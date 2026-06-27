@@ -44,6 +44,8 @@ jobs:
           node-version: 22
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      - name: 构建 dist/extension.js（集成测试需加载扩展）
+        run: node esbuild.js
       - run: pnpm run test:unit
       - name: 集成测试（Linux 需 xvfb 包装 Electron）
         run: xvfb-run -a pnpm run test:integration
