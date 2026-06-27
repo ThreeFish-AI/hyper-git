@@ -107,13 +107,13 @@ export class GitRepositoryService implements vscode.Disposable {
 	 * （cherry-pick / revert / reset / branch rename / stash list / compare 等）。仓库根为工作目录。
 	 * 仅作为 API 缺口的补充，不重造 vscode.git 已覆盖的能力。
 	 */
-	async execGit(args: string[]): Promise<string> {
+	async execGit(args: string[], options?: { env?: NodeJS.ProcessEnv }): Promise<string> {
 		const repo = this._repo;
 		if (!repo) {
 			throw new Error('未找到 Git 仓库');
 		}
 		return new Promise((resolve, reject) => {
-			execFile(this.api.git.path, args, { cwd: repo.rootUri.fsPath, maxBuffer: 20 * 1024 * 1024, encoding: 'utf8' }, (err, stdout) => {
+			execFile(this.api.git.path, args, { cwd: repo.rootUri.fsPath, maxBuffer: 20 * 1024 * 1024, encoding: 'utf8', env: options?.env }, (err, stdout) => {
 				if (err) {
 					logGit(args, undefined, err.message);
 					reject(err);

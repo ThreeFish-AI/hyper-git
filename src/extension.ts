@@ -13,6 +13,8 @@ import { LogTreeProvider } from './adapter/tree/log-tree';
 import { registerHistoryCommands } from './adapter/history-commands';
 import { registerStashCommands } from './adapter/stash-commands';
 import { registerGitCliCommands } from './adapter/git-cli-commands';
+import { registerPartialCommands } from './adapter/partial-commands';
+import { registerAdvancedCommands } from './adapter/advanced-commands';
 import { StashTreeProvider } from './adapter/tree/stash-tree';
 import { CommitWebviewProvider } from './adapter/webview/commit-webview';
 import { GraphWebview } from './adapter/webview/graph-webview';
@@ -80,6 +82,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		...registerChangesCommands(service, registry, tree),
 		...registerHistoryCommands(service, logTree, branchesTree),
 		...registerGitCliCommands(service, branchesTree),
+		...registerPartialCommands(service),
+		...registerAdvancedCommands(service, branchesTree),
 		...registerStashCommands(service, stashTree),
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
