@@ -4,6 +4,22 @@
 
 ## [Unreleased]
 
+### Fixed — M0/M1/M2 审查修复（0.3.1）
+
+经 3 路独立 code review（正确性 / 架构 / 完整性）交叉复核后修复：
+
+- **GitRepositoryService**：仓库切换时 `onDidChange` 订阅累积泄漏 → 改用单 `repoSub`，切换/卸载时 dispose。
+- **pickRepository**：`startsWith` 误匹配（无路径边界）→ 改用 `api.getRepository(folder.uri)` 精确匹配。
+- **getChanges**：缺失 `indexChanges`（已暂存文件不可见）→ 合并 index/working/untracked 按相对路径去重（index 优先）。
+- **commit 语义**：未勾选的已暂存文件先 `restore --staged`，让勾选集成为提交权威范围（对齐 IDEA「提交该集合」）。
+- **push 失败**：commit 成功后 push 失败误报「提交失败」→ 返回 `ok:true` + `warning`。
+- **extension.ts**：三个 `onDidChange` 订阅入 `subscriptions`（修复卸载泄漏）。
+- **refresh**：`await repo.status()` 后再刷新（避免陈旧数据）。
+- **conventional-linter**：Windows `\r\n` 行尾 + 中文/Unicode scope 支持。
+- **commit-webview**：`onDidReceiveMessage` 绑定 `view.onDidDispose`（修复重载泄漏）；nonce 改用 `crypto.randomBytes`；选中态 `setState` 持久化。
+- **changes-tree**：tooltip 显示状态全称（Modified 而非 M）；清理 `CommitFileItem` 冗余 `status/statusName` 字段。
+- **测试补齐**：`ConventionalCommitCheck`、`CommitService.executeCommit`（mock Repository，覆盖 CC 阻断/无文件/amend 透传/unstage/push 警告）、`git-status-map` 全量、`amend` 真实集成。
+
 ### Added — M2 Commit 提交窗口（0.3.0）
 
 - Commit 提交窗口（WebviewView 自绘 IDEA 风格）：活动 changelist 文件勾选 + 多行 Commit Message 编辑器 + Amend / Signed-off-by / 跳过 Git hooks 选项 + Commit / Commit and Push 按钮。
