@@ -3,7 +3,7 @@
   "displayName": "Hyper Git",
   "icon": "media/icon.png",
   "description": "在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口，并为未来 AI Agent 自主代理预留架构接缝。",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "publisher": "threefish-ai",
   "license": "MIT",
   "preview": true,
@@ -141,7 +141,8 @@
       { "command": "hyperGit.fixupCommit", "title": "Fixup 到提交（autosquash）", "category": "Hyper Git" },
       { "command": "hyperGit.cleanupBranches", "title": "清理已合并分支", "category": "Hyper Git" },
       { "command": "hyperGit.copyBranchRef", "title": "复制分支引用", "category": "Hyper Git" },
-      { "command": "hyperGit.threeWayDiff", "title": "3-way Diff 概览", "category": "Hyper Git" }
+      { "command": "hyperGit.threeWayDiff", "title": "3-way Diff 概览", "category": "Hyper Git" },
+      { "command": "hyperGit.inlineCommitHunk", "title": "行内提交 Hunk", "category": "Hyper Git" }
     ],
     "menus": {
       "view/title": [
@@ -206,7 +207,8 @@
         { "command": "hyperGit.branchRename", "when": "false" },
         { "command": "hyperGit.compareBranches", "when": "false" },
         { "command": "hyperGit.ignorePath", "when": "false" },
-        { "command": "hyperGit.copyBranchRef", "when": "false" }
+        { "command": "hyperGit.copyBranchRef", "when": "false" },
+        { "command": "hyperGit.inlineCommitHunk", "when": "false" }
       ]
     },
     "configuration": {

@@ -63,6 +63,7 @@ suite('扩展冒烟测试', function () {
 			'hyperGit.cleanupBranches',
 			'hyperGit.copyBranchRef',
 			'hyperGit.threeWayDiff',
+			'hyperGit.inlineCommitHunk',
 		]) {
 			assert.ok(commands.includes(cmd), `命令 ${cmd} 未注册`);
 		}
