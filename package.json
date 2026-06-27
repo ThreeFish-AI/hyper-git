@@ -1,0 +1,125 @@
+{
+  "name": "hyper-git",
+  "displayName": "Hyper Git",
+  "description": "在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口，并为未来 AI Agent 自主代理预留架构接缝。",
+  "version": "0.1.0",
+  "publisher": "threefish-ai",
+  "license": "MIT",
+  "preview": true,
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ThreeFish-AI/hyper-git.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "intellij",
+    "idea",
+    "commit",
+    "changelist",
+    "scm",
+    "version control",
+    "shelf",
+    "stash"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Hyper Git 依赖本地 git，不支持虚拟/web 工作区。"
+    }
+  },
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "hyper-git",
+          "title": "Hyper Git",
+          "icon": "media/hyper-git-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "hyper-git": [
+        {
+          "id": "hyperGit.changes",
+          "name": "Changes",
+          "visibility": "visible"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "hyperGit.changes",
+        "contents": "Hyper Git 脚手架已就绪（M0）。\nLocal Changes 变更列表（多 changelist）将在 M1 接入 vscode.git API。\n[显示版本](command:hyperGit.showVersion)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "hyperGit.showVersion",
+        "title": "显示版本",
+        "category": "Hyper Git"
+      }
+    ],
+    "configuration": {
+      "title": "Hyper Git",
+      "properties": {
+        "hyperGit.commit.template": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Commit message 模板（注入到 Commit 窗口编辑器）。"
+        },
+        "hyperGit.commit.conventional": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "对提交信息执行 Conventional Commits 实时校验。"
+        },
+        "hyperGit.ai.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "启用 AI 代理能力（M5，当前仅预留接缝，暂不生效）。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run package",
+    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
+    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint",
+    "watch": "node esbuild.js --watch",
+    "test:unit": "vitest run",
+    "test:integration": "node tests/run-integration.js",
+    "test": "pnpm run test:unit && pnpm run test:integration",
+    "clean": "rimraf dist out *.vsix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "@stylistic/eslint-plugin": "^2.9.0",
+    "@types/node": "^20.14.0",
+    "@types/vscode": "~1.85.0",
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.13.0",
+    "mocha": "^11.0.1",
+    "prettier": "^3.3.3",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.39.0",
+    "vitest": "^2.1.8"
+  }
+}
