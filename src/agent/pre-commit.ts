@@ -1,3 +1,4 @@
+import { CheckinResult } from '../engine/commit/pipeline';
 import type { CheckinHook } from '../engine/commit/pipeline';
 
 /**
@@ -24,4 +25,14 @@ export interface InspectionResult {
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- AI 接缝占位：M5 补充 inspect() 等方法
 export interface IPreCommitInspector extends CheckinHook {
 	// M5: inspect(input: { stagedFiles; diff; context }): Promise<InspectionResult>;
+}
+
+/** Null 实现：AI 未启用，提交前检查恒放行。 */
+export class NullPreCommitInspector implements IPreCommitInspector {
+	readonly name = 'null-pre-commit-inspector';
+	readonly executionOrder = 100;
+
+	async beforeCheckin(): Promise<CheckinResult> {
+		return CheckinResult.Commit;
+	}
 }
