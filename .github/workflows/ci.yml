@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [master, feature/1.x.x]
+    tags:
+      - 'v*'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # 闸门：类型检查 + lint + 生产构建（快门，ubuntu 单格）
+  lint-build:
+    name: Lint & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check-types
+      - run: pnpm run lint
+      - run: pnpm run package
+
+  # 集成测试矩阵：main/tag 跑三平台，PR 仅 ubuntu 快门
+  test:
+    name: Test (${{ matrix.os }})
+    needs: lint-build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ (github.event_name == 'pull_request') && fromJson('["ubuntu-latest"]') || fromJson('["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test:unit
+      - name: 集成测试（Linux 需 xvfb 包装 Electron）
+        run: xvfb-run -a pnpm run test:integration
+        if: runner.os == 'Linux'
+      - name: 集成测试
+        run: pnpm run test:integration
+        if: runner.os != 'Linux'
+
+  # 打包 vsix（Linux 保 POSIX 文件属性）
+  package:
+    name: Package vsix
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm dlx @vscode/vsce package --no-yarn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: '*.vsix'
+          if-no-files-found: error
+
+  # 发布：仅 tag 触发，双市场（Marketplace + OpenVSX），生产环境审批门
+  publish:
+    name: Publish
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+      - name: 发布到 VS Code Marketplace
+        run: pnpm dlx @vscode/vsce publish --packagePath *.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: 发布到 OpenVSX（覆盖 Cursor / Windsurf 等 AI IDE）
+        run: pnpm dlx ovsx publish *.vsix
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
