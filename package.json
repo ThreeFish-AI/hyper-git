@@ -3,7 +3,7 @@
   "displayName": "Hyper Git",
   "icon": "media/icon.png",
   "description": "在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口，并为未来 AI Agent 自主代理预留架构接缝。",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "threefish-ai",
   "license": "MIT",
   "preview": true,
@@ -123,7 +123,14 @@
       { "command": "hyperGit.discardChanges", "title": "丢弃改动", "category": "Hyper Git" },
       { "command": "hyperGit.pull", "title": "Pull", "category": "Hyper Git", "icon": "$(arrow-down)" },
       { "command": "hyperGit.push", "title": "Push", "category": "Hyper Git", "icon": "$(arrow-up)" },
-      { "command": "hyperGit.fetch", "title": "Fetch", "category": "Hyper Git" }
+      { "command": "hyperGit.fetch", "title": "Fetch", "category": "Hyper Git" },
+      { "command": "hyperGit.cherryPick", "title": "Cherry-Pick", "category": "Hyper Git" },
+      { "command": "hyperGit.revertCommit", "title": "Revert Commit", "category": "Hyper Git" },
+      { "command": "hyperGit.resetHead", "title": "Reset HEAD…", "category": "Hyper Git" },
+      { "command": "hyperGit.branchRename", "title": "重命名分支", "category": "Hyper Git" },
+      { "command": "hyperGit.ignorePath", "title": "添加到 .gitignore", "category": "Hyper Git" },
+      { "command": "hyperGit.compareBranches", "title": "比较分支", "category": "Hyper Git" },
+      { "command": "hyperGit.rewordCommit", "title": "改写最新提交信息", "category": "Hyper Git" }
     ],
     "menus": {
       "view/title": [
@@ -137,10 +144,7 @@
         { "command": "hyperGit.branchCreate", "when": "view == hyperGit.branches", "group": "navigation" },
         { "command": "hyperGit.pull", "when": "view == hyperGit.branches", "group": "navigation" },
         { "command": "hyperGit.push", "when": "view == hyperGit.branches", "group": "navigation" },
-        { "command": "hyperGit.stashCreate", "when": "view == hyperGit.stash", "group": "navigation" },
-        { "command": "hyperGit.stashApply", "when": "view == hyperGit.stash" },
-        { "command": "hyperGit.stashPop", "when": "view == hyperGit.stash" },
-        { "command": "hyperGit.stashDrop", "when": "view == hyperGit.stash" }
+        { "command": "hyperGit.stashCreate", "when": "view == hyperGit.stash", "group": "navigation" }
       ],
       "view/item/context": [
         { "command": "hyperGit.setActiveChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.changelist", "group": "1_changelist@1" },
@@ -154,7 +158,15 @@
         { "command": "hyperGit.branchCheckout", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@1" },
         { "command": "hyperGit.branchDelete", "when": "view == hyperGit.branches && viewItem == hyperGit.branch", "group": "1_branch@2" },
         { "command": "hyperGit.mergeBranch", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@3" },
-        { "command": "hyperGit.rebaseBranch", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@4" }
+        { "command": "hyperGit.rebaseBranch", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@4" },
+        { "command": "hyperGit.branchRename", "when": "view == hyperGit.branches && viewItem == hyperGit.branch", "group": "1_branch@5" },
+        { "command": "hyperGit.compareBranches", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@6" },
+        { "command": "hyperGit.cherryPick", "when": "view == hyperGit.log && viewItem == hyperGit.commit", "group": "1_commit@1" },
+        { "command": "hyperGit.revertCommit", "when": "view == hyperGit.log && viewItem == hyperGit.commit", "group": "1_commit@2" },
+        { "command": "hyperGit.ignorePath", "when": "view == hyperGit.changes && viewItem == hyperGit.fileChange", "group": "1_file@4" },
+        { "command": "hyperGit.stashApply", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@1" },
+        { "command": "hyperGit.stashPop", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@2" },
+        { "command": "hyperGit.stashDrop", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@3" }
       ],
       "commandPalette": [
         { "command": "hyperGit.openDiff", "when": "false" },
@@ -171,7 +183,12 @@
         { "command": "hyperGit.stashApply", "when": "false" },
         { "command": "hyperGit.stashPop", "when": "false" },
         { "command": "hyperGit.stashDrop", "when": "false" },
-        { "command": "hyperGit.discardChanges", "when": "false" }
+        { "command": "hyperGit.discardChanges", "when": "false" },
+        { "command": "hyperGit.cherryPick", "when": "false" },
+        { "command": "hyperGit.revertCommit", "when": "false" },
+        { "command": "hyperGit.branchRename", "when": "false" },
+        { "command": "hyperGit.compareBranches", "when": "false" },
+        { "command": "hyperGit.ignorePath", "when": "false" }
       ]
     },
     "configuration": {
