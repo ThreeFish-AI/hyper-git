@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### Added — Parity Batch 1（CLI 功能补齐，0.0.2）
+
+> 关键转向：引入 `GitRepositoryService.execGit`（复用 vscode.git 的同一 git 二进制 `api.git.path`），补齐稳定 API 未暴露的操作——修正此前"API 限制延后"的过度自我设限。
+
+- Cherry-pick（Log 右键）、Revert commit（Log 右键）——经 `git cherry-pick` / `git revert`。
+- Reset HEAD（soft/mixed/hard/keep，命令面板，hard 二次确认）。
+- 分支重命名（Branches 右键 `git branch -m`）、比较分支（`git diff --stat a...b`）。
+- Ignore（写 .gitignore）、改写最新提交（amend）。
+- **Stash 多栈列表**：用 `git stash list`（CLI）修复——apply/pop/drop 按真实 `stash@{n}` 索引（此前 `log({refNames:['stash']})` 仅返回最新 stash 内部提交、语义错误，已弃用）。
+
 ## [0.0.1-rc.1] - 2026-06-27 — 首发候选（Pre-release）
 
 首个公开预发布候选，整合 M0-M4 里程碑交付 + 两轮独立 code review 修复。

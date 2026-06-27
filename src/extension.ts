@@ -12,6 +12,7 @@ import { ChangesTreeProvider, EmptyChangesProvider } from './adapter/tree/change
 import { LogTreeProvider } from './adapter/tree/log-tree';
 import { registerHistoryCommands } from './adapter/history-commands';
 import { registerStashCommands } from './adapter/stash-commands';
+import { registerGitCliCommands } from './adapter/git-cli-commands';
 import { StashTreeProvider } from './adapter/tree/stash-tree';
 import { CommitWebviewProvider } from './adapter/webview/commit-webview';
 import { getGitApi } from './adapter/git-api';
@@ -57,7 +58,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const commitView = new CommitWebviewProvider(service, registry, commit);
 	const logTree = new LogTreeProvider(service);
 	const branchesTree = new BranchesTreeProvider(service);
-	const stashTree = new StashTreeProvider();
+	const stashTree = new StashTreeProvider(service);
 	const focusCommitView = (): void => {
 		void vscode.commands.executeCommand('hyperGit.commit.focus');
 	};
@@ -76,6 +77,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.window.registerTreeDataProvider('hyperGit.stash', stashTree),
 		...registerChangesCommands(service, registry, tree),
 		...registerHistoryCommands(service, logTree, branchesTree),
+		...registerGitCliCommands(service, branchesTree),
 		...registerStashCommands(service, stashTree),
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
