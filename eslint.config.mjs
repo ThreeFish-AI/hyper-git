@@ -10,6 +10,7 @@ export default tseslint.config(
 			'media/**',
 			'media-src/**',
 			'node_modules/**',
+			'.vscode-test/**',
 			'*.vsix',
 			'esbuild.js',
 			'tests/run-integration.js',

@@ -38,3 +38,11 @@
 - **后续防范**：凡含 `@vscode/test-electron` 集成测试的 CI job，必须在测试前显式构建扩展产物；本地验证集成测试后清理 dist/ 以暴露该依赖；`.gitignore` 排除 dist/ 时注意 CI 需重建。
 - **同类问题影响**：所有 VS Code 扩展的 test-electron CI job；本地"能跑"但 CI 失败的构建产物缺失类问题。
 
+## #5 ESLint flat config 遍历 .vscode-test 导致 OOM
+
+- **表因**：本地 `pnpm run lint` 在 ~70s 后 `FATAL ERROR: ... JavaScript heap out of memory`（4GB 耗尽）；M0 时却正常。
+- **根因**：`@vscode/test-electron` 首次运行将完整 VS Code（约 260MB、海量 JS）下载到 `.vscode-test/`；ESLint 9 flat config 默认仅忽略 `node_modules`，**不忽略 `.vscode-test/`**，于是 eslint 遍历其下成千上万 JS 文件导致 OOM。M0 lint 通过是因为当时 `.vscode-test/` 尚未生成。
+- **处理方式**：在 `eslint.config.mjs` 的 `ignores` 增加 `.vscode-test/**`。
+- **后续防范**：含 test-electron 的扩展，eslint ignores 必须含 `.vscode-test/**`（及 `out/**`、`dist/**`、`*.vsix`）；CI 因不缓存该目录可能不暴露，但本地必现——本地与 CI 环境差异需警惕。
+- **同类问题影响**：所有跑过 test-electron 的本地环境的 eslint/其他静态分析工具。
+

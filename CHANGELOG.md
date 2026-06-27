@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Added — M1 Git Adapter + 多 changelist Changes（0.2.0）
+
+- Git Adapter：`GitRepositoryService` 封装内置 vscode.git 稳定 `Repository` API（读取 workingTreeChanges/untrackedChanges、状态变更事件、diff/toGitUri 委托）。
+- 多 changelist：`ChangelistRegistry`（active 列表、新建/重命名/删除/移动 + `workspaceState` 持久化，重启恢复）+ 引擎纯分组逻辑 `groupByChangelist`。
+- Changes TreeView：changelist 一级节点 + 文件叶子，状态色复用 `gitDecoration.*` 主题色（ThemeIcon + ThemeColor），文件单击打开原生 `vscode.diff`。
+- 命令：`refresh` / `newChangelist` / `setActiveChangelist` / `renameChangelist` / `deleteChangelist` / `moveChangelist` / `openDiff`，配视图标题与右键菜单（`viewItem` 上下文键）。
+- 测试：新增 `changelist-grouper`（5）+ `git-status-map`（9）单元测试；集成测试覆盖全部 M1 命令注册。
+- 工程修复：eslint flat config 忽略 `.vscode-test/**`（规避本地 test-electron 下载的 VS Code 导致 lint OOM）。
+
 ### Added — M0 脚手架 + CI
 
 - 初始化 pnpm + esbuild + TypeScript（strict）工程骨架，对齐官方 `esbuild-sample`。
