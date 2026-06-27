@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Added — Parity Batch 2（UI 丰富度，0.0.3）
+
+- **Git 提交图（WebviewPanel）**：`git log --graph --oneline --decorate --all`（CLI）获取拓扑，语义着色渲染（graph 连线 / refs / hash）——补齐 IDEA Log 提交图的可视化拓扑。命令面板 + Log 视图标题按钮。
+- **Console**：Hyper Git Console（OutputChannel）记录所有 `execGit` 命令与输出（对齐 IDEA Console 标签页）。
+
 ### Added — Parity Batch 1（CLI 功能补齐，0.0.2）
 
 > 关键转向：引入 `GitRepositoryService.execGit`（复用 vscode.git 的同一 git 二进制 `api.git.path`），补齐稳定 API 未暴露的操作——修正此前"API 限制延后"的过度自我设限。
