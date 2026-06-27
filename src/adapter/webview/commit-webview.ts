@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getDecoration } from '../../engine/scm-mapping/status-decoration';
@@ -28,7 +29,8 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 		this.view = view;
 		view.webview.options = { enableScripts: true, localResourceRoots: [] };
 		view.webview.html = this.renderHtml();
-		view.webview.onDidReceiveMessage((msg) => this.onMessage(msg as WebviewToHostMessage));
+		const msgSub = view.webview.onDidReceiveMessage((msg) => this.onMessage(msg as WebviewToHostMessage));
+		view.onDidDispose(() => msgSub.dispose());
 		this.pushState();
 	}
 
@@ -81,8 +83,6 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 			path: c.relativePath,
 			label: path.basename(c.relativePath),
 			dir: path.dirname(c.relativePath),
-			status: decoration.letter,
-			statusName: c.status,
 			themeColor: decoration.themeColor,
 		};
 	}
@@ -161,7 +161,9 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
-const checked = new Set();
+const persisted = vscode.getState();
+const checked = new Set(persisted && persisted.checked ? persisted.checked : []);
+function saveChecked() { vscode.setState({ checked: Array.from(checked) }); }
 let conventionalEnabled = true;
 let templateApplied = false;
 const filesEl = document.getElementById('files');
@@ -214,7 +216,7 @@ function renderFiles(files) {
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = checked.has(f.path);
-    cb.addEventListener('change', function () { if (cb.checked) checked.add(f.path); else checked.delete(f.path); });
+    cb.addEventListener('change', function () { if (cb.checked) checked.add(f.path); else checked.delete(f.path); saveChecked(); });
     const dot = document.createElement('span');
     dot.className = 'dot';
     dot.style.color = 'var(--vscode-' + f.themeColor.replace(/\\./g, '-') + ')';
@@ -230,6 +232,7 @@ function renderFiles(files) {
     filesEl.appendChild(row);
   });
   Array.from(checked).forEach(function (p) { if (!present.has(p)) checked.delete(p); });
+  saveChecked();
 }
 
 function renderRecent(messages) {
@@ -285,7 +288,7 @@ window.addEventListener('message', function (e) {
   } else if (m.type === 'commitResult') {
     setBusy(false);
     if (m.payload.ok) {
-      toast('提交成功', false);
+      toast(m.payload.warning || '提交成功', Boolean(m.payload.warning));
       msgEl.value = '';
       amendEl.checked = false; signoffEl.checked = false; skipHooksEl.checked = false;
       vscode.postMessage({ type: 'messageChanged', payload: { message: '' } });
@@ -303,10 +306,5 @@ vscode.postMessage({ type: 'requestState' });
 }
 
 function getNonce(): string {
-	let text = '';
-	const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-	for (let i = 0; i < 32; i++) {
-		text += possible.charAt(Math.floor(Math.random() * possible.length));
-	}
-	return text;
+	return crypto.randomBytes(16).toString('base64');
 }

@@ -14,8 +14,6 @@ export interface CommitFileItem {
 	readonly path: string; // 仓库相对路径（key）
 	readonly label: string; // basename
 	readonly dir: string; // dirname
-	readonly status: string; // FileStatus 字母（M/A/D/...）
-	readonly statusName: string; // 状态名（Modified/...）
 	readonly themeColor: string; // gitDecoration.* 主题色 id → webview 用 var(--vscode-...)
 }
 

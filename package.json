@@ -2,7 +2,7 @@
   "name": "hyper-git",
   "displayName": "Hyper Git",
   "description": "在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口，并为未来 AI Agent 自主代理预留架构接缝。",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "threefish-ai",
   "license": "MIT",
   "preview": true,
