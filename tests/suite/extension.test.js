@@ -54,6 +54,15 @@ suite('扩展冒烟测试', function () {
 			'hyperGit.rewordCommit',
 			'hyperGit.showGraph',
 			'hyperGit.showConsole',
+			'hyperGit.partialStage',
+			'hyperGit.partialUnstage',
+			'hyperGit.stageHunkAtCursor',
+			'hyperGit.undoLastCommit',
+			'hyperGit.dropCommit',
+			'hyperGit.fixupCommit',
+			'hyperGit.cleanupBranches',
+			'hyperGit.copyBranchRef',
+			'hyperGit.threeWayDiff',
 		]) {
 			assert.ok(commands.includes(cmd), `命令 ${cmd} 未注册`);
 		}

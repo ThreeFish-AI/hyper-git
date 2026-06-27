@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Added — Parity Batch 3（partial commit + 高级操作，0.0.4）
+
+- **partial / 行级提交**（IDEA PartialChangesUtil 等价）：`engine/diff/hunk-parser`（unified diff 解析，7 单测）+ hunk 选择暂存/取消暂存（QuickPick 勾选）+ 光标处 hunk 暂存——经 patch 重建 + `git apply --cached`。
+- **undo commit**（soft reset，保留改动到暂存区）、**drop commit**（`git rebase --onto`，重写历史二次确认）、**fixup**（autosquash rebase，经 env 注入 `GIT_SEQUENCE_EDITOR`）。
+- **cleanup branches**（`git branch --merged` 批量删除）、**copy branch ref**、**3-way diff 概览**（HEAD↔Staged↔Working）。
+- `execGit` 支持 env 注入（为 autosquash 等 rebase 自动化铺路）。
+
 ### Added — Parity Batch 2（UI 丰富度，0.0.3）
 
 - **Git 提交图（WebviewPanel）**：`git log --graph --oneline --decorate --all`（CLI）获取拓扑，语义着色渲染（graph 连线 / refs / hash）——补齐 IDEA Log 提交图的可视化拓扑。命令面板 + Log 视图标题按钮。
