@@ -14,6 +14,12 @@
 - [引用规范 IEEE](./reference-specifications.md) — 文献引用格式与上标锚定。
 - [浏览器验证协议](./browser-validation.md) — OAuth/SSO 红线与 E2E 验证协议。
 
+## 项目文档（docs/）
+- [文档中心](../docs/README.md) — 文档与调研资产总索引。
+- [工程实施方案](../docs/architecture/engineering-plan.md) — 路径 B 架构 + M0-M5 里程碑（**开发蓝图**）。
+- [IDEA 功能复刻矩阵](../docs/requirements/idea-feature-matrix.md) — 56 功能点 / 8 组（**验收基线**）。
+- [调研报告](../docs/research/README.md) — SCM 集成 / 工程蓝图 / 发布 CI / AI 接缝四路循证报告。
+
 ## 架构分层（src/）
 > 依赖方向单向：`UI → Adapter → Engine`；`Agent` 以接口注入 `Engine`/`CommitPipeline`，不反向依赖 UI。
 
