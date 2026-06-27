@@ -2,7 +2,7 @@
   "name": "hyper-git",
   "displayName": "Hyper Git",
   "description": "在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口，并为未来 AI Agent 自主代理预留架构接缝。",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "threefish-ai",
   "license": "MIT",
   "preview": true,
@@ -57,6 +57,12 @@
           "id": "hyperGit.changes",
           "name": "Changes",
           "visibility": "visible"
+        },
+        {
+          "id": "hyperGit.commit",
+          "name": "Commit",
+          "type": "webview",
+          "visibility": "visible"
         }
       ]
     },
@@ -74,7 +80,9 @@
       { "command": "hyperGit.renameChangelist", "title": "重命名 Changelist", "category": "Hyper Git" },
       { "command": "hyperGit.deleteChangelist", "title": "删除 Changelist", "category": "Hyper Git" },
       { "command": "hyperGit.moveChangelist", "title": "移至 Changelist…", "category": "Hyper Git" },
-      { "command": "hyperGit.openDiff", "title": "打开 Diff", "category": "Hyper Git" }
+      { "command": "hyperGit.openDiff", "title": "打开 Diff", "category": "Hyper Git" },
+      { "command": "hyperGit.commit", "title": "提交", "category": "Hyper Git", "icon": "$(check)" },
+      { "command": "hyperGit.commitAndPush", "title": "提交并推送", "category": "Hyper Git", "icon": "$(cloud-upload)" }
     ],
     "menus": {
       "view/title": [
