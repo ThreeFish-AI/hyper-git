@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [0.0.1-rc.1] - 2026-06-27 — 首发候选（Pre-release）
+
+首个公开预发布候选，整合 M0-M4 里程碑交付 + 两轮独立 code review 修复。
+版本号遵循 VS Code Marketplace 约定（仅 `major.minor.patch` = `0.0.1`），预发布语义由 `--pre-release` 标记 + git tag `v0.0.1-rc.1` 体现。
+
+**核心能力**：多 changelist Changes 视图、Commit 提交窗口（Conventional Commits 校验 + Amend/sign-off/skipHooks + Checkin hook 链）、Log/Branches/Blame/Show History、Stash（create/apply/pop/drop）、Discard 改动、Pull/Push/Fetch。架构路径 B（消费 vscode.git 稳定 API），5 个 AI 接缝已预埋（M5 实现）。
+
+**已知限制**（vscode.git 稳定 API 边界）：cherry-pick / revert / reset / 分支重命名 / 行级 hunk 暂存 / 多 stash 列表枚举 / Author 覆盖暂不可用，详见 [实施状态 §3](./docs/milestones/implementation-status.md#3-api-限制汇总vscodegit-稳定-api-边界)。
+
 ### Added — M4 Stash/Shelf（0.5.0）
 
 - **Stash 视图**：`StashTreeProvider` 经 `Repository.log({ refNames: ['stash'] })` 枚举 stash（API 不暴露 `git stash list`，以此近似）。
