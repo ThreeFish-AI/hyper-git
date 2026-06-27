@@ -40,4 +40,14 @@ describe('mapGitStatus', () => {
 	it('未知数值 → Modified（兜底）', () => {
 		expect(mapGitStatus(999)).toBe(FileStatus.Modified);
 	});
+
+	it('全部 GitStatus 数值均映射到合法 FileStatus（无遗漏分支）', () => {
+		const validStatuses = new Set(Object.values(FileStatus));
+		const numericEntries = Object.entries(GitStatus).filter(([, v]) => typeof v === 'number') as Array<[string, number]>;
+		expect(numericEntries.length).toBeGreaterThanOrEqual(19);
+		for (const [name, val] of numericEntries) {
+			const mapped = mapGitStatus(val);
+			expect(validStatuses.has(mapped), `${name}(${val}) → ${mapped} 非法`).toBe(true);
+		}
+	});
 });

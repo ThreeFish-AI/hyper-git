@@ -1,5 +1,6 @@
 const assert = require('assert');
 const vscode = require('vscode');
+const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
 
@@ -49,5 +50,23 @@ suite('Commit 流程（真实 git 操作）', function () {
 
 		const status = cp.execFileSync('git', ['status', '--porcelain'], { cwd: root }).toString().trim();
 		assert.strictEqual(status, '', '提交后工作区应为空');
+	});
+
+	test('amend 改写 HEAD 提交信息且不新增 commit', async function () {
+		const gitExt = vscode.extensions.getExtension('vscode.git');
+		const api = gitExt.exports.getAPI(1);
+		const repo = api.repositories[0];
+		assert.ok(repo, '仓库未就绪');
+		const root = repo.rootUri.fsPath;
+
+		const before = cp.execFileSync('git', ['rev-list', '--count', 'HEAD'], { cwd: root }).toString().trim();
+		fs.writeFileSync(path.join(root, 'amend.txt'), 'amend\n');
+		await repo.add([path.join(root, 'amend.txt')]);
+		await repo.commit('feat(test): 改写后的提交', { amend: true });
+
+		const after = cp.execFileSync('git', ['rev-list', '--count', 'HEAD'], { cwd: root }).toString().trim();
+		const subject = cp.execFileSync('git', ['log', '-1', '--pretty=%s'], { cwd: root }).toString().trim();
+		assert.strictEqual(after, before, 'amend 不应新增 commit 数');
+		assert.strictEqual(subject, 'feat(test): 改写后的提交');
 	});
 });
