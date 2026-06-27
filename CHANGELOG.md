@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Added — Parity Batch 4（忠实 Shelf + 交互式 Rebase + Line→CL，0.0.6）
+
+- **忠实 Shelf**（IDEA patch-based，#27-28）：Shelve（`git diff` → patch 存扩展存储 → `git checkout --` 移除工作区）+ Unshelve silently / with 3-way merge + Delete + Shelf TreeView。与 Stash 独立并存。
+- **交互式 Rebase UI**（Webview，#44）：commit 列表 + pick/squash/fixup/drop 动作 → 非交互 rebase（`GIT_SEQUENCE_EDITOR=cp <tempfile>` + `GIT_EDITOR=:`）。
+- **Move Hunk to Changelist**（#25）：编辑器内光标处 hunk → QuickPick changelist → ChangelistRegistry 持久化 hunk→CL 归属。
+
 ### Added — Editor Inline Commit（#13，0.0.5）
 
 > IDEA editor inline commit 的 VS Code 等价（补齐最后一块主要拼图）。

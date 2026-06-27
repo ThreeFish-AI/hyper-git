@@ -64,6 +64,12 @@ suite('扩展冒烟测试', function () {
 			'hyperGit.copyBranchRef',
 			'hyperGit.threeWayDiff',
 			'hyperGit.inlineCommitHunk',
+			'hyperGit.shelveChanges',
+			'hyperGit.unshelveSilently',
+			'hyperGit.unshelveWithMerge',
+			'hyperGit.deleteShelf',
+			'hyperGit.startRebase',
+			'hyperGit.moveHunkToChangelist',
 		]) {
 			assert.ok(commands.includes(cmd), `命令 ${cmd} 未注册`);
 		}
