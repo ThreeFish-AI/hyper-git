@@ -6,7 +6,7 @@ const EXT_ID = 'threefish-ai.hyper-git';
 suite('扩展冒烟测试', function () {
 	this.timeout(30000);
 
-	test('扩展可激活并注册全部 M1+M2+M3 命令', async () => {
+	test('扩展可激活并注册全部 M1+M2+M3+M4 命令', async () => {
 		const ext = vscode.extensions.getExtension(EXT_ID);
 		assert.ok(ext, `扩展 ${EXT_ID} 未找到`);
 		if (!ext.isActive) {
@@ -37,6 +37,10 @@ suite('扩展冒烟测试', function () {
 			'hyperGit.mergeBranch',
 			'hyperGit.rebaseBranch',
 			'hyperGit.showBlame',
+			'hyperGit.stashCreate',
+			'hyperGit.stashApply',
+			'hyperGit.stashPop',
+			'hyperGit.stashDrop',
 		]) {
 			assert.ok(commands.includes(cmd), `命令 ${cmd} 未注册`);
 		}
