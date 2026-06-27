@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Added — M2 Commit 提交窗口（0.3.0）
+
+- Commit 提交窗口（WebviewView 自绘 IDEA 风格）：活动 changelist 文件勾选 + 多行 Commit Message 编辑器 + Amend / Signed-off-by / 跳过 Git hooks 选项 + Commit / Commit and Push 按钮。
+- Conventional Commits 实时校验：`engine/commit/conventional-linter` 纯函数 + webview 指示器（ok/warning/error）+ 内置 `ConventionalCommitCheck` Checkin hook（pipeline 内阻断不合规提交）。
+- `CommitPipeline` 责任链接入提交流程（对齐 IDEA `CheckinHandler`：校验 → stage → hook 链 → commit → 可选 push）。
+- AI 接缝 5 接口 + Null 实现注入 CommitService（`ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver`），M5 替换为真实实现。
+- 最近提交消息复用（`workspaceState` 持久化，webview 一键填入）。
+- 真实 git 提交闭环集成测试（fixture 仓库 + `vscode.git` add/commit + git log 校验）。
+
 ### Added — M1 Git Adapter + 多 changelist Changes（0.2.0）
 
 - Git Adapter：`GitRepositoryService` 封装内置 vscode.git 稳定 `Repository` API（读取 workingTreeChanges/untrackedChanges、状态变更事件、diff/toGitUri 委托）。

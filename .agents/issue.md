@@ -46,3 +46,12 @@
 - **后续防范**：含 test-electron 的扩展，eslint ignores 必须含 `.vscode-test/**`（及 `out/**`、`dist/**`、`*.vsix`）；CI 因不缓存该目录可能不暴露，但本地必现——本地与 CI 环境差异需警惕。
 - **同类问题影响**：所有跑过 test-electron 的本地环境的 eslint/其他静态分析工具。
 
+## #6 vscode.git 公开 API add() 须传绝对路径
+
+- **表因**：调用 `Repository.add(['README.md'])`（相对路径）无效或误加文件；CommitService 初期也曾困惑路径语义。
+- **根因**：`extensions/git/src/api/api1.ts` 的 `add(paths)` 实现为 `paths.map(p => Uri.file(p))`——`Uri.file()` 要求**绝对路径**；相对路径会被包装成畸形 Uri，内部 `path.relative(root, ...)` 计算错误。`revert`/`clean`/`restore` 同理。
+- **处理方式**：CommitService 始终传 `ChangeItem.uri.fsPath`（绝对）。
+- **后续防范**：消费 vscode.git 公开 API 的路径类方法（add/revert/clean/restore）一律传绝对 fsPath；已加集成测试 `tests/suite/commit-flow.test.js` 守护。
+- **同类问题影响**：所有消费 vscode.git API 做 stage/revert 的扩展；git CLI 本身接受相对路径，但**公开 API 层不接受**，二者语义差异易踩。
+
+

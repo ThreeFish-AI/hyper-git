@@ -1,8 +1,14 @@
 import * as vscode from 'vscode';
+import { NullChangelistGrouper } from './agent/grouper';
+import { NullCommitMessageProvider } from './agent/commit-message';
+import { NullConflictResolver } from './agent/conflict';
 import { NullLlmProvider } from './agent/llm-provider';
+import { NullPreCommitInspector } from './agent/pre-commit';
 import { registerChangesCommands } from './adapter/commands';
 import { ChangelistRegistry } from './adapter/changelist-registry';
+import { CommitService } from './adapter/commit/commit-service';
 import { ChangesTreeProvider, EmptyChangesProvider } from './adapter/tree/changes-tree';
+import { CommitWebviewProvider } from './adapter/webview/commit-webview';
 import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
 import { createLogger } from './infra/logger';
@@ -15,7 +21,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	logger.info('Hyper Git activated');
 
 	const llm = new NullLlmProvider();
-
 	context.subscriptions.push(
 		vscode.commands.registerCommand('hyperGit.showVersion', () => {
 			const version: string = context.extension.packageJSON.version;
@@ -24,10 +29,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		}),
 	);
 
-	// M1：Git Adapter + Changes TreeView（多 changelist）
 	const api = await getGitApi();
 	if (!api) {
-		logger.warn('vscode.git API 不可用，Changes 视图保持空状态');
+		logger.warn('vscode.git API 不可用，视图保持空状态');
 		context.subscriptions.push(vscode.window.registerTreeDataProvider('hyperGit.changes', new EmptyChangesProvider()));
 		return;
 	}
@@ -37,16 +41,39 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const registry = new ChangelistRegistry(context.workspaceState, service.repoRoot ?? workspaceRoot);
 	const tree = new ChangesTreeProvider(service, registry);
 
+	// AI 接缝注入（Null 实现，M5 替换为真实 provider）
+	const commit = new CommitService(context, service, context.workspaceState, {
+		llm,
+		commitMessage: new NullCommitMessageProvider(),
+		preCommit: new NullPreCommitInspector(),
+		grouper: new NullChangelistGrouper(),
+		conflict: new NullConflictResolver(),
+	});
+	const commitView = new CommitWebviewProvider(service, registry, commit);
+	const focusCommitView = (): void => {
+		void vscode.commands.executeCommand('hyperGit.commit.focus');
+	};
+
 	context.subscriptions.push(
 		service,
 		registry,
+		commit,
 		vscode.window.registerTreeDataProvider('hyperGit.changes', tree),
+		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
 		...registerChangesCommands(service, registry, tree),
+		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
+		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
 	);
-	service.onDidChange(() => tree.refresh());
-	registry.onDidChange(() => tree.refresh());
+
+	const refreshAll = (): void => {
+		tree.refresh();
+		commitView.refresh();
+	};
+	service.onDidChange(refreshAll);
+	registry.onDidChange(refreshAll);
+	commit.onDidChange(refreshAll);
 }
 
 export function deactivate(): void {
-	// 预留：M2+ 在此释放长生命周期资源。
+	// 预留：M3+ 在此释放长生命周期资源。
 }
