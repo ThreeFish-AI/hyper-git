@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { logGit } from '../infra/git-console';
 import type { API, Change, Repository } from '../types/git';
 import { FileStatus } from '../engine/model';
 import { mapGitStatus } from './git-status-map';
@@ -114,8 +115,10 @@ export class GitRepositoryService implements vscode.Disposable {
 		return new Promise((resolve, reject) => {
 			execFile(this.api.git.path, args, { cwd: repo.rootUri.fsPath, maxBuffer: 20 * 1024 * 1024, encoding: 'utf8' }, (err, stdout) => {
 				if (err) {
+					logGit(args, undefined, err.message);
 					reject(err);
 				} else {
+					logGit(args, stdout);
 					resolve(stdout);
 				}
 			});

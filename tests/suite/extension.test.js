@@ -52,6 +52,8 @@ suite('扩展冒烟测试', function () {
 			'hyperGit.ignorePath',
 			'hyperGit.compareBranches',
 			'hyperGit.rewordCommit',
+			'hyperGit.showGraph',
+			'hyperGit.showConsole',
 		]) {
 			assert.ok(commands.includes(cmd), `命令 ${cmd} 未注册`);
 		}

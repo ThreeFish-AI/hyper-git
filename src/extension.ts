@@ -15,6 +15,8 @@ import { registerStashCommands } from './adapter/stash-commands';
 import { registerGitCliCommands } from './adapter/git-cli-commands';
 import { StashTreeProvider } from './adapter/tree/stash-tree';
 import { CommitWebviewProvider } from './adapter/webview/commit-webview';
+import { GraphWebview } from './adapter/webview/graph-webview';
+import { showGitConsole } from './infra/git-console';
 import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
 import { createLogger } from './infra/logger';
@@ -81,6 +83,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		...registerStashCommands(service, stashTree),
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
+		vscode.commands.registerCommand('hyperGit.showGraph', () => GraphWebview.open(service)),
+		vscode.commands.registerCommand('hyperGit.showConsole', () => showGitConsole()),
 	);
 
 	// git 状态变化频繁（add/checkout/diff 缓存失效均触发），防抖合并避免 log/stash 高频重拉。

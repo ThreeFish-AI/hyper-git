@@ -3,7 +3,7 @@
   "displayName": "Hyper Git",
   "icon": "media/icon.png",
   "description": "在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口，并为未来 AI Agent 自主代理预留架构接缝。",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "threefish-ai",
   "license": "MIT",
   "preview": true,
@@ -130,13 +130,16 @@
       { "command": "hyperGit.branchRename", "title": "重命名分支", "category": "Hyper Git" },
       { "command": "hyperGit.ignorePath", "title": "添加到 .gitignore", "category": "Hyper Git" },
       { "command": "hyperGit.compareBranches", "title": "比较分支", "category": "Hyper Git" },
-      { "command": "hyperGit.rewordCommit", "title": "改写最新提交信息", "category": "Hyper Git" }
+      { "command": "hyperGit.rewordCommit", "title": "改写最新提交信息", "category": "Hyper Git" },
+      { "command": "hyperGit.showGraph", "title": "查看提交图（Graph）", "category": "Hyper Git", "icon": "$(git-commit)" },
+      { "command": "hyperGit.showConsole", "title": "打开 Console", "category": "Hyper Git" }
     ],
     "menus": {
       "view/title": [
         { "command": "hyperGit.refresh", "when": "view == hyperGit.changes", "group": "navigation" },
         { "command": "hyperGit.newChangelist", "when": "view == hyperGit.changes", "group": "navigation" },
         { "command": "hyperGit.refreshLog", "when": "view == hyperGit.log", "group": "navigation" },
+        { "command": "hyperGit.showGraph", "when": "view == hyperGit.log", "group": "navigation" },
         { "command": "hyperGit.logFilterAuthor", "when": "view == hyperGit.log" },
         { "command": "hyperGit.logFilterPath", "when": "view == hyperGit.log" },
         { "command": "hyperGit.logClearFilter", "when": "view == hyperGit.log" },
