@@ -151,12 +151,61 @@ export function registerHistoryCommands(
 				return;
 			}
 			const rel = path.relative(repo.rootUri.fsPath, editor.document.uri.fsPath).split(path.sep).join('/');
+			if (rel.startsWith('..') || path.isAbsolute(rel)) {
+				void vscode.window.showWarningMessage('该文件不在当前仓库内，无法 Blame');
+				return;
+			}
 			try {
 				const blame = await repo.blame(rel);
 				const doc = await vscode.workspace.openTextDocument({ content: blame, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
 				void vscode.window.showErrorMessage(`Blame 失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.pull', async () => {
+			const repo = service.repo;
+			if (!repo) {
+				return;
+			}
+			try {
+				await repo.pull();
+				branchesTree.refresh();
+			} catch (e) {
+				void vscode.window.showErrorMessage(`Pull 失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.push', async () => {
+			const repo = service.repo;
+			if (!repo) {
+				return;
+			}
+			try {
+				await repo.push();
+				branchesTree.refresh();
+			} catch (e) {
+				void vscode.window.showErrorMessage(`Push 失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.fetch', async () => {
+			const repo = service.repo;
+			if (!repo) {
+				return;
+			}
+			try {
+				await repo.fetch();
+				branchesTree.refresh();
+			} catch (e) {
+				void vscode.window.showErrorMessage(`Fetch 失败：${errMsg(e)}`);
 			}
 		}),
 	);

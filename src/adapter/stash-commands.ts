@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
 import type { GitRepositoryService } from './git-repository-service';
-import type { StashNode, StashTreeProvider } from './tree/stash-tree';
+import type { StashTreeProvider } from './tree/stash-tree';
 
 /**
  * 注册 Stash 相关命令（M4）。
  *
  * 经 vscode.git 稳定 API：createStash / applyStash / popStash / dropStash。
- * 「Shelve Changes」以 stash 近似（MVP，见工程方案 §4 P2）；忠实 patch Shelf 受 API 限制延后。
+ * 因 API 无 stash 列表枚举（见 StashTreeProvider），apply/pop/drop 作用于 stash@{0}（最新）。
+ * 「Shelve Changes」以 stash 近似（MVP，见工程方案 §4 P2）。
  */
 export function registerStashCommands(service: GitRepositoryService, stashTree: StashTreeProvider): vscode.Disposable[] {
 	const subs: vscode.Disposable[] = [];
@@ -29,13 +30,13 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.stashApply', async (node?: StashNode) => {
+		vscode.commands.registerCommand('hyperGit.stashApply', async () => {
 			const repo = service.repo;
 			if (!repo) {
 				return;
 			}
 			try {
-				await repo.applyStash(node?.kind === 'stash' ? node.index : 0);
+				await repo.applyStash(0);
 				stashTree.refresh();
 			} catch (e) {
 				void vscode.window.showErrorMessage(`Stash 应用失败：${errMsg(e)}`);
@@ -44,13 +45,13 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.stashPop', async (node?: StashNode) => {
+		vscode.commands.registerCommand('hyperGit.stashPop', async () => {
 			const repo = service.repo;
 			if (!repo) {
 				return;
 			}
 			try {
-				await repo.popStash(node?.kind === 'stash' ? node.index : 0);
+				await repo.popStash(0);
 				stashTree.refresh();
 			} catch (e) {
 				void vscode.window.showErrorMessage(`Stash pop 失败：${errMsg(e)}`);
@@ -59,15 +60,15 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.stashDrop', async (node?: StashNode) => {
+		vscode.commands.registerCommand('hyperGit.stashDrop', async () => {
 			const repo = service.repo;
-			if (!repo || node?.kind !== 'stash') {
+			if (!repo) {
 				return;
 			}
-			const choice = await vscode.window.showWarningMessage(`删除 stash@{${node.index}}？`, { modal: true }, '删除');
+			const choice = await vscode.window.showWarningMessage('删除最新的 stash（stash@{0}）？', { modal: true }, '删除');
 			if (choice === '删除') {
 				try {
-					await repo.dropStash(node.index);
+					await repo.dropStash(0);
 					stashTree.refresh();
 				} catch (e) {
 					void vscode.window.showErrorMessage(`Stash 删除失败：${errMsg(e)}`);
