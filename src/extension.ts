@@ -19,6 +19,7 @@ import { StashTreeProvider } from './adapter/tree/stash-tree';
 import { CommitWebviewProvider } from './adapter/webview/commit-webview';
 import { GraphWebview } from './adapter/webview/graph-webview';
 import { showGitConsole } from './infra/git-console';
+import { InlineCommitCodeLensProvider, registerInlineCommitCommand } from './adapter/editor/inline-commit-codelens';
 import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
 import { createLogger } from './infra/logger';
@@ -63,6 +64,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const logTree = new LogTreeProvider(service);
 	const branchesTree = new BranchesTreeProvider(service);
 	const stashTree = new StashTreeProvider(service);
+	const inlineLens = new InlineCommitCodeLensProvider(service);
 	const focusCommitView = (): void => {
 		void vscode.commands.executeCommand('hyperGit.commit.focus');
 	};
@@ -89,6 +91,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.showGraph', () => GraphWebview.open(service)),
 		vscode.commands.registerCommand('hyperGit.showConsole', () => showGitConsole()),
+		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, inlineLens),
+		registerInlineCommitCommand(service, inlineLens),
 	);
 
 	// git 状态变化频繁（add/checkout/diff 缓存失效均触发），防抖合并避免 log/stash 高频重拉。
@@ -101,6 +105,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			logTree.refresh();
 			branchesTree.refresh();
 			stashTree.refresh();
+			inlineLens.refresh();
 		}, 150);
 	};
 	context.subscriptions.push(

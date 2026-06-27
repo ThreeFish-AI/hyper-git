@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added — Editor Inline Commit（#13，0.0.5）
+
+> IDEA editor inline commit 的 VS Code 等价（补齐最后一块主要拼图）。
+
+- **行内提交 CodeLens**：编辑器中每个未暂存 hunk 上方渲染可点击 CodeLens「✓ 提交此 Hunk (+N -M)」→ 仅暂存该 hunk（patch 重建 + `git apply --cached`）→ 输入 message → `git commit`。
+- 新增 `engine/diff/editor-mapping`（hunk → 编辑器行区域映射，纯逻辑 + 5 单测）；gutter 行标记（绿/红/蓝）由原生 git quickDiff 提供。
+- 其他已暂存内容会一并提交时给出二次确认提示。
+
 ### Added — Parity Batch 3（partial commit + 高级操作，0.0.4）
 
 - **partial / 行级提交**（IDEA PartialChangesUtil 等价）：`engine/diff/hunk-parser`（unified diff 解析，7 单测）+ hunk 选择暂存/取消暂存（QuickPick 勾选）+ 光标处 hunk 暂存——经 patch 重建 + `git apply --cached`。
