@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Added — M4 Stash/Shelf（0.5.0）
+
+- **Stash 视图**：`StashTreeProvider` 经 `Repository.log({ refNames: ['stash'] })` 枚举 stash（API 不暴露 `git stash list`，以此近似）。
+- **Stash 操作**：`createStash` / `applyStash` / `popStash` / `dropStash`（经 vscode.git 稳定 API），配视图标题按钮与右键菜单 + viewsWelcome。
+- **Shelf（MVP）**：以 stash 近似 IDEA shelve（工程方案 §4 P2 约定）；忠实 patch Shelf 受 API 限制延后。
+- **API 限制（文档化延后）**：行级 partial commit（vscode.git `add` 仅整文件，无 hunk 暂存）、忠实 patch Shelf、Staging Area 模式开关、cherry-pick/revert/reset/分支重命名——均无稳定 API 对应，未来可经 git CLI 兜底或 proposed API 评估。
+
 ### Added — M3 Log/Branches/Diff·Blame（0.4.0）
 
 - **Log TreeView**：消费 `Repository.log()`，按 author/path 过滤（清除过滤）、复制 commit hash、显示文件历史。完整提交图（SVG 拓扑连线）作为后续增强（M3.x）。
