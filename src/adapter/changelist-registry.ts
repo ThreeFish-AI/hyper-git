@@ -123,6 +123,30 @@ export class ChangelistRegistry implements vscode.Disposable {
 		this.persist();
 	}
 
+	/** 将某个 hunk 分配到指定 changelist（#25 Move Lines to Changelist）。 */
+	moveHunk(fileKey: string, hunkIndex: number, targetId: string): void {
+		if (!this.defs.some((d) => d.id === targetId)) {
+			return;
+		}
+		this.assignments = { ...this.assignments, [`${fileKey}:${hunkIndex}`]: targetId };
+		this.persist();
+	}
+
+	/** 查询某文件的 hunk 级归属（返回 hunkIndex → changelistId 映射）。 */
+	getHunkAssignments(fileKey: string): Map<number, string> {
+		const result = new Map<number, string>();
+		const prefix = `${fileKey}:`;
+		for (const [key, clId] of Object.entries(this.assignments)) {
+			if (key.startsWith(prefix)) {
+				const idx = Number(key.slice(prefix.length));
+				if (!Number.isNaN(idx)) {
+					result.set(idx, clId);
+				}
+			}
+		}
+		return result;
+	}
+
 	dispose(): void {
 		this._onDidChange.dispose();
 	}

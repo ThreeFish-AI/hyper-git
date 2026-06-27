@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { buildPatch, parseUnifiedDiff } from '../engine/diff/hunk-parser';
+import type { ChangelistRegistry } from './changelist-registry';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -13,7 +14,7 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
  * hunk 选择暂存：解析 `git diff` 为 hunks，QuickPick 勾选 → 重建 patch → `git apply --cached`。
  * 光标处 hunk 暂存：定位光标所在 hunk → 暂存该 hunk。
  */
-export function registerPartialCommands(service: GitRepositoryService): vscode.Disposable[] {
+export function registerPartialCommands(service: GitRepositoryService, registry: ChangelistRegistry): vscode.Disposable[] {
 	const subs: vscode.Disposable[] = [];
 
 	/** 把 patch 经临时文件应用到 index（reverse=true 时为取消暂存）。 */
@@ -146,6 +147,48 @@ export function registerPartialCommands(service: GitRepositoryService): vscode.D
 				void vscode.window.showInformationMessage('已暂存光标处 hunk');
 			} catch (e) {
 				void vscode.window.showErrorMessage(`暂存失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.moveHunkToChangelist', async () => {
+			const editor = vscode.window.activeTextEditor;
+			const repo = service.repo;
+			if (!editor || !repo) {
+				return;
+			}
+			const rel = repoRelative(repo.rootUri.fsPath, editor.document.uri.fsPath);
+			if (!rel) {
+				void vscode.window.showWarningMessage('文件不在当前仓库内');
+				return;
+			}
+			const cursorLine = editor.selection.active.line + 1;
+			try {
+				const diff = await service.execGit(['diff', '--', rel]);
+				const files = parseUnifiedDiff(diff);
+				if (files.length === 0) {
+					return;
+				}
+				const file = files[0];
+				const overlapping = file.hunks
+					.map((h, i) => ({ h, i }))
+					.filter(({ h }) => cursorLine >= h.newStart && cursorLine < h.newStart + Math.max(h.newCount, 1));
+				if (overlapping.length === 0) {
+					void vscode.window.showInformationMessage('光标不在改动 hunk 内');
+					return;
+				}
+				const hunkIdx = overlapping[0].i;
+				const defs = registry.listDefs();
+				const active = registry.activeChangelistId;
+				const picks = defs.map((d) => ({ label: d.name, id: d.id, description: d.id === active ? 'active' : undefined }));
+				const pick = await vscode.window.showQuickPick(picks, { placeHolder: `将 Hunk ${hunkIdx + 1} 移至 Changelist` });
+				if (pick) {
+					registry.moveHunk(rel, hunkIdx, pick.id);
+					void vscode.window.showInformationMessage(`已将 Hunk ${hunkIdx + 1}（${rel}）分配到「${pick.label}」`);
+				}
+			} catch (e) {
+				void vscode.window.showErrorMessage(`分配失败：${errMsg(e)}`);
 			}
 		}),
 	);

@@ -3,7 +3,7 @@
   "displayName": "Hyper Git",
   "icon": "media/icon.png",
   "description": "在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口，并为未来 AI Agent 自主代理预留架构接缝。",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "threefish-ai",
   "license": "MIT",
   "preview": true,
@@ -79,6 +79,11 @@
           "id": "hyperGit.stash",
           "name": "Stash",
           "visibility": "visible"
+        },
+        {
+          "id": "hyperGit.shelf",
+          "name": "Shelf",
+          "visibility": "visible"
         }
       ]
     },
@@ -142,7 +147,13 @@
       { "command": "hyperGit.cleanupBranches", "title": "清理已合并分支", "category": "Hyper Git" },
       { "command": "hyperGit.copyBranchRef", "title": "复制分支引用", "category": "Hyper Git" },
       { "command": "hyperGit.threeWayDiff", "title": "3-way Diff 概览", "category": "Hyper Git" },
-      { "command": "hyperGit.inlineCommitHunk", "title": "行内提交 Hunk", "category": "Hyper Git" }
+      { "command": "hyperGit.inlineCommitHunk", "title": "行内提交 Hunk", "category": "Hyper Git" },
+      { "command": "hyperGit.shelveChanges", "title": "Shelve Changes…", "category": "Hyper Git", "icon": "$(inbox)" },
+      { "command": "hyperGit.unshelveSilently", "title": "Unshelve Silently", "category": "Hyper Git" },
+      { "command": "hyperGit.unshelveWithMerge", "title": "Unshelve with Merge", "category": "Hyper Git" },
+      { "command": "hyperGit.deleteShelf", "title": "Delete Shelf", "category": "Hyper Git" },
+      { "command": "hyperGit.startRebase", "title": "Interactive Rebase…", "category": "Hyper Git" },
+      { "command": "hyperGit.moveHunkToChangelist", "title": "Move Hunk to Changelist", "category": "Hyper Git" }
     ],
     "menus": {
       "view/title": [
@@ -157,7 +168,8 @@
         { "command": "hyperGit.branchCreate", "when": "view == hyperGit.branches", "group": "navigation" },
         { "command": "hyperGit.pull", "when": "view == hyperGit.branches", "group": "navigation" },
         { "command": "hyperGit.push", "when": "view == hyperGit.branches", "group": "navigation" },
-        { "command": "hyperGit.stashCreate", "when": "view == hyperGit.stash", "group": "navigation" }
+        { "command": "hyperGit.stashCreate", "when": "view == hyperGit.stash", "group": "navigation" },
+        { "command": "hyperGit.shelveChanges", "when": "view == hyperGit.shelf", "group": "navigation" }
       ],
       "view/item/context": [
         { "command": "hyperGit.setActiveChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.changelist", "group": "1_changelist@1" },
@@ -184,7 +196,10 @@
         { "command": "hyperGit.partialUnstage", "when": "view == hyperGit.changes && viewItem == hyperGit.fileChange", "group": "1_file@6" },
         { "command": "hyperGit.stashApply", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@1" },
         { "command": "hyperGit.stashPop", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@2" },
-        { "command": "hyperGit.stashDrop", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@3" }
+        { "command": "hyperGit.stashDrop", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@3" },
+        { "command": "hyperGit.unshelveSilently", "when": "view == hyperGit.shelf && viewItem == hyperGit.shelf", "group": "1_shelf@1" },
+        { "command": "hyperGit.unshelveWithMerge", "when": "view == hyperGit.shelf && viewItem == hyperGit.shelf", "group": "1_shelf@2" },
+        { "command": "hyperGit.deleteShelf", "when": "view == hyperGit.shelf && viewItem == hyperGit.shelf", "group": "1_shelf@3" }
       ],
       "commandPalette": [
         { "command": "hyperGit.openDiff", "when": "false" },
@@ -208,7 +223,11 @@
         { "command": "hyperGit.compareBranches", "when": "false" },
         { "command": "hyperGit.ignorePath", "when": "false" },
         { "command": "hyperGit.copyBranchRef", "when": "false" },
-        { "command": "hyperGit.inlineCommitHunk", "when": "false" }
+        { "command": "hyperGit.inlineCommitHunk", "when": "false" },
+        { "command": "hyperGit.unshelveSilently", "when": "false" },
+        { "command": "hyperGit.unshelveWithMerge", "when": "false" },
+        { "command": "hyperGit.deleteShelf", "when": "false" },
+        { "command": "hyperGit.moveHunkToChangelist", "when": "false" }
       ]
     },
     "configuration": {
