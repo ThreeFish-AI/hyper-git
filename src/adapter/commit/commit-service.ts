@@ -27,6 +27,8 @@ export interface CommitRequest {
 export interface CommitOutcome {
 	readonly ok: boolean;
 	readonly error?: string;
+	/** 提交成功但后续操作（如 push）失败时的提示。 */
+	readonly warning?: string;
 }
 
 /** Commit 流水线依赖的 AI 接缝集合（Null 实现注入，M5 替换为真实实现）。 */
@@ -118,25 +120,35 @@ export class CommitService implements vscode.Disposable {
 
 		// 解析选中文件的绝对路径
 		const changes = this.service.getChanges();
+		const checkedSet = new Set(req.selectedPaths);
 		const absPaths = this.resolveAbsolute(req.selectedPaths, changes);
 		if (absPaths.length === 0) {
 			return { ok: false, error: '未选择任何待提交文件' };
 		}
 
-		// Checkin hook 责任链
-		const hookResult = await this.pipeline.run({ message, filePaths: req.selectedPaths });
+		// Checkin hook 责任链（传绝对路径，供未来 AI hook 读取文件内容）
+		const hookResult = await this.pipeline.run({ message, filePaths: absPaths });
 		if (hookResult === CheckinResult.Cancel) {
 			return { ok: false, error: '提交被检查拦截（Checkin hook）' };
 		}
 
 		try {
+			// 让勾选集成为提交的权威范围：未勾选的已暂存文件先 unstage（对齐 IDEA「提交该集合」语义）
+			const toUnstage = changes.filter((c) => c.staged && !checkedSet.has(c.relativePath)).map((c) => c.uri.fsPath);
+			if (toUnstage.length > 0) {
+				await repo.restore(toUnstage, { staged: true });
+			}
 			await repo.add(absPaths);
 			await repo.commit(message, { amend: req.amend, signoff: req.signoff, noVerify: req.skipHooks });
-			if (req.push) {
-				await repo.push();
-			}
 			this.pushRecent(message);
 			this._onDidChange.fire();
+			if (req.push) {
+				try {
+					await repo.push();
+				} catch (e) {
+					return { ok: true, warning: `提交已成功，但推送失败：${this.normalizeError(e)}` };
+				}
+			}
 			return { ok: true };
 		} catch (e) {
 			return { ok: false, error: this.normalizeError(e) };

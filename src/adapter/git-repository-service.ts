@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { API, Repository } from '../types/git';
+import type { API, Change, Repository } from '../types/git';
 import { FileStatus } from '../engine/model';
 import { mapGitStatus } from './git-status-map';
 
@@ -24,6 +24,7 @@ export class GitRepositoryService implements vscode.Disposable {
 	private readonly _onDidChange = new vscode.EventEmitter<void>();
 	readonly onDidChange: vscode.Event<void> = this._onDidChange.event;
 	private readonly disposables: vscode.Disposable[] = [];
+	private repoSub?: vscode.Disposable;
 
 	constructor(private readonly api: API) {
 		this.disposables.push(api.onDidOpenRepository(() => this.pickRepository()));
@@ -39,46 +40,59 @@ export class GitRepositoryService implements vscode.Disposable {
 		return this._repo?.rootUri.fsPath ?? null;
 	}
 
-	/** 选取活跃仓库：优先匹配工作区根，否则首个。 */
+	/** 选取活跃仓库：优先匹配工作区根（用 API.getRepository，路径段精确匹配），否则首个。 */
 	private pickRepository(): void {
-		const folders = vscode.workspace.workspaceFolders;
 		let repo: Repository | null = null;
-		if (folders && folders.length > 0) {
-			const wsRoot = folders[0].uri.fsPath;
-			repo = this.api.repositories.find((r) => wsRoot.startsWith(r.rootUri.fsPath)) ?? null;
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		if (folder) {
+			repo = this.api.getRepository(folder.uri) ?? null;
 		}
 		if (!repo) {
 			repo = this.api.repositories[0] ?? null;
 		}
-		const changed = repo !== this._repo;
-		if (changed) {
+		if (repo !== this._repo) {
+			this.repoSub?.dispose();
+			this.repoSub = undefined;
 			this._repo = repo;
 			if (repo) {
-				this.disposables.push(repo.state.onDidChange(() => this._onDidChange.fire()));
+				this.repoSub = repo.state.onDidChange(() => this._onDidChange.fire());
 			}
+			this._onDidChange.fire();
 		}
-		this._onDidChange.fire();
 	}
 
-	/** 读取本地变更（工作区 + 未跟踪），映射为 ChangeItem。 */
+	/** 读取本地变更（已暂存 + 工作区 + 未跟踪，按相对路径去重，index 优先），映射为 ChangeItem。 */
 	getChanges(): ChangeItem[] {
 		const repo = this._repo;
 		if (!repo) {
 			return [];
 		}
 		const root = repo.rootUri.fsPath;
-		const items: ChangeItem[] = [];
-		const fromChange = (uri: vscode.Uri, originalUri: vscode.Uri, renameUri: vscode.Uri | undefined, status: number, staged: boolean): ChangeItem => {
-			const rel = path.relative(root, uri.fsPath).split(path.sep).join('/');
-			return { relativePath: rel, uri, originalUri, renameUri, status: mapGitStatus(status), staged };
+		const map = new Map<string, ChangeItem>();
+		const add = (c: Change, staged: boolean): void => {
+			const rel = path.relative(root, c.uri.fsPath).split(path.sep).join('/');
+			if (map.has(rel)) {
+				return;
+			}
+			map.set(rel, {
+				relativePath: rel,
+				uri: c.uri,
+				originalUri: c.originalUri,
+				renameUri: c.renameUri ?? undefined,
+				status: mapGitStatus(c.status),
+				staged,
+			});
 		};
+		for (const c of repo.state.indexChanges) {
+			add(c, true);
+		}
 		for (const c of repo.state.workingTreeChanges) {
-			items.push(fromChange(c.uri, c.originalUri, c.renameUri ?? undefined, c.status, false));
+			add(c, false);
 		}
 		for (const c of repo.state.untrackedChanges) {
-			items.push(fromChange(c.uri, c.originalUri, c.renameUri ?? undefined, c.status, false));
+			add(c, false);
 		}
-		return items;
+		return [...map.values()];
 	}
 
 	/** 构造任意 ref 版本的资源 Uri（diff 原始端，复用 vscode.git 的 git scheme）。 */
@@ -87,6 +101,7 @@ export class GitRepositoryService implements vscode.Disposable {
 	}
 
 	dispose(): void {
+		this.repoSub?.dispose();
 		this.disposables.forEach((d) => d.dispose());
 		this._onDidChange.dispose();
 	}

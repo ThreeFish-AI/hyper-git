@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { fileStatusLabel } from '../../engine/model';
 import { getDecoration } from '../../engine/scm-mapping/status-decoration';
 import type { ChangelistRegistry } from '../changelist-registry';
 import type { ChangeItem, GitRepositoryService } from '../git-repository-service';
@@ -87,7 +88,7 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
 		treeItem.id = `file:${change.relativePath}`;
 		treeItem.resourceUri = change.uri;
 		treeItem.description = `${decoration.letter}${dir && dir !== '.' ? ' · ' + dir : ''}`;
-		treeItem.tooltip = `${change.relativePath}\n状态：${change.status}${change.staged ? '（已暂存）' : ''}`;
+		treeItem.tooltip = `${change.relativePath}\n状态：${fileStatusLabel(change.status)}${change.staged ? '（已暂存）' : ''}`;
 		treeItem.iconPath = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor(decoration.themeColor));
 		treeItem.command = { command: 'hyperGit.openDiff', title: '打开 Diff', arguments: [change] };
 		return treeItem;

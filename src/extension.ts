@@ -69,9 +69,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		tree.refresh();
 		commitView.refresh();
 	};
-	service.onDidChange(refreshAll);
-	registry.onDidChange(refreshAll);
-	commit.onDidChange(refreshAll);
+	context.subscriptions.push(
+		service.onDidChange(refreshAll),
+		registry.onDidChange(refreshAll),
+		commit.onDidChange(refreshAll),
+	);
 }
 
 export function deactivate(): void {

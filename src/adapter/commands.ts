@@ -13,8 +13,8 @@ export function registerChangesCommands(
 	const subs: vscode.Disposable[] = [];
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.refresh', () => {
-			void service.repo?.status();
+		vscode.commands.registerCommand('hyperGit.refresh', async () => {
+			await service.repo?.status();
 			tree.refresh();
 		}),
 	);
@@ -87,7 +87,8 @@ export function registerChangesCommands(
 			if (!repo) {
 				return;
 			}
-			const left = service.toGitUri(change.uri, 'HEAD');
+			// 空仓库（无 HEAD）时用 originalUri 兜底，避免 git scheme 解析失败
+			const left = repo.state.HEAD ? service.toGitUri(change.uri, 'HEAD') : change.originalUri;
 			const right = change.uri;
 			const title = `${path.basename(change.relativePath)} (HEAD ↔ Working)`;
 			await vscode.commands.executeCommand('vscode.diff', left, right, title);

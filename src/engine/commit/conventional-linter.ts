@@ -15,7 +15,8 @@ export interface ConventionalValidation {
 }
 
 const ALLOWED_TYPES = ['feat', 'fix', 'docs', 'style', 'refactor', 'perf', 'test', 'build', 'ci', 'chore', 'revert'];
-const SUBJECT_RE = new RegExp(`^(${ALLOWED_TYPES.join('|')})(\\([\\w.\\-/]+\\))?(!)?: .+`);
+// scope 允许任意非括号非空白字符（含中文/Unicode）；Windows 行尾用 \r?\n 切分。
+const SUBJECT_RE = new RegExp(`^(${ALLOWED_TYPES.join('|')})(\\([^()\\s]+\\))?(!)?: .+`);
 const SUBJECT_MAX_LENGTH = 72;
 
 export const ALLOWED_COMMIT_TYPES = ALLOWED_TYPES;
@@ -31,7 +32,7 @@ export function validateConventional(message: string): ConventionalValidation {
 	if (!trimmed) {
 		return { severity: 'error', reason: '提交信息不能为空' };
 	}
-	const subject = message.split('\n', 1)[0] ?? '';
+	const subject = message.split(/\r?\n/, 1)[0] ?? '';
 	if (!subject.trim()) {
 		return { severity: 'error', reason: '主题行（首行）不能为空' };
 	}

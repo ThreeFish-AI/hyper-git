@@ -17,6 +17,22 @@ export enum FileStatus {
 	Ignored = 'I',
 }
 
+const FILE_STATUS_LABELS: Record<FileStatus, string> = {
+	[FileStatus.Modified]: 'Modified',
+	[FileStatus.Added]: 'Added',
+	[FileStatus.Deleted]: 'Deleted',
+	[FileStatus.Untracked]: 'Untracked',
+	[FileStatus.Renamed]: 'Renamed',
+	[FileStatus.Copied]: 'Copied',
+	[FileStatus.Conflict]: 'Conflict',
+	[FileStatus.Ignored]: 'Ignored',
+};
+
+/** 文件状态的可读名（用于 tooltip 等展示）。 */
+export function fileStatusLabel(status: FileStatus): string {
+	return FILE_STATUS_LABELS[status] ?? 'Unknown';
+}
+
 /** 单个文件的变更。uri 为仓库相对路径；rename/copy 时 oldUri 为源路径。 */
 export interface FileChange {
 	readonly uri: string;
