@@ -2,7 +2,7 @@
   "name": "hyper-git",
   "displayName": "Hyper Git",
   "description": "在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口，并为未来 AI Agent 自主代理预留架构接缝。",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "threefish-ai",
   "license": "MIT",
   "preview": true,
@@ -63,16 +63,39 @@
     "viewsWelcome": [
       {
         "view": "hyperGit.changes",
-        "contents": "Hyper Git 脚手架已就绪（M0）。\nLocal Changes 变更列表（多 changelist）将在 M1 接入 vscode.git API。\n[显示版本](command:hyperGit.showVersion)"
+        "contents": "未检测到 Git 变更或仓库。\n在 Git 仓库中打开工作区，变更将按 Changelist 分组显示。\n[新建 Changelist](command:hyperGit.newChangelist)"
       }
     ],
     "commands": [
-      {
-        "command": "hyperGit.showVersion",
-        "title": "显示版本",
-        "category": "Hyper Git"
-      }
+      { "command": "hyperGit.showVersion", "title": "显示版本", "category": "Hyper Git" },
+      { "command": "hyperGit.refresh", "title": "刷新", "category": "Hyper Git", "icon": "$(refresh)" },
+      { "command": "hyperGit.newChangelist", "title": "新建 Changelist", "category": "Hyper Git", "icon": "$(add)" },
+      { "command": "hyperGit.setActiveChangelist", "title": "设为活动 Changelist", "category": "Hyper Git" },
+      { "command": "hyperGit.renameChangelist", "title": "重命名 Changelist", "category": "Hyper Git" },
+      { "command": "hyperGit.deleteChangelist", "title": "删除 Changelist", "category": "Hyper Git" },
+      { "command": "hyperGit.moveChangelist", "title": "移至 Changelist…", "category": "Hyper Git" },
+      { "command": "hyperGit.openDiff", "title": "打开 Diff", "category": "Hyper Git" }
     ],
+    "menus": {
+      "view/title": [
+        { "command": "hyperGit.refresh", "when": "view == hyperGit.changes", "group": "navigation" },
+        { "command": "hyperGit.newChangelist", "when": "view == hyperGit.changes", "group": "navigation" }
+      ],
+      "view/item/context": [
+        { "command": "hyperGit.setActiveChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.changelist", "group": "1_changelist@1" },
+        { "command": "hyperGit.renameChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.changelist", "group": "1_changelist@2" },
+        { "command": "hyperGit.deleteChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.changelist", "group": "1_changelist@3" },
+        { "command": "hyperGit.moveChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.fileChange", "group": "inline" },
+        { "command": "hyperGit.moveChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.fileChange", "group": "1_file@1" }
+      ],
+      "commandPalette": [
+        { "command": "hyperGit.openDiff", "when": "false" },
+        { "command": "hyperGit.setActiveChangelist", "when": "false" },
+        { "command": "hyperGit.renameChangelist", "when": "false" },
+        { "command": "hyperGit.deleteChangelist", "when": "false" },
+        { "command": "hyperGit.moveChangelist", "when": "false" }
+      ]
+    },
     "configuration": {
       "title": "Hyper Git",
       "properties": {

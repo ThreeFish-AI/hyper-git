@@ -1,41 +1,52 @@
 import * as vscode from 'vscode';
-import { createLogger } from './infra/logger';
 import { NullLlmProvider } from './agent/llm-provider';
+import { registerChangesCommands } from './adapter/commands';
+import { ChangelistRegistry } from './adapter/changelist-registry';
+import { ChangesTreeProvider, EmptyChangesProvider } from './adapter/tree/changes-tree';
+import { getGitApi } from './adapter/git-api';
+import { GitRepositoryService } from './adapter/git-repository-service';
+import { createLogger } from './infra/logger';
 
 /**
  * 扩展入口。仅做装配（DI 注册），业务逻辑下沉到 engine/adapter 层。
  */
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	const logger = createLogger();
 	logger.info('Hyper Git activated');
 
-	// AI 接缝注入（Null 实现，M5 替换为真实 ILlmProvider）。
 	const llm = new NullLlmProvider();
 
-	const showVersion = vscode.commands.registerCommand('hyperGit.showVersion', () => {
-		const version: string = context.extension.packageJSON.version;
-		vscode.window.showInformationMessage(`Hyper Git v${version}`);
-		logger.info(`showVersion: version=${version}, llmSource=${llm.sourceId}`);
-	});
+	context.subscriptions.push(
+		vscode.commands.registerCommand('hyperGit.showVersion', () => {
+			const version: string = context.extension.packageJSON.version;
+			vscode.window.showInformationMessage(`Hyper Git v${version}`);
+			logger.info(`version=${version}, llmSource=${llm.sourceId}`);
+		}),
+	);
 
-	// Changes 视图占位（M1 接入真实 changelist registry + vscode.git workingTreeChanges）。
-	const changesProvider = new PlaceholderChangesProvider();
-	const changesView = vscode.window.registerTreeDataProvider('hyperGit.changes', changesProvider);
+	// M1：Git Adapter + Changes TreeView（多 changelist）
+	const api = await getGitApi();
+	if (!api) {
+		logger.warn('vscode.git API 不可用，Changes 视图保持空状态');
+		context.subscriptions.push(vscode.window.registerTreeDataProvider('hyperGit.changes', new EmptyChangesProvider()));
+		return;
+	}
 
-	context.subscriptions.push(showVersion, changesView);
+	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? 'default';
+	const service = new GitRepositoryService(api);
+	const registry = new ChangelistRegistry(context.workspaceState, service.repoRoot ?? workspaceRoot);
+	const tree = new ChangesTreeProvider(service, registry);
+
+	context.subscriptions.push(
+		service,
+		registry,
+		vscode.window.registerTreeDataProvider('hyperGit.changes', tree),
+		...registerChangesCommands(service, registry, tree),
+	);
+	service.onDidChange(() => tree.refresh());
+	registry.onDidChange(() => tree.refresh());
 }
 
 export function deactivate(): void {
-	// 预留：M1+ 在此释放长生命周期资源。
-}
-
-/** M0 占位：空树 → 触发 viewsWelcome 内容显示。M1 替换为真实 changelist TreeDataProvider。 */
-class PlaceholderChangesProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-	getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
-		return element;
-	}
-
-	getChildren(): vscode.TreeItem[] {
-		return [];
-	}
+	// 预留：M2+ 在此释放长生命周期资源。
 }
