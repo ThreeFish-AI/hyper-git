@@ -1,1 +1,18 @@
+# 本地 MCP 配置（不入仓）
 .mcp.json
+
+# 依赖与构建产物
+node_modules/
+dist/
+out/
+*.vsix
+
+# VS Code Test 临时
+.vscode-test/
+
+# 临时产物（执行计划等，一律收敛至此并即时清理）
+.temp/
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db

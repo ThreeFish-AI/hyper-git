@@ -1,0 +1,6 @@
+# pnpm 11+ 构建脚本审批（package.json 的 pnpm 字段已废弃）。
+# 放行需要 postinstall 安装原生二进制的依赖（默认被拦截以保供应链安全）。
+allowBuilds:
+  '@vscode/vsce-sign': true
+  esbuild: true
+  keytar: true
