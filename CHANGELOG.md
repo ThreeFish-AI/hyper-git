@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added — M3 Log/Branches/Diff·Blame（0.4.0）
+
+- **Log TreeView**：消费 `Repository.log()`，按 author/path 过滤（清除过滤）、复制 commit hash、显示文件历史。完整提交图（SVG 拓扑连线）作为后续增强（M3.x）。
+- **Branches TreeView**：消费 `Repository.state.refs`（Local/Remote 分组），活动分支高亮；支持新建/检出/删除/合并/变基（rebase）。
+- **Blame**：`Show Blame` 命令对当前文件执行 `repo.blame` 并以只读文档展示。
+- **Show History**：从 Changes 文件右键跳转 Log 并按该文件路径过滤。
+- **API 限制（文档化延后）**：vscode.git 稳定 API 不含 cherry-pick / revert / reset / 分支重命名，这些 IDEA 功能暂不可用（未来可 CLI 兜底）。
+
 ### Fixed — M0/M1/M2 审查修复（0.3.1）
 
 经 3 路独立 code review（正确性 / 架构 / 完整性）交叉复核后修复：
