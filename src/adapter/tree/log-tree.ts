@@ -18,7 +18,7 @@ export interface LogFilter {
  * Log 视图 TreeDataProvider：消费 `Repository.log()`，按 author/path 过滤。
  * 完整提交图（SVG 拓扑连线）作为后续增强（M3.x）；当前以提交列表 + 过滤 + copy hash 提供核心浏览能力。
  */
-export class LogTreeProvider implements vscode.TreeDataProvider<LogNode> {
+export class LogTreeProvider implements vscode.TreeDataProvider<LogNode>, vscode.Disposable {
 	private readonly _onDidChange = new vscode.EventEmitter<LogNode | undefined>();
 	readonly onDidChangeTreeData = this._onDidChange.event;
 	private filter: LogFilter = {};
@@ -70,6 +70,10 @@ export class LogTreeProvider implements vscode.TreeDataProvider<LogNode> {
 		item.contextValue = 'hyperGit.commit';
 		item.iconPath = new vscode.ThemeIcon('git-commit');
 		return item;
+	}
+
+	dispose(): void {
+		this._onDidChange.dispose();
 	}
 }
 

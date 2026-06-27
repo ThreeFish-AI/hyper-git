@@ -93,10 +93,14 @@ jobs:
         with:
           name: vsix
       - name: 发布到 VS Code Marketplace
-        run: pnpm dlx @vscode/vsce publish --packagePath *.vsix
+        run: |
+          PRE_FLAG=$([[ "${GITHUB_REF_NAME}" == *rc* ]] && echo "--pre-release" || echo "")
+          pnpm dlx @vscode/vsce publish --packagePath *.vsix $PRE_FLAG
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
       - name: 发布到 OpenVSX（覆盖 Cursor / Windsurf 等 AI IDE）
-        run: pnpm dlx ovsx publish *.vsix
+        run: |
+          PRE_FLAG=$([[ "${GITHUB_REF_NAME}" == *rc* ]] && echo "--pre-release" || echo "")
+          pnpm dlx ovsx publish *.vsix $PRE_FLAG
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}

@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { FileStatus } from '../engine/model';
 import type { ChangelistRegistry } from './changelist-registry';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
 import type { ChangesNode, ChangesTreeProvider } from './tree/changes-tree';
@@ -92,6 +93,34 @@ export function registerChangesCommands(
 			const right = change.uri;
 			const title = `${path.basename(change.relativePath)} (HEAD ↔ Working)`;
 			await vscode.commands.executeCommand('vscode.diff', left, right, title);
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.discardChanges', async (change: ChangeItem) => {
+			const repo = service.repo;
+			if (!repo || !change) {
+				return;
+			}
+			const choice = await vscode.window.showWarningMessage(
+				`丢弃「${change.relativePath}」的改动？此操作不可撤销。`,
+				{ modal: true },
+				'丢弃',
+			);
+			if (choice !== '丢弃') {
+				return;
+			}
+			try {
+				// 未跟踪文件用 clean（删除）；已跟踪的改动用 restore（丢弃工作区改动）
+				if (change.status === FileStatus.Untracked) {
+					await repo.clean([change.uri.fsPath]);
+				} else {
+					await repo.restore([change.uri.fsPath]);
+				}
+				tree.refresh();
+			} catch (e) {
+				void vscode.window.showErrorMessage(`丢弃失败：${e instanceof Error ? e.message : String(e)}`);
+			}
 		}),
 	);
 

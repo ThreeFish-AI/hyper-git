@@ -57,7 +57,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const commitView = new CommitWebviewProvider(service, registry, commit);
 	const logTree = new LogTreeProvider(service);
 	const branchesTree = new BranchesTreeProvider(service);
-	const stashTree = new StashTreeProvider(service);
+	const stashTree = new StashTreeProvider();
 	const focusCommitView = (): void => {
 		void vscode.commands.executeCommand('hyperGit.commit.focus');
 	};
@@ -66,6 +66,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		service,
 		registry,
 		commit,
+		logTree,
+		branchesTree,
+		stashTree,
 		vscode.window.registerTreeDataProvider('hyperGit.changes', tree),
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
 		vscode.window.registerTreeDataProvider('hyperGit.log', logTree),
@@ -78,12 +81,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
 	);
 
+	// git 状态变化频繁（add/checkout/diff 缓存失效均触发），防抖合并避免 log/stash 高频重拉。
+	let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 	const refreshAll = (): void => {
-		tree.refresh();
-		commitView.refresh();
-		logTree.refresh();
-		branchesTree.refresh();
-		stashTree.refresh();
+		clearTimeout(refreshTimer);
+		refreshTimer = setTimeout(() => {
+			tree.refresh();
+			commitView.refresh();
+			logTree.refresh();
+			branchesTree.refresh();
+			stashTree.refresh();
+		}, 150);
 	};
 	context.subscriptions.push(
 		service.onDidChange(refreshAll),

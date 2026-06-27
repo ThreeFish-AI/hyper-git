@@ -41,6 +41,10 @@ suite('扩展冒烟测试', function () {
 			'hyperGit.stashApply',
 			'hyperGit.stashPop',
 			'hyperGit.stashDrop',
+			'hyperGit.discardChanges',
+			'hyperGit.pull',
+			'hyperGit.push',
+			'hyperGit.fetch',
 		]) {
 			assert.ok(commands.includes(cmd), `命令 ${cmd} 未注册`);
 		}

@@ -17,7 +17,7 @@ export interface BranchRefNode {
 export type BranchNode = BranchGroupNode | BranchRefNode;
 
 /** Branches 视图 TreeDataProvider：消费 `Repository.state.refs`（本地 + 远程分支）。 */
-export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode> {
+export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>, vscode.Disposable {
 	private readonly _onDidChange = new vscode.EventEmitter<BranchNode | undefined>();
 	readonly onDidChangeTreeData = this._onDidChange.event;
 
@@ -63,5 +63,9 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		item.tooltip = `${ref.name ?? ''}${active ? ' (active)' : ''}`;
 		item.iconPath = new vscode.ThemeIcon(element.remote ? 'cloud' : 'git-branch', active ? new vscode.ThemeColor('gitDecoration.modifiedResourceForeground') : undefined);
 		return item;
+	}
+
+	dispose(): void {
+		this._onDidChange.dispose();
 	}
 }

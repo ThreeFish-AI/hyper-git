@@ -12,6 +12,7 @@ export default tseslint.config(
 			'node_modules/**',
 			'.vscode-test/**',
 			'*.vsix',
+			'.temp/**',
 			'esbuild.js',
 			'tests/run-integration.js',
 			'tests/suite/**',
