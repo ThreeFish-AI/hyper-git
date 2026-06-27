@@ -7,7 +7,10 @@ import { NullPreCommitInspector } from './agent/pre-commit';
 import { registerChangesCommands } from './adapter/commands';
 import { ChangelistRegistry } from './adapter/changelist-registry';
 import { CommitService } from './adapter/commit/commit-service';
+import { BranchesTreeProvider } from './adapter/tree/branches-tree';
 import { ChangesTreeProvider, EmptyChangesProvider } from './adapter/tree/changes-tree';
+import { LogTreeProvider } from './adapter/tree/log-tree';
+import { registerHistoryCommands } from './adapter/history-commands';
 import { CommitWebviewProvider } from './adapter/webview/commit-webview';
 import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
@@ -50,6 +53,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		conflict: new NullConflictResolver(),
 	});
 	const commitView = new CommitWebviewProvider(service, registry, commit);
+	const logTree = new LogTreeProvider(service);
+	const branchesTree = new BranchesTreeProvider(service);
 	const focusCommitView = (): void => {
 		void vscode.commands.executeCommand('hyperGit.commit.focus');
 	};
@@ -60,7 +65,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		commit,
 		vscode.window.registerTreeDataProvider('hyperGit.changes', tree),
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
+		vscode.window.registerTreeDataProvider('hyperGit.log', logTree),
+		vscode.window.registerTreeDataProvider('hyperGit.branches', branchesTree),
 		...registerChangesCommands(service, registry, tree),
+		...registerHistoryCommands(service, logTree, branchesTree),
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
 	);
@@ -68,6 +76,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const refreshAll = (): void => {
 		tree.refresh();
 		commitView.refresh();
+		logTree.refresh();
+		branchesTree.refresh();
 	};
 	context.subscriptions.push(
 		service.onDidChange(refreshAll),
