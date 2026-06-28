@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+## [0.0.1-rc.2] - 2026-06-28 — 第二个预发布候选
+
+包含 rc.1 后的全部 Parity Recovery（Batch 1-4 + Editor Inline Commit），大幅补齐 IDEA Git 功能复刻。
+
+### 核心新增（自 rc.1）
+- **Editor Inline Commit**（#13）：CodeLens「✓ 提交此 Hunk」→ 仅暂存该 hunk → 提交。
+- **Cherry-pick / Revert / Reset / Branch rename / Compare / Ignore / Reword**（经 `api.git.path` CLI 通道）。
+- **Git 提交图**（Webview `git log --graph` 着色拓扑）+ **Console**（git 命令输出面板）。
+- **partial/hunk 级提交**（hunk 解析引擎 + 选择暂存 + 光标处暂存）+ undo/drop/fixup + cleanup branches + 3-way diff。
+- **忠实 Shelf**（patch 存储 + unshelve 三方合并）+ **交互式 Rebase UI**（pick/squash/fixup/drop Webview）+ **Move Hunk to Changelist**（#25）。
+- **Stash 多栈列表** + Discard + Pull/Push/Fetch + PNG 图标 + Dependabot。
+
 ### Added — Parity Batch 4（忠实 Shelf + 交互式 Rebase + Line→CL，0.0.6）
 
 - **忠实 Shelf**（IDEA patch-based，#27-28）：Shelve（`git diff` → patch 存扩展存储 → `git checkout --` 移除工作区）+ Unshelve silently / with 3-way merge + Delete + Shelf TreeView。与 Stash 独立并存。
