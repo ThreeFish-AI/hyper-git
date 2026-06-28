@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { GitRepositoryService } from './git-repository-service';
+import { handleGitConflict } from './conflict-ui';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -214,7 +215,9 @@ export function registerShelfCommands(service: GitRepositoryService, shelfServic
 				shelfTree.refresh();
 				void vscode.window.showInformationMessage(`已 unshelve（3-way）「${node.name}」`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Unshelve 失败：${errMsg(e)}`);
+				if (!(await handleGitConflict(service, 'Unshelve'))) {
+					void vscode.window.showErrorMessage(`Unshelve 失败：${errMsg(e)}`);
+				}
 			}
 		}),
 	);

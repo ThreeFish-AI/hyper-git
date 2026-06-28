@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { GitRepositoryService } from './git-repository-service';
 import type { StashNode, StashTreeProvider } from './tree/stash-tree';
+import { handleGitConflict } from './conflict-ui';
 
 /**
  * 注册 Stash 相关命令（M4）。
@@ -55,7 +56,9 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 				await repo.popStash(index);
 				stashTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Stash pop 失败：${errMsg(e)}`);
+				if (!(await handleGitConflict(service, 'Stash pop'))) {
+					void vscode.window.showErrorMessage(`Stash pop 失败：${errMsg(e)}`);
+				}
 			}
 		}),
 	);

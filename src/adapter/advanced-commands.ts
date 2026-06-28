@@ -141,7 +141,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 			if (node?.kind !== 'branch') {
 				return;
 			}
-			const ref = node.ref.name ?? '';
+			const ref = node.ref.shortName;
 			if (ref) {
 				await vscode.env.clipboard.writeText(ref);
 				void vscode.window.showInformationMessage(`已复制 ${ref}`);

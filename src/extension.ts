@@ -89,7 +89,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.window.registerTreeDataProvider('hyperGit.shelf', shelfTree),
 		...registerChangesCommands(service, registry, tree),
 		...registerHistoryCommands(service, logTree, branchesTree),
-		...registerGitCliCommands(service, branchesTree),
+		...registerGitCliCommands(service, branchesTree, logTree),
 		...registerPartialCommands(service, registry),
 		...registerAdvancedCommands(service, branchesTree),
 		...registerStashCommands(service, stashTree),
@@ -122,6 +122,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		registry.onDidChange(refreshAll),
 		commit.onDidChange(refreshAll),
 	);
+
+	// 首帧保险：若 repo 在 activate 前已就绪，GitRepositoryService 构造函数的 _onDidChange.fire()
+	// 早于任何订阅者挂载而被丢失，state.onDidChange 此后可能不再触发。主动刷新一次确保
+	// Branches/Log 不停留在首帧空状态（getChildren 内已对未就绪数据做 CLI 兜底与空安全处理）。
+	setTimeout(() => {
+		branchesTree.refresh();
+		logTree.refresh();
+	}, 500);
 }
 
 export function deactivate(): void {

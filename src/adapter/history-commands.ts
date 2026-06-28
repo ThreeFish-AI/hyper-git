@@ -4,6 +4,7 @@ import type { BranchNode } from './tree/branches-tree';
 import type { BranchesTreeProvider } from './tree/branches-tree';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
 import type { LogNode, LogTreeProvider } from './tree/log-tree';
+import { handleGitConflict } from './conflict-ui';
 
 /** 注册 Log/Branches/Blame/History 相关命令（M3）。 */
 export function registerHistoryCommands(
@@ -82,7 +83,7 @@ export function registerHistoryCommands(
 				return;
 			}
 			try {
-				await repo.checkout(node.ref.name ?? '');
+				await repo.checkout(node.ref.shortName);
 				branchesTree.refresh();
 			} catch (e) {
 				void vscode.window.showErrorMessage(`检出失败：${errMsg(e)}`);
@@ -96,11 +97,17 @@ export function registerHistoryCommands(
 			if (!repo || node?.kind !== 'branch' || node.remote) {
 				return;
 			}
-			const name = node.ref.name ?? '';
-			const choice = await vscode.window.showWarningMessage(`删除分支「${name}」？`, { modal: true }, '删除');
-			if (choice === '删除') {
+			const name = node.ref.shortName;
+			// 查询是否已合并：已合并用安全删除（-d / force=false），未合并需二次确认强制删除（-D / force=true）
+			const merged = await isBranchMerged(service, name);
+			const detail = merged
+				? `分支「${name}」已合并，可安全删除。`
+				: `分支「${name}」未合并，强制删除将丢失其独有提交！`;
+			const confirmText = merged ? '删除' : '强制删除';
+			const choice = await vscode.window.showWarningMessage(detail, { modal: true }, confirmText);
+			if (choice === confirmText) {
 				try {
-					await repo.deleteBranch(name, true);
+					await repo.deleteBranch(name, !merged);
 					branchesTree.refresh();
 				} catch (e) {
 					void vscode.window.showErrorMessage(`删除失败：${errMsg(e)}`);
@@ -115,11 +122,18 @@ export function registerHistoryCommands(
 			if (!repo || node?.kind !== 'branch') {
 				return;
 			}
+			const name = node.ref.shortName;
+			const ok = await vscode.window.showWarningMessage(`将「${name}」合并到当前分支？`, { modal: true }, '合并');
+			if (ok !== '合并') {
+				return;
+			}
 			try {
-				await repo.merge(node.ref.name ?? '');
+				await repo.merge(name);
 				branchesTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`合并失败：${errMsg(e)}`);
+				if (!(await handleGitConflict(service, '合并'))) {
+					void vscode.window.showErrorMessage(`合并失败：${errMsg(e)}`);
+				}
 			}
 		}),
 	);
@@ -130,11 +144,18 @@ export function registerHistoryCommands(
 			if (!repo || node?.kind !== 'branch') {
 				return;
 			}
+			const name = node.ref.shortName;
+			const ok = await vscode.window.showWarningMessage(`将当前分支变基到「${name}」？（重写历史，可能冲突）`, { modal: true }, '变基');
+			if (ok !== '变基') {
+				return;
+			}
 			try {
-				await repo.rebase(node.ref.name ?? '');
+				await repo.rebase(name);
 				branchesTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`变基失败：${errMsg(e)}`);
+				if (!(await handleGitConflict(service, '变基'))) {
+					void vscode.window.showErrorMessage(`变基失败：${errMsg(e)}`);
+				}
 			}
 		}),
 	);
@@ -175,7 +196,9 @@ export function registerHistoryCommands(
 				await repo.pull();
 				branchesTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Pull 失败：${errMsg(e)}`);
+				if (!(await handleGitConflict(service, 'Pull'))) {
+					void vscode.window.showErrorMessage(`Pull 失败：${errMsg(e)}`);
+				}
 			}
 		}),
 	);
@@ -211,4 +234,19 @@ export function registerHistoryCommands(
 	);
 
 	return subs;
+}
+
+/** 查询本地分支是否已合并到当前 HEAD（或 main）：经 `git branch --merged <base>`。 */
+async function isBranchMerged(service: GitRepositoryService, branch: string): Promise<boolean> {
+	const repo = service.repo;
+	if (!repo) {
+		return false;
+	}
+	const base = repo.state.HEAD?.name ?? 'main';
+	try {
+		const out = await service.execGit(['branch', '--merged', base]);
+		return out.split('\n').some((line) => line.replace(/^\*\s*/, '').trim() === branch);
+	} catch {
+		return false;
+	}
 }
