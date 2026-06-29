@@ -2,15 +2,17 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { BranchNode } from './tree/branches-tree';
 import type { BranchesTreeProvider } from './tree/branches-tree';
+import type { BranchFavorites } from './branch-favorites';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
 import type { LogNode, LogTreeProvider } from './tree/log-tree';
 import { handleGitConflict } from './conflict-ui';
 
-/** 注册 Log/Branches/Blame/History 相关命令（M3）。 */
+/** 注册 Log/Branches/Blame/History/Tags 相关命令。 */
 export function registerHistoryCommands(
 	service: GitRepositoryService,
 	logTree: LogTreeProvider,
 	branchesTree: BranchesTreeProvider,
+	favorites: BranchFavorites,
 ): vscode.Disposable[] {
 	const subs: vscode.Disposable[] = [];
 	const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -229,6 +231,127 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 			} catch (e) {
 				void vscode.window.showErrorMessage(`Fetch 失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	// —— IDEA 风格 Branches 高级操作（Phase 1）——
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.toggleFavorite', async (node: BranchNode) => {
+			if (node?.kind !== 'branch' || node.ref.isTag) {
+				return;
+			}
+			favorites.toggle(node.ref.shortName);
+			// favorites.onDidChange 会触发 branchesTree.refresh()
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.checkoutAsNew', async (node: BranchNode) => {
+			const repo = service.repo;
+			if (!repo || node?.kind !== 'branch') {
+				return;
+			}
+			const source = node.ref.shortName;
+			const name = await vscode.window.showInputBox({ prompt: `从「${source}」新建并检出本地分支`, placeHolder: '新分支名' });
+			if (!name || !name.trim()) {
+				return;
+			}
+			try {
+				await repo.createBranch(name.trim(), true, source);
+				branchesTree.refresh();
+			} catch (e) {
+				void vscode.window.showErrorMessage(`新建分支失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.compareWithCurrent', async (node: BranchNode) => {
+			const repo = service.repo;
+			if (!repo || node?.kind !== 'branch') {
+				return;
+			}
+			const selected = node.ref.shortName;
+			try {
+				const out = await service.execGit(['diff', '--stat', `HEAD...${selected}`]);
+				const doc = await vscode.workspace.openTextDocument({ content: `$ git diff --stat HEAD...${selected}\n\n${out}`, language: 'plaintext' });
+				await vscode.window.showTextDocument(doc, { preview: true });
+			} catch (e) {
+				void vscode.window.showErrorMessage(`比较失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.tagCreate', async () => {
+			const repo = service.repo;
+			if (!repo) {
+				return;
+			}
+			const name = await vscode.window.showInputBox({ prompt: '标签名（如 v1.0.0）' });
+			if (!name || !name.trim()) {
+				return;
+			}
+			const commits = await repo.log({ maxEntries: 20 });
+			const items = [
+				{ label: 'HEAD', description: '当前提交', target: 'HEAD' },
+				...commits.map((c) => ({
+					label: (c.message.split('\n', 1)[0] ?? c.hash).slice(0, 50),
+					description: c.hash.slice(0, 7),
+					target: c.hash,
+				})),
+			];
+			const pick = await vscode.window.showQuickPick(items, { placeHolder: '在哪个 commit 上打标签' });
+			if (!pick) {
+				return;
+			}
+			try {
+				await service.execGit(['tag', name.trim(), pick.target]);
+				branchesTree.refresh();
+				void vscode.window.showInformationMessage(`已创建标签 ${name.trim()} @ ${pick.target === 'HEAD' ? 'HEAD' : pick.target.slice(0, 7)}`);
+			} catch (e) {
+				void vscode.window.showErrorMessage(`创建标签失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.tagDelete', async (node: BranchNode) => {
+			if (node?.kind !== 'branch' || !node.ref.isTag) {
+				return;
+			}
+			const name = node.ref.shortName;
+			const ok = await vscode.window.showWarningMessage(`删除标签「${name}」？`, { modal: true }, '删除');
+			if (ok !== '删除') {
+				return;
+			}
+			try {
+				await service.execGit(['tag', '-d', name]);
+				branchesTree.refresh();
+			} catch (e) {
+				void vscode.window.showErrorMessage(`删除标签失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.tagCheckout', async (node: BranchNode) => {
+			const repo = service.repo;
+			if (!repo || node?.kind !== 'branch' || !node.ref.isTag) {
+				return;
+			}
+			const name = node.ref.shortName;
+			const ok = await vscode.window.showWarningMessage(`检出标签「${name}」（进入 detached HEAD）？`, { modal: true }, '检出');
+			if (ok !== '检出') {
+				return;
+			}
+			try {
+				await repo.checkout(name);
+				branchesTree.refresh();
+			} catch (e) {
+				void vscode.window.showErrorMessage(`检出标签失败：${errMsg(e)}`);
 			}
 		}),
 	);

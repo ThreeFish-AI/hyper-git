@@ -6,6 +6,7 @@ import { NullLlmProvider } from './agent/llm-provider';
 import { NullPreCommitInspector } from './agent/pre-commit';
 import { registerChangesCommands } from './adapter/commands';
 import { ChangelistRegistry } from './adapter/changelist-registry';
+import { BranchFavorites } from './adapter/branch-favorites';
 import { CommitService } from './adapter/commit/commit-service';
 import { BranchesTreeProvider } from './adapter/tree/branches-tree';
 import { ChangesTreeProvider, EmptyChangesProvider } from './adapter/tree/changes-tree';
@@ -52,6 +53,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? 'default';
 	const service = new GitRepositoryService(api);
 	const registry = new ChangelistRegistry(context.workspaceState, service.repoRoot ?? workspaceRoot);
+	const favorites = new BranchFavorites(context.workspaceState, service.repoRoot ?? workspaceRoot);
 	const tree = new ChangesTreeProvider(service, registry);
 
 	// AI 接缝注入（Null 实现，M5 替换为真实 provider）
@@ -64,7 +66,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	});
 	const commitView = new CommitWebviewProvider(service, registry, commit);
 	const logTree = new LogTreeProvider(service);
-	const branchesTree = new BranchesTreeProvider(service);
+	const branchesTree = new BranchesTreeProvider(service, favorites);
 	const stashTree = new StashTreeProvider(service);
 	const inlineLens = new InlineCommitCodeLensProvider(service);
 	const shelfService = new ShelfService(service, context.globalStorageUri.fsPath);
@@ -76,6 +78,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	context.subscriptions.push(
 		service,
 		registry,
+		favorites,
 		commit,
 		logTree,
 		branchesTree,
@@ -88,7 +91,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.window.registerTreeDataProvider('hyperGit.stash', stashTree),
 		vscode.window.registerTreeDataProvider('hyperGit.shelf', shelfTree),
 		...registerChangesCommands(service, registry, tree),
-		...registerHistoryCommands(service, logTree, branchesTree),
+		...registerHistoryCommands(service, logTree, branchesTree, favorites),
 		...registerGitCliCommands(service, branchesTree, logTree),
 		...registerPartialCommands(service, registry),
 		...registerAdvancedCommands(service, branchesTree),
