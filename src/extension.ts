@@ -18,6 +18,8 @@ import { registerPartialCommands } from './adapter/partial-commands';
 import { registerAdvancedCommands } from './adapter/advanced-commands';
 import { registerRemoteCommands } from './adapter/remote-commands';
 import { StashTreeProvider } from './adapter/tree/stash-tree';
+import { WorktreeTreeProvider } from './adapter/tree/worktree-tree';
+import { registerWorktreeCommands } from './adapter/worktree-commands';
 import { CommitWebviewProvider } from './adapter/webview/commit-webview';
 import { GraphWebview } from './adapter/webview/graph-webview';
 import { showGitConsole } from './infra/git-console';
@@ -50,7 +52,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const api = await getGitApi();
 	if (!api) {
 		logger.warn('vscode.git API 不可用，视图保持空状态');
-		context.subscriptions.push(vscode.window.registerTreeDataProvider('hyperGit.changes', new EmptyChangesProvider()));
+		const empty = new EmptyChangesProvider();
+		context.subscriptions.push(
+			vscode.window.registerTreeDataProvider('hyperGit.changes', empty),
+			vscode.window.registerTreeDataProvider('hyperGit.worktrees', empty),
+		);
 		return;
 	}
 
@@ -75,6 +81,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const logTree = new LogTreeProvider(service);
 	const branchesTree = new BranchesTreeProvider(service, favorites);
 	const stashTree = new StashTreeProvider(service);
+	const worktreeTree = new WorktreeTreeProvider(service);
 	const inlineLens = new InlineCommitCodeLensProvider(service);
 	const blame = new BlameAnnotationController(service);
 	const shelfService = new ShelfService(service, context.globalStorageUri.fsPath);
@@ -91,6 +98,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		logTree,
 		branchesTree,
 		stashTree,
+		worktreeTree,
 		shelfTree,
 		blame,
 		changesView,
@@ -99,6 +107,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.window.registerTreeDataProvider('hyperGit.branches', branchesTree),
 		vscode.window.registerTreeDataProvider('hyperGit.stash', stashTree),
 		vscode.window.registerTreeDataProvider('hyperGit.shelf', shelfTree),
+		vscode.window.registerTreeDataProvider('hyperGit.worktrees', worktreeTree),
 		...registerChangesCommands(service, registry, tree),
 		...registerHistoryCommands(service, logTree, branchesTree, favorites),
 		...registerGitCliCommands(service, branchesTree, logTree),
@@ -110,6 +119,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('hyperGit.toggleBlameAnnotation', () => blame.toggle()),
 		...registerStashCommands(service, stashTree),
 		...registerShelfCommands(service, shelfService, shelfTree),
+		...registerWorktreeCommands(service, worktreeTree),
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.showGraph', () => GraphWebview.open(service)),
@@ -137,6 +147,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			logTree.refresh();
 			branchesTree.refresh();
 			stashTree.refresh();
+			worktreeTree.refresh();
 			shelfTree.refresh();
 			inlineLens.refresh();
 		}, 150);
@@ -153,6 +164,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	setTimeout(() => {
 		branchesTree.refresh();
 		logTree.refresh();
+		worktreeTree.refresh();
 		updateChangesBadge();
 	}, 500);
 }
