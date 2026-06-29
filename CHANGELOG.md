@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [0.0.1-rc.4] - 2026-06-29 — 第四个预发布候选
+
+> 修复用户截图反馈的两处工具窗口缺陷：活动栏图标缺失「未提交文件数」角标、Branches「Push」对无上游分支失败。
+>
+> 版本号遵循 VS Code Marketplace 约定（`major.minor.patch` = `0.0.4`），预发布语义由 `--pre-release` 标记 + git tag `v0.0.1-rc.4` 体现。
+
+### Fixed
+
+- **活动栏未提交角标（#17）**：`hyperGit.changes` 原经 `registerTreeDataProvider` 注册，仅得 `Disposable` 无法承载 `.badge`；改用 `createTreeView` 获取 `TreeView` 句柄并新增 `updateChangesBadge()`，计数复用 `GitRepositoryService.getChanges()`（index+工作区+未跟踪去重），接入既有 `refreshAll` 防抖链路与首帧保险，计数为 0 时清空。活动栏容器图标角标为容器内各视图 `badge.value` 之和，故 Hyper Git 图标自此实时显示未提交文件数，对齐原生 SCM。
+- **Branches Push 对无上游分支失败（#17）**：`hyperGit.push` 原以零参数调 `repo.push()`，当前分支无上游时 `git push`（`push.default=simple`）必然失败，vscode.git 包装为 `GitError`、其 `.message` 恰为通用串「Failed to execute git」而真实 stderr 被吞没。改为以 `HEAD.upstream` 是否存在分流：有上游沿用 `repo.push()`；无上游则选定 remote（单 remote 直用、多 remote 弹选）并以 `repo.push(remote, branch, true)` 建立 `-u` 追踪。同时增强 `errMsg` 优先暴露 `GitError.stderr`，使「无上游」「non-fast-forward」等失败可读（push/pull/fetch 等同享）。
+
 ## [0.0.1-rc.3] - 2026-06-29 — 第三个预发布候选
 
 > 包含 rc.2 后的全部 Parity Recovery（Batch 5-12），完成 IDEA Git 工具窗口全量对齐；并修复发布流水线，使 GitHub Release 自此自动附带「可本地安装的 `.vsix`」资产。
