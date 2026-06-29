@@ -411,13 +411,14 @@ const detailsList = document.getElementById('details-list');
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function laneColor(i) { return PALETTE[((i % PALETTE.length) + PALETTE.length) % PALETTE.length]; }
 function colX(c) { return c * LANE_W + LANE_W / 2; }
-function graphPx() { return model.maxLanes * LANE_W + GUTTER; }
+/** 本行实际绘制的最右列号（node + 各边 from/to 的最大值）——行宽据此自适应，消除「全局 maxLanes 撑宽」的留白。 */
+function rowMaxCol(row) { const L = row.layout; let m = L.node.col; for (const e of L.incoming) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } for (const e of L.outgoing) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } for (const e of L.passThrough) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } return m; }
 function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; const m = String(d.getMonth() + 1).padStart(2, '0'); const da = String(d.getDate()).padStart(2, '0'); return d.getFullYear() + '-' + m + '-' + da; }
 
 function rowSvg(row) {
   const L = row.layout;
   const cy = ROW_H / 2;
-  const W = graphPx();
+  const W = (rowMaxCol(row) + 1) * LANE_W + GUTTER;
   const p = ['<svg class="graph" width="', W, '" height="', ROW_H, '" viewBox="0 0 ', W, ' ', ROW_H, '" xmlns="http://www.w3.org/2000/svg">'];
   const seg = (e) => 'stroke="' + laneColor(e.colorIdx) + '" stroke-width="1.6" stroke-linecap="round"';
   for (const e of L.passThrough) p.push('<line x1="', colX(e.fromCol), '" y1="0" x2="', colX(e.toCol), '" y2="', ROW_H, '" ', seg(e), '/>');

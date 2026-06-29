@@ -13,6 +13,10 @@
 
 - **品牌图标统一**：将活动栏图标（`media/hyper-git-icon.svg`）、Marketplace 市场徽标（`media/icon.png`）与 README 头图统一为辨识度更高的「Git Pull Request」造型（字形改编自 Tabler Icons，MIT）；市场徽标基于新字形重新栅格化为 256×256 RGBA 蓝→紫渐变图，设计源沉淀至 `media-src/icon.svg`；README 头部重构为居中布局（徽标 + 标题 + 一句话定位 + License 徽章）。
 
+### Fixed
+
+- **Log Graph 文字与节点间留白**：原实现每行 Graph SVG 宽度取「已加载全部提交」的全局 `maxLanes`，分支型仓库中仅用 1–2 条 lane 的行仍预留整宽，导致节点与文字间大片留白。改为按「本行实际绘制的最右列」自适应行宽，文字随即向左贴近本行 Graph（lane x 坐标仍全局一致，竖线跨行衔接不变），对齐 IDEA「文字紧随 Graph」观感。
+
 ## [0.0.1-rc.4] - 2026-06-29 — 第四个预发布候选
 
 > 修复用户截图反馈的两处工具窗口缺陷：活动栏图标缺失「未提交文件数」角标、Branches「Push」对无上游分支失败。
