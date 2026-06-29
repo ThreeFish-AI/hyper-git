@@ -62,4 +62,12 @@
 - **后续防范**：该 job 与市场 `publish` **解耦**（不 `needs: publish`、不挂 `environment: production`），保证「Release 带 `.vsix`」不被市场审批门/密钥缺失阻塞；「仅出 Release、暂不发市场」时不审批 production 即可，无需改 publish job；最小权限仅本 job 提权 `contents: write`。
 - **同类问题影响**：所有「CI 只上传 artifact + 发市场、却在 README 承诺 Release 手动下载」的 VS Code 扩展；artifact ≠ Release 资产，二者可见性/留存期差异易被忽视。
 
+## #8 Branches 视图无法多选（批量删除等批量操作缺失）
+
+- **表因**：用户截图反馈 Branches 视图中一组功能/工作分支无法框选多个、无法批量删除。
+- **根因**：`hyperGit.branches` 经 `vscode.window.registerTreeDataProvider` 注册——该 API **不支持** `canSelectMany`，故视图天然单选；所有分支命令处理器亦只接收单个 `BranchNode`。多选能力（`canSelectMany: true`）仅 `createTreeView` 的 `TreeViewOptions` 支持。
+- **处理方式**：改用 `createTreeView('hyperGit.branches', { treeDataProvider, canSelectMany: true })`（句柄入 subscriptions）。批量命令处理器签名扩展为 `(clickedNode, selectedNodes[])`——VS Code 多选树的 `view/item/context` 命令第 2 实参即完整选区数组。新增纯逻辑 `engine/ref/selection.collectBranchRefs`（谓词过滤 + shortName 去重 + 「点击在选区之外则以点击项为准」）与 `engine/ref/cleanup.partitionByMerged`/`formatBranchDeleteConfirm`，使 `branchDelete`/`tagDelete`/`copyBranchRef`/`toggleFavorite` 批量化（删除仅一次 `git branch --merged` 分类、汇总成功/失败、末尾单次刷新）。`package.json` 对仅单目标命令（检出/合并/变基/重命名/比较等）追加 `&& !listMultiSelection` 在多选时隐藏。
+- **后续防范**：① 需要承载 `.badge` 或 `canSelectMany` 等 `TreeViewOptions` 能力的视图，一律用 `createTreeView` 而非 `registerTreeDataProvider`（本仓 `hyperGit.changes` 已有先例）。② 多选命令正确性**只依赖处理器读取实参**（`clickedNode` + `selectedNodes[]`），不得依赖 `listMultiSelection` 上下文键——其对**自定义贡献视图**的可靠性无法确证，仅作菜单整洁的视觉优化；单目标命令因只读 `clickedNode` 即便该键失效仍安全。③ 「右键点击选区之外」须以点击项为准（手势目标优先），由归一化助手统一兜底。
+- **同类问题影响**：所有以 `registerTreeDataProvider` 注册却后续需要多选/角标的自定义 TreeView；以及误把单目标命令在多选下直接作用于「点击项」造成的隐性误操作。
+
 
