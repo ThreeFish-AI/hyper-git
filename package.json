@@ -379,7 +379,7 @@
     "@types/vscode": "~1.85.0",
     "@vscode/test-electron": "^2.4.1",
     "@vscode/vsce": "^3.2.1",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.1",
     "eslint": "^9.13.0",
     "mocha": "^11.0.1",
     "prettier": "^3.9.3",
