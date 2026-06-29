@@ -227,8 +227,15 @@ export function registerHistoryCommands(
 			if (!repo) {
 				return;
 			}
+			const pick = await vscode.window.showQuickPick(
+				['普通 Fetch', 'Fetch + Prune（清理已删除的远程分支）'],
+				{ placeHolder: 'Fetch 模式' },
+			);
+			if (!pick) {
+				return;
+			}
 			try {
-				await repo.fetch();
+				await repo.fetch(pick.includes('Prune') ? { prune: true } : undefined);
 				branchesTree.refresh();
 			} catch (e) {
 				void vscode.window.showErrorMessage(`Fetch 失败：${errMsg(e)}`);
