@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { BranchNode, BranchesTreeProvider } from './tree/branches-tree';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
-import type { LogNode, LogTreeProvider } from './tree/log-tree';
+import type { LogFilterControl, LogNode } from './webview/log-webview';
 import { handleGitConflict } from './conflict-ui';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -12,7 +12,7 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
  * 注册经 git CLI 补齐的操作（M5' batch 1）：cherry-pick / revert / reset / branch rename /
  * ignore / compare branches / reword。均经 `service.execGit`（复用 vscode.git 的同一 git 二进制）。
  */
-export function registerGitCliCommands(service: GitRepositoryService, branchesTree: BranchesTreeProvider, logTree: LogTreeProvider): vscode.Disposable[] {
+export function registerGitCliCommands(service: GitRepositoryService, branchesTree: BranchesTreeProvider, logTree: LogFilterControl): vscode.Disposable[] {
 	const subs: vscode.Disposable[] = [];
 
 	subs.push(

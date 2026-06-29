@@ -4,7 +4,7 @@ import type { BranchNode } from './tree/branches-tree';
 import type { BranchesTreeProvider } from './tree/branches-tree';
 import type { BranchFavorites } from './branch-favorites';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
-import type { LogNode, LogTreeProvider } from './tree/log-tree';
+import type { LogFilterControl, LogNode } from './webview/log-webview';
 import { handleGitConflict } from './conflict-ui';
 import type { MergeMode } from '../engine/log/log-filter';
 import { selectedBranchRefs } from './branch-selection';
@@ -13,7 +13,7 @@ import { formatBranchDeleteConfirm, partitionByMerged, truncateNames } from '../
 /** 注册 Log/Branches/Blame/History/Tags 相关命令。 */
 export function registerHistoryCommands(
 	service: GitRepositoryService,
-	logTree: LogTreeProvider,
+	logTree: LogFilterControl,
 	branchesTree: BranchesTreeProvider,
 	favorites: BranchFavorites,
 ): vscode.Disposable[] {

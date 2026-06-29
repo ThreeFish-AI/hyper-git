@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Log 视图升级为 IDEA 风格提交图（Graph DAG）**：`hyperGit.log` 由原生 TreeView（`log-tree.ts`）迁移为 Webview，基于 commit 父子关系**自计算 DAG lane 布局**，完整复刻 IntelliJ IDEA Git Log 的彩色泳道 / 节点 / 分叉·合并连线 / HEAD·分支·标签标签——不再依赖 `git log --graph` 的粗糙 ASCII（lane 由 git 分配、不可控、随列号抖动着色）。新增纯逻辑引擎 `engine/log/graph-layout.ts`（单遍增量 lane 状态机，nil-slot 复用保证分支「直顺」；`graph-color.ts` 沿首父链继承 + 相邻 lane 异色；覆盖 octopus 合并 / 多 root / 收敛 / 截断 dangling 边）、`log-line.ts`（NUL/RS 解析）与 `log-query.ts`（`--topo-order` 保拓扑序；author/grep/path 服务端 + mergeMode/date/regex 客户端复用 `applyClientFilters`），单测 29 例全覆盖。Webview 端虚拟化「每行内联 SVG + 文本列」渲染、主题调色板（`--vscode-` 令牌 + hex 回退）、All/Current 范围切换、滚动增量加载、↑↓ 键导航、选中提交内联展示变更文件（点击打开 diff）、右键 per-commit 操作菜单（复用既有 9 个命令）。移除独立的 `showGraph` 面板与 `graph-parser`（单一事实源去重）；新增 `LogFilterControl` 接口使 4 个命令注册器零行为改动完成迁移。
 - **Branches 视图多选 + 批量操作**：`hyperGit.branches` 由 `registerTreeDataProvider` 改用 `createTreeView({ canSelectMany: true })`，支持 Ctrl/Cmd/Shift 框选多个分支/标签。批量命令作用于整个选区：**删除分支**（一次 `git branch --merged` 分类已合并/未合并，单条确认弹窗诚实分栏呈现强制删除风险，逐个删除并汇总成功/失败）、**删除标签**、**复制引用**（按行连接）、**收藏切换**。仅单目标语义的操作（检出/合并/变基/重命名/比较）经 `!listMultiSelection` 在多选时从右键菜单隐藏，且因仅读「右键点击项」而始终安全。新增纯逻辑 `engine/ref/selection.collectBranchRefs`（选区归一化 + 「点击在选区之外」手势优先）与 `engine/ref/cleanup` 的 `partitionByMerged`/`formatBranchDeleteConfirm`/`truncateNames`，单测全覆盖。
 
 ## [0.0.1-rc.4] - 2026-06-29 — 第四个预发布候选
