@@ -22,9 +22,11 @@ import { CommitWebviewProvider } from './adapter/webview/commit-webview';
 import { GraphWebview } from './adapter/webview/graph-webview';
 import { showGitConsole } from './infra/git-console';
 import { InlineCommitCodeLensProvider, registerInlineCommitCommand } from './adapter/editor/inline-commit-codelens';
+import { BlameAnnotationController } from './adapter/editor/blame-annotation';
 import { ShelfService, ShelfTreeProvider, registerShelfCommands } from './adapter/shelf';
 import { RebaseWebview } from './adapter/webview/rebase-webview';
 import { registerMergeCommands } from './adapter/webview/merge-editor';
+import { registerMiscCommands } from './adapter/misc-commands';
 import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
 import { createLogger } from './infra/logger';
@@ -71,6 +73,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const branchesTree = new BranchesTreeProvider(service, favorites);
 	const stashTree = new StashTreeProvider(service);
 	const inlineLens = new InlineCommitCodeLensProvider(service);
+	const blame = new BlameAnnotationController(service);
 	const shelfService = new ShelfService(service, context.globalStorageUri.fsPath);
 	const shelfTree = new ShelfTreeProvider(shelfService);
 	const focusCommitView = (): void => {
@@ -86,6 +89,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		branchesTree,
 		stashTree,
 		shelfTree,
+		blame,
 		vscode.window.registerTreeDataProvider('hyperGit.changes', tree),
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
 		vscode.window.registerTreeDataProvider('hyperGit.log', logTree),
@@ -99,6 +103,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		...registerAdvancedCommands(service, branchesTree),
 		...registerRemoteCommands(service, branchesTree, logTree),
 		...registerMergeCommands(service),
+		...registerMiscCommands(service, branchesTree, logTree),
+		vscode.commands.registerCommand('hyperGit.toggleBlameAnnotation', () => blame.toggle()),
 		...registerStashCommands(service, stashTree),
 		...registerShelfCommands(service, shelfService, shelfTree),
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
