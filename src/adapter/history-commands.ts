@@ -16,7 +16,20 @@ export function registerHistoryCommands(
 	favorites: BranchFavorites,
 ): vscode.Disposable[] {
 	const subs: vscode.Disposable[] = [];
-	const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+	// vscode.git 在 git 非零退出时抛出 GitError，其 .message 为通用串「Failed to execute git」，
+	// 真实原因落在 .stderr。优先暴露 stderr，使「无上游」「non-fast-forward」等失败可读。
+	const errMsg = (e: unknown): string => {
+		if (e && typeof e === 'object') {
+			const ge = e as { stderr?: unknown; message?: unknown };
+			if (typeof ge.stderr === 'string' && ge.stderr.trim()) {
+				return ge.stderr.trim();
+			}
+			if (typeof ge.message === 'string' && ge.message) {
+				return ge.message;
+			}
+		}
+		return String(e);
+	};
 
 	subs.push(vscode.commands.registerCommand('hyperGit.refreshLog', () => logTree.refresh()));
 	subs.push(vscode.commands.registerCommand('hyperGit.refreshBranches', () => branchesTree.refresh()));
@@ -212,9 +225,35 @@ export function registerHistoryCommands(
 			if (!repo) {
 				return;
 			}
+			const head = repo.state.HEAD;
+			if (!head?.name) {
+				void vscode.window.showWarningMessage('当前处于 detached HEAD，无法推送当前分支');
+				return;
+			}
 			try {
-				await repo.push();
+				if (head.upstream) {
+					// 已配置上游：按 push.default 推送到追踪分支（正确处理本地名/上游名不一致）。
+					await repo.push();
+				} else {
+					// 无上游：选定 remote 并以 -u 建立追踪（修复「Failed to execute git」根因）。
+					const remotes = repo.state.remotes.map((r) => r.name);
+					if (remotes.length === 0) {
+						void vscode.window.showWarningMessage('未配置远程仓库（remote），无法推送');
+						return;
+					}
+					const remote =
+						remotes.length === 1
+							? remotes[0]
+							: await vscode.window.showQuickPick(remotes, {
+								placeHolder: `为「${head.name}」选择推送目标 remote（将建立上游追踪 -u）`,
+							});
+					if (!remote) {
+						return;
+					}
+					await repo.push(remote, head.name, true);
+				}
 				branchesTree.refresh();
+				void vscode.window.showInformationMessage(`已推送 ${head.name}`);
 			} catch (e) {
 				void vscode.window.showErrorMessage(`Push 失败：${errMsg(e)}`);
 			}
