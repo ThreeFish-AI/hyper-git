@@ -88,7 +88,10 @@
 ```
 [ push/PR ] ──▶ lint ──▶ build ──▶ test 矩阵(ubuntu/macos/windows) ──▶ package vsix ──▶ upload artifact
                                                                               │
-[ tag v* ] ─────────────────────────────────────────────────────────────────▶ publish(vsce + ovsx)
+                                          ┌───────────────────────────────────┤
+[ tag v* ] ───────────────────────────────┤                                   │
+                                          ├─▶ github-release(.vsix 附 Release) │ ← 与 publish 解耦,无审批门
+                                          └─▶ publish(vsce + ovsx, production 审批门)
 ```
 
 ### 3.2 `.github/workflows/ci.yml`(骨架)
@@ -156,6 +159,34 @@ jobs:
 - **PAT 作为 GitHub encrypted secret**,`vsce`/`ovsx` 默认读环境变量,命令行不明文。
 - **发布条件**:`startsWith(github.ref, 'refs/tags/v')`,打 tag 才发布。
 - **平台特定扩展**:若引入 native node 模块(git 二进制),需 `vsce package --target win32-x64 win32-arm64 linux-x64 darwin-arm64 ...`,每 target 产独立 vsix;`--target` 自 `vsce 1.99.0` 支持([Platform-specific extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#_platform-specific-extensions))。纯 TS 初期**无需**,降本。
+
+### 3.2.1 GitHub Release 附带 `.vsix`（已实现，本仓 `ci.yml` 现状）
+
+§3.2 骨架仅把 vsix 上传为 **Actions artifact** + 发双市场,**不会**把 `.vsix` 附到 GitHub Release;而 README 指引用户「从 Releases 下载 `.vsix` 手动安装」。为闭合此缺口,本仓在 `ci.yml` 增设独立 `github-release` job:
+
+```yaml
+  github-release:
+    name: GitHub Release (.vsix)
+    needs: package                                   # 复用 package job 的 vsix artifact,不重复构建
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write                                # 仅本 job 提权;顶层保持 contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: vsix }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: '*.vsix'
+          prerelease: ${{ contains(github.ref_name, 'rc') }}   # 与 publish 的 --pre-release 判定一致
+          generate_release_notes: true
+          fail_on_unmatched_files: true              # vsix 缺失即显式失败,杜绝空资产 Release
+```
+
+设计要点(契合 AGENTS.md「正交分解 / 最小干预」):
+- **解耦**:`needs: package` 而非 `needs: publish`,且不挂 `environment: production` → 即便市场 publish 待审批或失败,带 `.vsix` 的 Release 仍照常产出;反之「仅出 GitHub Release、暂不发市场」时,不审批 production 即可,无需改动 publish job;
+- **最小权限**:仅 `github-release` 提权 `contents: write`,顶层 `permissions: contents: read` 不动;
+- **复用**:消费 `package` job 既有的 `vsix` artifact,零重复打包。
 
 ### 3.3 关键 Action 版本
 - `actions/checkout@v4`、`actions/setup-node@v4`、`actions/upload-artifact@v4`、`actions/download-artifact@v4`;

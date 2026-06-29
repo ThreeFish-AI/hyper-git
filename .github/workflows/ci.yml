@@ -74,6 +74,26 @@ jobs:
           path: '*.vsix'
           if-no-files-found: error
 
+  # GitHub Release：仅 tag 触发，将 .vsix 作为可本地安装资产附带（与市场 publish 解耦）
+  github-release:
+    name: GitHub Release (.vsix)
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+      - name: 创建/更新 GitHub Release 并附带 .vsix
+        uses: softprops/action-gh-release@v2
+        with:
+          files: '*.vsix'
+          prerelease: ${{ contains(github.ref_name, 'rc') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
   # 发布：仅 tag 触发，双市场（Marketplace + OpenVSX），生产环境审批门
   publish:
     name: Publish

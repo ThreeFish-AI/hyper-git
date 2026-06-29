@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [0.0.1-rc.3] - 2026-06-29 — 第三个预发布候选
+
+> 包含 rc.2 后的全部 Parity Recovery（Batch 5-12），完成 IDEA Git 工具窗口全量对齐；并修复发布流水线，使 GitHub Release 自此自动附带「可本地安装的 `.vsix`」资产。
+>
+> 版本号遵循 VS Code Marketplace 约定（`major.minor.patch` = `0.0.3`），预发布语义由 `--pre-release` 标记 + git tag `v0.0.1-rc.3` 体现。
+
+### CI / 发布
+
+- **GitHub Release 自动附带 `.vsix`**：CI 新增独立 `github-release` job（`softprops/action-gh-release`），对每个 `v*` tag 复用 `package` job 产出的 vsix artifact，自动创建 Release（`*rc*` tag 自动标记 prerelease）并上传 `.vsix` 资产，用户可直接「`Extensions: Install from VSIX`」本地安装。该 job 与市场 `publish` 解耦（`needs: package`、不挂 `production` 环境），即便市场发布待审批/失败亦不影响 Release 资产产出；`fail_on_unmatched_files` 杜绝「空资产 Release」。
+
 ### Added — Parity Recovery（Batch 5-12，IDEA 全量对齐）
 
 > 基于「IDEA Git 功能复刻全量对齐」评审（用户截图反馈 Branches 空白/工具栏缺失），经 3 路代码审计确认「功能多数已实现但被视图 bug + 工具栏未浮现掩盖」，本批次先解除可见痛感再全量补齐。共新增 **13 个 engine 纯逻辑模块 + 21 个命令**，单测 64 → 166。
