@@ -87,7 +87,7 @@ jobs:
         with:
           name: vsix
       - name: 创建/更新 GitHub Release 并附带 .vsix
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: '*.vsix'
           prerelease: ${{ contains(github.ref_name, 'rc') }}
