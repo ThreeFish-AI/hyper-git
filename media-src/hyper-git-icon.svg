@@ -1,4 +1,4 @@
-<!-- Hyper Git activity-bar icon. Single-color (currentColor); VS Code recolors via alpha mask. Glyph adapted from Tabler Icons (MIT). -->
+<!-- Hyper Git activity-bar icon SOURCE (mirror of ../media/hyper-git-icon.svg). Single-color (currentColor); VS Code recolors via alpha mask. Glyph adapted from Tabler Icons (MIT). -->
 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
   <circle cx="6" cy="6" r="2" />
   <circle cx="6" cy="18" r="2" />
