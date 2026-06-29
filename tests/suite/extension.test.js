@@ -52,7 +52,6 @@ suite('扩展冒烟测试', function () {
 			'hyperGit.ignorePath',
 			'hyperGit.compareBranches',
 			'hyperGit.rewordCommit',
-			'hyperGit.showGraph',
 			'hyperGit.showConsole',
 			'hyperGit.partialStage',
 			'hyperGit.partialUnstage',
