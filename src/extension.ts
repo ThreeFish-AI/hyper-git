@@ -59,6 +59,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const registry = new ChangelistRegistry(context.workspaceState, service.repoRoot ?? workspaceRoot);
 	const favorites = new BranchFavorites(context.workspaceState, service.repoRoot ?? workspaceRoot);
 	const tree = new ChangesTreeProvider(service, registry);
+	// createTreeView（registerTreeDataProvider 的超集）以获取 TreeView 句柄承载 .badge；
+	// 活动栏容器图标的数字角标 = 容器内各视图 badge.value 之和，故此处点亮即映射到 Hyper Git 图标。
+	const changesView = vscode.window.createTreeView('hyperGit.changes', { treeDataProvider: tree });
 
 	// AI 接缝注入（Null 实现，M5 替换为真实 provider）
 	const commit = new CommitService(context, service, context.workspaceState, {
@@ -90,7 +93,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		stashTree,
 		shelfTree,
 		blame,
-		vscode.window.registerTreeDataProvider('hyperGit.changes', tree),
+		changesView,
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
 		vscode.window.registerTreeDataProvider('hyperGit.log', logTree),
 		vscode.window.registerTreeDataProvider('hyperGit.branches', branchesTree),
@@ -116,12 +119,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		registerInlineCommitCommand(service, inlineLens),
 	);
 
+	// 活动栏角标：复用 service.getChanges() 计数（index+工作区+未跟踪去重），与 Changes 视图内容一致；
+	// 计数为 0 时清空，对齐原生 SCM 行为。
+	const updateChangesBadge = (): void => {
+		const count = service.getChanges().length;
+		changesView.badge = count > 0 ? { value: count, tooltip: `${count} 个未提交变更` } : undefined;
+	};
+
 	// git 状态变化频繁（add/checkout/diff 缓存失效均触发），防抖合并避免 log/stash 高频重拉。
 	let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 	const refreshAll = (): void => {
 		clearTimeout(refreshTimer);
 		refreshTimer = setTimeout(() => {
 			tree.refresh();
+			updateChangesBadge();
 			commitView.refresh();
 			logTree.refresh();
 			branchesTree.refresh();
@@ -142,6 +153,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	setTimeout(() => {
 		branchesTree.refresh();
 		logTree.refresh();
+		updateChangesBadge();
 	}, 500);
 }
 
