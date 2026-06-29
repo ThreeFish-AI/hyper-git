@@ -94,7 +94,7 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
 
-  # 发布：仅 tag 触发，双市场（Marketplace + OpenVSX），生产环境审批门
+  # 发布：仅 tag 触发；OpenVSX 默认发布，VS Code Marketplace 由 ENABLE_MARKETPLACE_PUBLISH 变量门控（默认关闭）；生产环境审批门
   publish:
     name: Publish
     needs: package
@@ -112,7 +112,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: vsix
+      # VS Code Marketplace 发布：默认关闭（未配置 VSCE_PAT）。
+      # 配好 VSCE_PAT 后，在仓库 Settings → Secrets and variables → Actions → Variables
+      # 新增 ENABLE_MARKETPLACE_PUBLISH=true 即恢复，无需改代码或发 PR。
       - name: 发布到 VS Code Marketplace
+        if: ${{ vars.ENABLE_MARKETPLACE_PUBLISH == 'true' }}
         run: |
           PRE_FLAG=$([[ "${GITHUB_REF_NAME}" == *rc* ]] && echo "--pre-release" || echo "")
           pnpm dlx @vscode/vsce publish --packagePath *.vsix $PRE_FLAG
