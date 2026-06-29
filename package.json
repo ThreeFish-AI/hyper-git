@@ -84,6 +84,11 @@
           "id": "hyperGit.shelf",
           "name": "Shelf",
           "visibility": "visible"
+        },
+        {
+          "id": "hyperGit.worktrees",
+          "name": "Worktrees",
+          "visibility": "visible"
         }
       ]
     },
@@ -95,6 +100,10 @@
       {
         "view": "hyperGit.stash",
         "contents": "暂无 Stash。\n[Stash 当前变更](command:hyperGit.stashCreate)"
+      },
+      {
+        "view": "hyperGit.worktrees",
+        "contents": "暂无 Worktree。\n[新建 Worktree](command:hyperGit.worktreeAdd)"
       }
     ],
     "commands": [
@@ -181,7 +190,16 @@
       { "command": "hyperGit.createPatch", "title": "导出 Patch…", "category": "Hyper Git", "icon": "$(diff)" },
       { "command": "hyperGit.applyPatch", "title": "应用 Patch…", "category": "Hyper Git", "icon": "$(diff)" },
       { "command": "hyperGit.showReflog", "title": "查看 Reflog", "category": "Hyper Git", "icon": "$(history)" },
-      { "command": "hyperGit.toggleBlameAnnotation", "title": "切换 Blame 注解", "category": "Hyper Git", "icon": "$(eye)" }
+      { "command": "hyperGit.toggleBlameAnnotation", "title": "切换 Blame 注解", "category": "Hyper Git", "icon": "$(eye)" },
+      { "command": "hyperGit.worktreeRefresh", "title": "刷新 Worktrees", "category": "Hyper Git", "icon": "$(refresh)" },
+      { "command": "hyperGit.worktreeAdd", "title": "新建 Worktree", "category": "Hyper Git", "icon": "$(add)" },
+      { "command": "hyperGit.worktreeOpen", "title": "打开 Worktree", "category": "Hyper Git", "icon": "$(folder-opened)" },
+      { "command": "hyperGit.worktreeRemove", "title": "删除 Worktree", "category": "Hyper Git", "icon": "$(trash)" },
+      { "command": "hyperGit.worktreeCopyPath", "title": "复制 Worktree 路径", "category": "Hyper Git" },
+      { "command": "hyperGit.worktreeLock", "title": "锁定 Worktree", "category": "Hyper Git", "icon": "$(lock)" },
+      { "command": "hyperGit.worktreeUnlock", "title": "解锁 Worktree", "category": "Hyper Git" },
+      { "command": "hyperGit.worktreeMove", "title": "移动 Worktree…", "category": "Hyper Git" },
+      { "command": "hyperGit.worktreePrune", "title": "清理失效 Worktree", "category": "Hyper Git", "icon": "$(clear-all)" }
     ],
     "menus": {
       "view/title": [
@@ -220,7 +238,10 @@
         { "command": "hyperGit.stashCreate", "when": "view == hyperGit.stash", "group": "navigation" },
         { "command": "hyperGit.stashKeepIndex", "when": "view == hyperGit.stash", "group": "navigation" },
         { "command": "hyperGit.stashClear", "when": "view == hyperGit.stash" },
-        { "command": "hyperGit.shelveChanges", "when": "view == hyperGit.shelf", "group": "navigation" }
+        { "command": "hyperGit.shelveChanges", "when": "view == hyperGit.shelf", "group": "navigation" },
+        { "command": "hyperGit.worktreeRefresh", "when": "view == hyperGit.worktrees", "group": "navigation" },
+        { "command": "hyperGit.worktreeAdd", "when": "view == hyperGit.worktrees", "group": "navigation" },
+        { "command": "hyperGit.worktreePrune", "when": "view == hyperGit.worktrees", "group": "navigation" }
       ],
       "view/item/context": [
         { "command": "hyperGit.setActiveChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.changelist", "group": "1_changelist@1" },
@@ -261,7 +282,13 @@
         { "command": "hyperGit.stashBranch", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@4" },
         { "command": "hyperGit.unshelveSilently", "when": "view == hyperGit.shelf && viewItem == hyperGit.shelf", "group": "1_shelf@1" },
         { "command": "hyperGit.unshelveWithMerge", "when": "view == hyperGit.shelf && viewItem == hyperGit.shelf", "group": "1_shelf@2" },
-        { "command": "hyperGit.deleteShelf", "when": "view == hyperGit.shelf && viewItem == hyperGit.shelf", "group": "1_shelf@3" }
+        { "command": "hyperGit.deleteShelf", "when": "view == hyperGit.shelf && viewItem == hyperGit.shelf", "group": "1_shelf@3" },
+        { "command": "hyperGit.worktreeOpen", "when": "view == hyperGit.worktrees && viewItem =~ /hyperGit.worktree|hyperGit.worktreeMain/", "group": "1_wt@1" },
+        { "command": "hyperGit.worktreeMove", "when": "view == hyperGit.worktrees && viewItem == hyperGit.worktree", "group": "1_wt@2" },
+        { "command": "hyperGit.worktreeLock", "when": "view == hyperGit.worktrees && viewItem == hyperGit.worktree", "group": "1_wt@3" },
+        { "command": "hyperGit.worktreeUnlock", "when": "view == hyperGit.worktrees && viewItem == hyperGit.worktree", "group": "1_wt@4" },
+        { "command": "hyperGit.worktreeCopyPath", "when": "view == hyperGit.worktrees && viewItem =~ /hyperGit.worktree|hyperGit.worktreeMain/", "group": "1_wt@5" },
+        { "command": "hyperGit.worktreeRemove", "when": "view == hyperGit.worktrees && viewItem == hyperGit.worktree", "group": "1_wt@6" }
       ],
       "editor/context": [
         { "command": "hyperGit.toggleBlameAnnotation", "when": "resourceScheme == file", "group": "hyperGit@1" }
@@ -302,7 +329,14 @@
         { "command": "hyperGit.resetToHere", "when": "false" },
         { "command": "hyperGit.createBranchFromCommit", "when": "false" },
         { "command": "hyperGit.createTagFromCommit", "when": "false" },
-        { "command": "hyperGit.showContainingBranches", "when": "false" }
+        { "command": "hyperGit.showContainingBranches", "when": "false" },
+        { "command": "hyperGit.worktreeOpen", "when": "false" },
+        { "command": "hyperGit.worktreeRemove", "when": "false" },
+        { "command": "hyperGit.worktreeCopyPath", "when": "false" },
+        { "command": "hyperGit.worktreeLock", "when": "false" },
+        { "command": "hyperGit.worktreeUnlock", "when": "false" },
+        { "command": "hyperGit.worktreeMove", "when": "false" },
+        { "command": "hyperGit.worktreeRefresh", "when": "false" }
       ]
     },
     "configuration": {
