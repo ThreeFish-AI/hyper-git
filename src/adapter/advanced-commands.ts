@@ -3,6 +3,7 @@ import type { BranchNode, BranchesTreeProvider } from './tree/branches-tree';
 import type { GitRepositoryService } from './git-repository-service';
 import type { LogNode } from './tree/log-tree';
 import { filterMergeable } from '../engine/ref/cleanup';
+import { selectedBranchRefs } from './branch-selection';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -135,15 +136,16 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.copyBranchRef', async (node?: BranchNode) => {
-			if (node?.kind !== 'branch') {
+		vscode.commands.registerCommand('hyperGit.copyBranchRef', async (node?: BranchNode, nodes?: BranchNode[]) => {
+			// 支持多选：复制全部选中引用（按行连接）。
+			const names = selectedBranchRefs(node, nodes, () => true)
+				.map((r) => r.shortName)
+				.filter((n) => n.length > 0);
+			if (names.length === 0) {
 				return;
 			}
-			const ref = node.ref.shortName;
-			if (ref) {
-				await vscode.env.clipboard.writeText(ref);
-				void vscode.window.showInformationMessage(`已复制 ${ref}`);
-			}
+			await vscode.env.clipboard.writeText(names.join('\n'));
+			void vscode.window.showInformationMessage(names.length === 1 ? `已复制 ${names[0]}` : `已复制 ${names.length} 个引用`);
 		}),
 	);
 

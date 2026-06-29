@@ -80,6 +80,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const commitView = new CommitWebviewProvider(service, registry, commit);
 	const logTree = new LogTreeProvider(service);
 	const branchesTree = new BranchesTreeProvider(service, favorites);
+	// Branches 视图启用多选（canSelectMany 仅 createTreeView 支持，registerTreeDataProvider 不支持）；
+	// 多选后批量操作（删除分支/标签、复制引用、收藏）作用于整个选区。
+	const branchesView = vscode.window.createTreeView('hyperGit.branches', {
+		treeDataProvider: branchesTree,
+		canSelectMany: true,
+	});
 	const stashTree = new StashTreeProvider(service);
 	const worktreeTree = new WorktreeTreeProvider(service);
 	const inlineLens = new InlineCommitCodeLensProvider(service);
@@ -102,9 +108,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		shelfTree,
 		blame,
 		changesView,
+		branchesView,
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
 		vscode.window.registerTreeDataProvider('hyperGit.log', logTree),
-		vscode.window.registerTreeDataProvider('hyperGit.branches', branchesTree),
 		vscode.window.registerTreeDataProvider('hyperGit.stash', stashTree),
 		vscode.window.registerTreeDataProvider('hyperGit.shelf', shelfTree),
 		vscode.window.registerTreeDataProvider('hyperGit.worktrees', worktreeTree),
