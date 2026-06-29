@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Branches 视图多选 + 批量操作**：`hyperGit.branches` 由 `registerTreeDataProvider` 改用 `createTreeView({ canSelectMany: true })`，支持 Ctrl/Cmd/Shift 框选多个分支/标签。批量命令作用于整个选区：**删除分支**（一次 `git branch --merged` 分类已合并/未合并，单条确认弹窗诚实分栏呈现强制删除风险，逐个删除并汇总成功/失败）、**删除标签**、**复制引用**（按行连接）、**收藏切换**。仅单目标语义的操作（检出/合并/变基/重命名/比较）经 `!listMultiSelection` 在多选时从右键菜单隐藏，且因仅读「右键点击项」而始终安全。新增纯逻辑 `engine/ref/selection.collectBranchRefs`（选区归一化 + 「点击在选区之外」手势优先）与 `engine/ref/cleanup` 的 `partitionByMerged`/`formatBranchDeleteConfirm`/`truncateNames`，单测全覆盖。
+
 ### Changed
 
 - **品牌图标统一**：将活动栏图标（`media/hyper-git-icon.svg`）、Marketplace 市场徽标（`media/icon.png`）与 README 头图统一为辨识度更高的「Git Pull Request」造型（字形改编自 Tabler Icons，MIT）；市场徽标基于新字形重新栅格化为 256×256 RGBA 蓝→紫渐变图，设计源沉淀至 `media-src/icon.svg`；README 头部重构为居中布局（徽标 + 标题 + 一句话定位 + License 徽章）。

@@ -7,6 +7,8 @@ import type { ChangeItem, GitRepositoryService } from './git-repository-service'
 import type { LogNode, LogTreeProvider } from './tree/log-tree';
 import { handleGitConflict } from './conflict-ui';
 import type { MergeMode } from '../engine/log/log-filter';
+import { selectedBranchRefs } from './branch-selection';
+import { formatBranchDeleteConfirm, partitionByMerged, truncateNames } from '../engine/ref/cleanup';
 
 /** 注册 Log/Branches/Blame/History/Tags 相关命令。 */
 export function registerHistoryCommands(
@@ -108,26 +110,50 @@ export function registerHistoryCommands(
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.branchDelete', async (node: BranchNode) => {
+		vscode.commands.registerCommand('hyperGit.branchDelete', async (node: BranchNode, nodes?: BranchNode[]) => {
 			const repo = service.repo;
-			if (!repo || node?.kind !== 'branch' || node.remote) {
+			if (!repo) {
 				return;
 			}
-			const name = node.ref.shortName;
-			// 查询是否已合并：已合并用安全删除（-d / force=false），未合并需二次确认强制删除（-D / force=true）
-			const merged = await isBranchMerged(service, name);
-			const detail = merged
-				? `分支「${name}」已合并，可安全删除。`
-				: `分支「${name}」未合并，强制删除将丢失其独有提交！`;
-			const confirmText = merged ? '删除' : '强制删除';
-			const choice = await vscode.window.showWarningMessage(detail, { modal: true }, confirmText);
-			if (choice === confirmText) {
-				try {
-					await repo.deleteBranch(name, !merged);
-					branchesTree.refresh();
-				} catch (e) {
-					void vscode.window.showErrorMessage(`删除失败：${errMsg(e)}`);
+			// 仅本地、非当前 HEAD 可删（ref.head 直接排除当前分支，无需解析名字）；支持多选批量。
+			const refs = selectedBranchRefs(node, nodes, (r) => !r.isRemote && !r.isTag && !r.head);
+			const names = refs.map((r) => r.shortName);
+			if (names.length === 0) {
+				if (node?.kind === 'branch' && node.ref.head) {
+					void vscode.window.showWarningMessage('当前分支无法删除');
 				}
+				return;
+			}
+			// 一次查询已合并集合（避免逐个 git branch --merged）：已合并安全删除（-d），未合并强制删除（-D）。
+			const base = repo.state.HEAD?.name ?? 'main';
+			let mergedOut = '';
+			try {
+				mergedOut = await service.execGit(['branch', '--merged', base]);
+			} catch {
+				/* 查询失败则视为全部未合并，确认弹窗会以强制删除提示 */
+			}
+			const { merged, unmerged } = partitionByMerged(mergedOut, names);
+			const mergedSet = new Set(merged);
+			const { detail, confirmLabel } = formatBranchDeleteConfirm(merged, unmerged);
+			const choice = await vscode.window.showWarningMessage(detail, { modal: true }, confirmLabel);
+			if (choice !== confirmLabel) {
+				return;
+			}
+			const failures: string[] = [];
+			let deleted = 0;
+			for (const name of names) {
+				try {
+					await repo.deleteBranch(name, !mergedSet.has(name));
+					deleted++;
+				} catch {
+					failures.push(name);
+				}
+			}
+			branchesTree.refresh();
+			if (failures.length === 0) {
+				void vscode.window.showInformationMessage(deleted === 1 ? `已删除分支 ${names[0]}` : `已删除 ${deleted} 个分支`);
+			} else {
+				void vscode.window.showWarningMessage(`已删除 ${deleted} 个分支，${failures.length} 个失败：${truncateNames(failures)}`);
 			}
 		}),
 	);
@@ -285,11 +311,12 @@ export function registerHistoryCommands(
 	// —— IDEA 风格 Branches 高级操作（Phase 1）——
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.toggleFavorite', async (node: BranchNode) => {
-			if (node?.kind !== 'branch' || node.ref.isTag) {
-				return;
+		vscode.commands.registerCommand('hyperGit.toggleFavorite', async (node: BranchNode, nodes?: BranchNode[]) => {
+			// 支持多选批量切换收藏（标签无收藏语义，谓词排除）。
+			const refs = selectedBranchRefs(node, nodes, (r) => !r.isTag);
+			for (const r of refs) {
+				favorites.toggle(r.shortName);
 			}
-			favorites.toggle(node.ref.shortName);
 			// favorites.onDidChange 会触发 branchesTree.refresh()
 		}),
 	);
@@ -365,20 +392,32 @@ export function registerHistoryCommands(
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.tagDelete', async (node: BranchNode) => {
-			if (node?.kind !== 'branch' || !node.ref.isTag) {
+		vscode.commands.registerCommand('hyperGit.tagDelete', async (node: BranchNode, nodes?: BranchNode[]) => {
+			// 支持多选批量删除标签。
+			const names = selectedBranchRefs(node, nodes, (r) => r.isTag).map((r) => r.shortName);
+			if (names.length === 0) {
 				return;
 			}
-			const name = node.ref.shortName;
-			const ok = await vscode.window.showWarningMessage(`删除标签「${name}」？`, { modal: true }, '删除');
+			const detail = names.length === 1 ? `删除标签「${names[0]}」？` : `将删除 ${names.length} 个标签：${truncateNames(names)}`;
+			const ok = await vscode.window.showWarningMessage(detail, { modal: true }, '删除');
 			if (ok !== '删除') {
 				return;
 			}
-			try {
-				await service.execGit(['tag', '-d', name]);
-				branchesTree.refresh();
-			} catch (e) {
-				void vscode.window.showErrorMessage(`删除标签失败：${errMsg(e)}`);
+			const failures: string[] = [];
+			let deleted = 0;
+			for (const name of names) {
+				try {
+					await service.execGit(['tag', '-d', name]);
+					deleted++;
+				} catch {
+					failures.push(name);
+				}
+			}
+			branchesTree.refresh();
+			if (failures.length === 0) {
+				void vscode.window.showInformationMessage(deleted === 1 ? `已删除标签 ${names[0]}` : `已删除 ${deleted} 个标签`);
+			} else {
+				void vscode.window.showWarningMessage(`已删除 ${deleted} 个标签，${failures.length} 个失败：${truncateNames(failures)}`);
 			}
 		}),
 	);
@@ -573,19 +612,4 @@ export function registerHistoryCommands(
 	);
 
 	return subs;
-}
-
-/** 查询本地分支是否已合并到当前 HEAD（或 main）：经 `git branch --merged <base>`。 */
-async function isBranchMerged(service: GitRepositoryService, branch: string): Promise<boolean> {
-	const repo = service.repo;
-	if (!repo) {
-		return false;
-	}
-	const base = repo.state.HEAD?.name ?? 'main';
-	try {
-		const out = await service.execGit(['branch', '--merged', base]);
-		return out.split('\n').some((line) => line.replace(/^\*\s*/, '').trim() === branch);
-	} catch {
-		return false;
-	}
 }

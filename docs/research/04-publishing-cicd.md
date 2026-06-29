@@ -188,6 +188,28 @@ jobs:
 - **最小权限**:仅 `github-release` 提权 `contents: write`,顶层 `permissions: contents: read` 不动;
 - **复用**:消费 `package` job 既有的 `vsix` artifact,零重复打包。
 
+### 3.2.2 VS Code Marketplace 发布门控（特性开关，本仓 `ci.yml` 现状）
+
+在尚未配置 `VSCE_PAT` 凭证期间,`publish` job 的「发布到 VS Code Marketplace」步骤(`vsce publish`)会因鉴权失败而中断整个 job;因该 job 挂 `environment: production`,会在仓库 `/deployments` 页持续产生 **error** 状态的 deployment 记录。为此,本仓用**仓库级特性开关变量** `ENABLE_MARKETPLACE_PUBLISH` 对该步骤做门控:
+
+```yaml
+      - name: 发布到 VS Code Marketplace
+        if: ${{ vars.ENABLE_MARKETPLACE_PUBLISH == 'true' }}   # 默认未设=跳过,零报错
+        run: |
+          PRE_FLAG=$([[ "${GITHUB_REF_NAME}" == *rc* ]] && echo "--pre-release" || echo "")
+          pnpm dlx @vscode/vsce publish --packagePath *.vsix $PRE_FLAG
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+```
+
+设计要点(契合 AGENTS.md「最小干预 / 演进式设计」):
+
+- **默认关闭**:变量未设置时其值为空串,`'' == 'true'` 为假 → 步骤显示 **skipped**(非 failed),不致 job 失败;job 继续执行其后的 OpenVSX 步骤。
+- **OpenVSX 不受影响**:`ovsx publish` 步骤保持无条件发布,Cursor/Windsurf 等 AI IDE 用户的安装来源不中断(前提:`OVSX_PAT` 已配置)。
+- **零代码恢复**:取得 Azure DevOps PAT 后,在仓库 `Settings → Secrets and variables → Actions` 配置 `VSCE_PAT`(Secret)并新增 `ENABLE_MARKETPLACE_PUBLISH=true`(Variable)即恢复 Marketplace 自动发布,无需改动 workflow 或再发 PR——这是特性开关相较「注释/删除步骤」的核心优势。
+
+> 注:本门控仅阻止「未来」的失败 deployment;`/deployments` 上已有的历史失败记录不会自动消失,如需清空可在 `Settings → Environments → production` 删除该环境(会一并清除其 deployment 历史,下次发布时按 `environment: production` 自动重建),或经 REST API 逐条删除。
+
 ### 3.3 关键 Action 版本
 - `actions/checkout@v4`、`actions/setup-node@v4`、`actions/upload-artifact@v4`、`actions/download-artifact@v4`;
 - `@vscode/test-electron`(或新版 VS Code Test CLI)驱动集成测试;
