@@ -6,6 +6,7 @@ import { NullLlmProvider } from './agent/llm-provider';
 import { NullPreCommitInspector } from './agent/pre-commit';
 import { registerChangesCommands } from './adapter/commands';
 import { ChangelistRegistry } from './adapter/changelist-registry';
+import { BranchFavorites } from './adapter/branch-favorites';
 import { CommitService } from './adapter/commit/commit-service';
 import { BranchesTreeProvider } from './adapter/tree/branches-tree';
 import { ChangesTreeProvider, EmptyChangesProvider } from './adapter/tree/changes-tree';
@@ -15,13 +16,17 @@ import { registerStashCommands } from './adapter/stash-commands';
 import { registerGitCliCommands } from './adapter/git-cli-commands';
 import { registerPartialCommands } from './adapter/partial-commands';
 import { registerAdvancedCommands } from './adapter/advanced-commands';
+import { registerRemoteCommands } from './adapter/remote-commands';
 import { StashTreeProvider } from './adapter/tree/stash-tree';
 import { CommitWebviewProvider } from './adapter/webview/commit-webview';
 import { GraphWebview } from './adapter/webview/graph-webview';
 import { showGitConsole } from './infra/git-console';
 import { InlineCommitCodeLensProvider, registerInlineCommitCommand } from './adapter/editor/inline-commit-codelens';
+import { BlameAnnotationController } from './adapter/editor/blame-annotation';
 import { ShelfService, ShelfTreeProvider, registerShelfCommands } from './adapter/shelf';
 import { RebaseWebview } from './adapter/webview/rebase-webview';
+import { registerMergeCommands } from './adapter/webview/merge-editor';
+import { registerMiscCommands } from './adapter/misc-commands';
 import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
 import { createLogger } from './infra/logger';
@@ -52,6 +57,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? 'default';
 	const service = new GitRepositoryService(api);
 	const registry = new ChangelistRegistry(context.workspaceState, service.repoRoot ?? workspaceRoot);
+	const favorites = new BranchFavorites(context.workspaceState, service.repoRoot ?? workspaceRoot);
 	const tree = new ChangesTreeProvider(service, registry);
 
 	// AI 接缝注入（Null 实现，M5 替换为真实 provider）
@@ -64,9 +70,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	});
 	const commitView = new CommitWebviewProvider(service, registry, commit);
 	const logTree = new LogTreeProvider(service);
-	const branchesTree = new BranchesTreeProvider(service);
+	const branchesTree = new BranchesTreeProvider(service, favorites);
 	const stashTree = new StashTreeProvider(service);
 	const inlineLens = new InlineCommitCodeLensProvider(service);
+	const blame = new BlameAnnotationController(service);
 	const shelfService = new ShelfService(service, context.globalStorageUri.fsPath);
 	const shelfTree = new ShelfTreeProvider(shelfService);
 	const focusCommitView = (): void => {
@@ -76,11 +83,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	context.subscriptions.push(
 		service,
 		registry,
+		favorites,
 		commit,
 		logTree,
 		branchesTree,
 		stashTree,
 		shelfTree,
+		blame,
 		vscode.window.registerTreeDataProvider('hyperGit.changes', tree),
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
 		vscode.window.registerTreeDataProvider('hyperGit.log', logTree),
@@ -88,10 +97,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.window.registerTreeDataProvider('hyperGit.stash', stashTree),
 		vscode.window.registerTreeDataProvider('hyperGit.shelf', shelfTree),
 		...registerChangesCommands(service, registry, tree),
-		...registerHistoryCommands(service, logTree, branchesTree),
-		...registerGitCliCommands(service, branchesTree),
+		...registerHistoryCommands(service, logTree, branchesTree, favorites),
+		...registerGitCliCommands(service, branchesTree, logTree),
 		...registerPartialCommands(service, registry),
 		...registerAdvancedCommands(service, branchesTree),
+		...registerRemoteCommands(service, branchesTree, logTree),
+		...registerMergeCommands(service),
+		...registerMiscCommands(service, branchesTree, logTree),
+		vscode.commands.registerCommand('hyperGit.toggleBlameAnnotation', () => blame.toggle()),
 		...registerStashCommands(service, stashTree),
 		...registerShelfCommands(service, shelfService, shelfTree),
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
@@ -122,6 +135,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		registry.onDidChange(refreshAll),
 		commit.onDidChange(refreshAll),
 	);
+
+	// 首帧保险：若 repo 在 activate 前已就绪，GitRepositoryService 构造函数的 _onDidChange.fire()
+	// 早于任何订阅者挂载而被丢失，state.onDidChange 此后可能不再触发。主动刷新一次确保
+	// Branches/Log 不停留在首帧空状态（getChildren 内已对未就绪数据做 CLI 兜底与空安全处理）。
+	setTimeout(() => {
+		branchesTree.refresh();
+		logTree.refresh();
+	}, 500);
 }
 
 export function deactivate(): void {

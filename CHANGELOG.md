@@ -4,6 +4,35 @@
 
 ## [Unreleased]
 
+### Added — Parity Recovery（Batch 5-12，IDEA 全量对齐）
+
+> 基于「IDEA Git 功能复刻全量对齐」评审（用户截图反馈 Branches 空白/工具栏缺失），经 3 路代码审计确认「功能多数已实现但被视图 bug + 工具栏未浮现掩盖」，本批次先解除可见痛感再全量补齐。共新增 **13 个 engine 纯逻辑模块 + 21 个命令**，单测 64 → 166。
+
+- **Branches 视图渲染修复（Batch5）**：`engine/ref/for-each-ref`（NUL 分隔 + upstream/HEAD/ahead-behind track）+ async getChildren + `repo.state.refs` 为空时 `git for-each-ref` CLI 兜底 + 首帧刷新（修复初始 `_onDidChange.fire` 早于订阅挂载而丢失的根因）。
+- **工具栏 Action 组补齐 + 命令 bug（Batch5）**：Changes 加 fetch/pull/push/commit；Branches 加 fetch；Log 加 cherry-pick/revert/reset；cherry-pick/revert 成功后刷新；resetHead 重写（修 `HEAD~0` 致 mixed/keep 失效）；branchDelete 加 `--merged` 检查；merge/rebase 加确认。
+- **冲突兜底引导（Batch5）**：`engine/git-state/conflict-detector` + `adapter/conflict-ui`；merge/rebase/pull/cherry-pick/revert/stash-pop/unshelve 失败检测冲突弹「解决/中止」。
+- **Branches 对齐 IDEA（Batch6）**：Favorites/Local/Remote/Tags 四段分组 + ahead/behind/upstream 展示 + `engine/ref/favorites`/`cleanup`（提取复用）+ toggleFavorite/checkoutAsNew/compareWithCurrent/tagCreate/tagDelete/tagCheckout。
+- **交互式 Rebase webview 1:1 复刻（Batch7）**：补 reword/edit + 拖拽重排序；reword 经 `process.execPath` 跑 Node editor helper + state 文件非交互写入新 message（已功能性验证）；`engine/rebase/todo`。
+- **Log 提交详情面板 + 高级过滤（Batch8）**：commit 展开显示变更文件（`engine/log/commit-files`）+ 单文件 diff（commit^ vs commit）+ `engine/log/log-filter`（合并模式/日期/正则）+ per-commit 操作（resetToHere/createBranchFromCommit/createTagFromCommit/showContainingBranches）。
+- **真实 SVG 提交拓扑图（Batch9）**：解析 `git log --graph` 字符粒度渲染（`*` 圆点可点击 / `|` 竖线 / `/ \` 斜线，多色 lane）+ 实时刷新 + 节点点击 QuickPick；`engine/log/graph-parser`。
+- **Push/Update/Merge 对话框（Batch10）**：force/force-with-lease/push tags、pull --rebase/--no-rebase、merge ff-only/no-ff/squash + message；fetch --prune；`engine/commit/trailer`（Co-authored-by）。
+- **自绘 3-way Merge Editor（Batch11）**：自实现 `engine/merge/diff3`（基于 LCS，双方同改动自动消解）+ WebviewPanel 三栏（OURS/RESULT 可编辑/THEIRS）+ Accept 按钮 + 写回 `git add`；handleGitConflict「解决冲突」直接调起。
+- **Phase 4/5 收尾（Batch12）**：Stash 高级（keep-index/clear/branch）、Patch create/apply、Reflog 视图、编辑器内 Blame 行内注解（`engine/blame/blame-parser` + `adapter/editor/blame-annotation`）。
+
+### 架构与质量
+- 新增 engine 模块（零 vscode 依赖、可单测）：`ref/{for-each-ref,favorites,cleanup}`、`rebase/todo`、`log/{log-filter,commit-files,graph-parser}`、`merge/diff3`、`commit/trailer`、`git-state/conflict-detector`、`blame/blame-parser`。
+- 命令 56 → 77；单测 64 → 166（+21 文件）；集成 3/3；lint/类型/构建全程 GREEN。
+- 关键算法（reword helper / graph 解析 / diff3 / blame 解析）均做真实 git 数据功能性验证。
+- git 底座：稳定 API 能做的用 `Repository.*`；缺口用 `GitRepositoryService.execGit`（复用 `api.git.path` 同一二进制）。
+
+### 待补（后续）
+- Commit webview 的 Co-authored-by / author 覆盖（`--author`）/ undo-last-commit 按钮 UI 接线（engine trailer 已就绪）。
+- Partial 多文件选择 UX、行级 split chunks（IDEA "Include Selected Lines"）。
+- 目录/folder diff（虚拟文档）、Submodules 管理。
+- M5 AI Agent（5 个接缝已预埋 Null 实现，本轮未启动）。
+
+
+
 ## [0.0.1-rc.2] - 2026-06-28 — 第二个预发布候选
 
 包含 rc.1 后的全部 Parity Recovery（Batch 1-4 + Editor Inline Commit），大幅补齐 IDEA Git 功能复刻。

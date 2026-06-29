@@ -3,7 +3,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { BranchNode, BranchesTreeProvider } from './tree/branches-tree';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
-import type { LogNode } from './tree/log-tree';
+import type { LogNode, LogTreeProvider } from './tree/log-tree';
+import { handleGitConflict } from './conflict-ui';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -11,7 +12,7 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
  * 注册经 git CLI 补齐的操作（M5' batch 1）：cherry-pick / revert / reset / branch rename /
  * ignore / compare branches / reword。均经 `service.execGit`（复用 vscode.git 的同一 git 二进制）。
  */
-export function registerGitCliCommands(service: GitRepositoryService, branchesTree: BranchesTreeProvider): vscode.Disposable[] {
+export function registerGitCliCommands(service: GitRepositoryService, branchesTree: BranchesTreeProvider, logTree: LogTreeProvider): vscode.Disposable[] {
 	const subs: vscode.Disposable[] = [];
 
 	subs.push(
@@ -26,9 +27,13 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 			}
 			try {
 				await service.execGit(['cherry-pick', hash]);
+				branchesTree.refresh();
+				logTree.refresh();
 				void vscode.window.showInformationMessage(`Cherry-pick ${hash.slice(0, 7)} 完成`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Cherry-pick 失败：${errMsg(e)}`);
+				if (!(await handleGitConflict(service, 'Cherry-pick'))) {
+					void vscode.window.showErrorMessage(`Cherry-pick 失败：${errMsg(e)}`);
+				}
 			}
 		}),
 	);
@@ -45,9 +50,13 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 			}
 			try {
 				await service.execGit(['revert', '--no-edit', hash]);
+				branchesTree.refresh();
+				logTree.refresh();
 				void vscode.window.showInformationMessage(`Revert ${hash.slice(0, 7)} 完成`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Revert 失败：${errMsg(e)}`);
+				if (!(await handleGitConflict(service, 'Revert'))) {
+					void vscode.window.showErrorMessage(`Revert 失败：${errMsg(e)}`);
+				}
 			}
 		}),
 	);
@@ -58,13 +67,20 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 			if (!repo) {
 				return;
 			}
+			// 1) 选择目标 commit（默认最近 30 条；HEAD 在前）。修复此前固定 HEAD~0 导致
+			//    mixed/keep 等同 reset HEAD（仅取消暂存/丢工作区）而无法回退到历史提交的问题。
+			const target = await pickResetTarget(service);
+			if (!target) {
+				return;
+			}
+			// 2) 选择 reset 模式
 			const items = [
-				{ label: 'soft', description: '保留工作区与暂存区改动' },
-				{ label: 'mixed', description: '保留工作区改动，取消暂存（默认）' },
-				{ label: 'hard', description: '⚠ 丢弃所有改动（不可撤销）' },
-				{ label: 'keep', description: '保留工作区已修改文件' },
+				{ label: 'soft', description: '仅移动 HEAD，保留暂存区与工作区改动' },
+				{ label: 'mixed', description: '移动 HEAD + 取消暂存（默认），保留工作区改动' },
+				{ label: 'hard', description: '⚠ 移动 HEAD + 丢弃暂存区与工作区所有改动（不可撤销）' },
+				{ label: 'keep', description: '移动 HEAD + 保留已修改文件（遇冲突中止）' },
 			];
-			const pick = await vscode.window.showQuickPick(items, { placeHolder: '选择 reset 模式（作用于 HEAD）' });
+			const pick = await vscode.window.showQuickPick(items, { placeHolder: `选择 reset 模式（目标 ${target.slice(0, 7)}）` });
 			if (!pick) {
 				return;
 			}
@@ -75,9 +91,10 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 				}
 			}
 			try {
-				await service.execGit(['reset', `--${pick.label}`, 'HEAD~0']);
+				await service.execGit(['reset', `--${pick.label}`, target]);
 				branchesTree.refresh();
-				void vscode.window.showInformationMessage(`Reset (--${pick.label}) 完成`);
+				logTree.refresh();
+				void vscode.window.showInformationMessage(`Reset (--${pick.label} ${target.slice(0, 7)}) 完成`);
 			} catch (e) {
 				void vscode.window.showErrorMessage(`Reset 失败：${errMsg(e)}`);
 			}
@@ -90,7 +107,7 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 			if (!repo || node?.kind !== 'branch') {
 				return;
 			}
-			const oldName = node.ref.name ?? '';
+			const oldName = node.ref.shortName;
 			const newName = await vscode.window.showInputBox({ prompt: `重命名分支「${oldName}」`, value: oldName });
 			if (!newName || !newName.trim() || newName === oldName) {
 				return;
@@ -133,7 +150,7 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 				return;
 			}
 			const refs = repo.state.refs.filter((r) => r.name && (r.type === 0 || r.type === 1));
-			const base = node?.kind === 'branch' ? node.ref.name : await vscode.window.showQuickPick(refs.map((r) => r.name!), { placeHolder: '选择 base 分支' });
+			const base = node?.kind === 'branch' ? node.ref.shortName : await vscode.window.showQuickPick(refs.map((r) => r.name!), { placeHolder: '选择 base 分支' });
 			if (!base) {
 				return;
 			}
@@ -198,4 +215,20 @@ async function pickRelativePath(service: GitRepositoryService): Promise<string |
 	}
 	const pick = await vscode.window.showQuickPick(changes.map((c) => ({ label: c.relativePath })), { placeHolder: '选择要忽略的文件' });
 	return pick?.label;
+}
+
+/** 选择 reset 目标 commit（最近 30 条，HEAD 在前）。 */
+async function pickResetTarget(service: GitRepositoryService): Promise<string | undefined> {
+	const repo = service.repo;
+	if (!repo) {
+		return undefined;
+	}
+	const commits = await repo.log({ maxEntries: 30 });
+	const items = commits.map((c, i) => ({
+		label: (c.message.split('\n', 1)[0] ?? c.hash).slice(0, 60),
+		description: `${c.hash.slice(0, 7)}${i === 0 ? ' · HEAD' : ''}`,
+		hash: c.hash,
+	}));
+	const pick = await vscode.window.showQuickPick(items, { placeHolder: '选择 reset 目标 commit' });
+	return pick?.hash;
 }

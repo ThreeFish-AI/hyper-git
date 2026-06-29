@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { BranchNode, BranchesTreeProvider } from './tree/branches-tree';
 import type { GitRepositoryService } from './git-repository-service';
 import type { LogNode } from './tree/log-tree';
+import { filterMergeable } from '../engine/ref/cleanup';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -103,10 +104,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 			let merged: string[] = [];
 			try {
 				const out = await service.execGit(['branch', '--merged', base]);
-				merged = out
-					.split('\n')
-					.map((s) => s.trim().replace(/^\*\s*/, ''))
-					.filter((s) => s && s !== base && s !== 'main' && s !== 'master' && s !== headName);
+				merged = filterMergeable(out, base, headName ? [headName] : []);
 			} catch (e) {
 				void vscode.window.showErrorMessage(`查询已合并分支失败：${errMsg(e)}`);
 				return;
@@ -141,7 +139,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 			if (node?.kind !== 'branch') {
 				return;
 			}
-			const ref = node.ref.name ?? '';
+			const ref = node.ref.shortName;
 			if (ref) {
 				await vscode.env.clipboard.writeText(ref);
 				void vscode.window.showInformationMessage(`已复制 ${ref}`);
