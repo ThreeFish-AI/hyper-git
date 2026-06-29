@@ -4,6 +4,8 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { GitRepositoryService } from '../git-repository-service';
+import { handleGitConflict } from '../conflict-ui';
+import { type RebaseTodoItem, isValidAction, serializeTodo } from '../../engine/rebase/todo';
 
 interface RebaseCommit {
 	readonly hash: string;
@@ -13,11 +15,35 @@ interface RebaseCommit {
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /**
- * 交互式 Rebase Webview（IDEA Git Log → rebase 等价）。
+ * reword 的 GIT_EDITOR helper 脚本（Node）。
  *
- * 展示 base..HEAD 的提交列表，每条可设 pick/squash/fixup/drop 动作。
- * 「Start Rebase」→ 构造 todo 序列 → 写临时文件 → `GIT_SEQUENCE_EDITOR=cp <tempfile>` 非交互触发 rebase。
- * 重排序（drag/drop）作为后续增强；当前覆盖 squash/fixup/drop（最常见场景）。
+ * git 对每个 reword 提交以 `node helper <msgfile>` 调用本脚本；脚本从 HYPERGIT_REWORD_STATE
+ * 指向的 state 文件（{counter, subjects}）按调用顺序取出新 message 写入 msgfile，实现非交互 reword。
+ * 用 process.execPath 运行（与扩展宿主同一 Node 二进制，规避 PATH 缺 node 的风险）。
+ */
+const REWORD_EDITOR_JS = `const fs = require('fs');
+const target = process.argv[2];
+const stateFile = process.env.HYPERGIT_REWORD_STATE;
+if (!target || !stateFile) { process.exit(0); }
+let state;
+try { state = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch (e) { process.exit(0); }
+const idx = state.counter || 0;
+const subjects = state.subjects || [];
+if (idx < subjects.length) {
+  fs.writeFileSync(target, String(subjects[idx]) + '\\n');
+  state.counter = idx + 1;
+  try { fs.writeFileSync(stateFile, JSON.stringify(state)); } catch (e) {}
+}
+`;
+
+/**
+ * 交互式 Rebase Webview（1:1 复刻 IDEA Git Log → Edit Rebase 编辑器）。
+ *
+ * 展示 base..HEAD 的提交列表，每条可设 pick/reword/edit/squash/fixup/drop 动作；
+ * reword 支持行内编辑新 message；行可拖拽重排序。
+ * 「Start Rebase」→ serializeTodo 构造 todo → 写临时文件 → `GIT_SEQUENCE_EDITOR=cp` 注入；
+ * reword 经 GIT_EDITOR=process.execPath + state 文件按序写入新 message（非交互）。
+ * edit 或冲突会让 rebase 暂停 → 检测 rebase-merge 态并提示 continue/skip/abort。
  */
 export class RebaseWebview {
 	static async open(service: GitRepositoryService): Promise<void> {
@@ -41,7 +67,7 @@ export class RebaseWebview {
 		}
 		const base = basePick.label;
 
-		// 获取 base..HEAD 提交（逆序 → 正序）
+		// 获取 base..HEAD 提交（逆序 → 正序：rebase 按时间正序回放）
 		let rebaseCommits: RebaseCommit[] = [];
 		try {
 			const out = await service.execGit(['log', '--reverse', '--format=%h|%s', `${base}..HEAD`]);
@@ -62,33 +88,90 @@ export class RebaseWebview {
 			return;
 		}
 
-		const panel = vscode.window.createWebviewPanel('hyperGit.rebase', 'Interactive Rebase — Hyper Git', vscode.ViewColumn.Active, { enableScripts: true });
+		const panel = vscode.window.createWebviewPanel('hyperGit.rebase', 'Interactive Rebase — Hyper Git', vscode.ViewColumn.Active, {
+			enableScripts: true,
+			retainContextWhenHidden: true,
+		});
 		panel.webview.html = RebaseWebview.renderHtml(rebaseCommits);
 
 		panel.webview.onDidReceiveMessage(async (msg) => {
 			if (msg.type === 'rebase') {
-				await RebaseWebview.executeRebase(service, base, msg.actions as Array<{ hash: string; action: string; subject: string }>, panel);
+				await RebaseWebview.executeRebase(
+					service,
+					base,
+					msg.actions as Array<{ hash: string; action: string; subject: string }>,
+					panel,
+				);
 			}
 		});
 	}
 
-	private static async executeRebase(service: GitRepositoryService, base: string, actions: Array<{ hash: string; action: string; subject: string }>, panel: vscode.WebviewPanel): Promise<void> {
-		const todo = actions.map((a) => `${a.action} ${a.hash} ${a.subject}`).join('\n') + '\n';
-		const tmpTodo = path.join(os.tmpdir(), `hg-rebase-todo-${crypto.randomBytes(4).toString('hex')}.txt`);
+	private static async executeRebase(
+		service: GitRepositoryService,
+		base: string,
+		actions: Array<{ hash: string; action: string; subject: string }>,
+		panel: vscode.WebviewPanel,
+	): Promise<void> {
+		// 校验并构造 todo（按 webview DOM 顺序，即用户重排后的顺序）
+		const todoItems: RebaseTodoItem[] = [];
+		const rewordSubjects: string[] = [];
+		for (const a of actions) {
+			if (!isValidAction(a.action)) {
+				void vscode.window.showErrorMessage(`非法动作：${a.action}`);
+				return;
+			}
+			todoItems.push({ action: a.action, hash: a.hash, subject: a.subject });
+			if (a.action === 'reword') {
+				rewordSubjects.push(a.subject);
+			}
+		}
+		const todo = serializeTodo(todoItems);
+
+		const tag = crypto.randomBytes(4).toString('hex');
+		const tmpTodo = path.join(os.tmpdir(), `hg-rebase-todo-${tag}.txt`);
 		fs.writeFileSync(tmpTodo, todo);
+		const env: NodeJS.ProcessEnv = { ...process.env, GIT_SEQUENCE_EDITOR: `cp ${tmpTodo}` };
+
+		// reword：写 Node editor helper + state 文件，按 todo 顺序写入新 message
+		let tmpEditor: string | undefined;
+		let tmpState: string | undefined;
+		if (rewordSubjects.length > 0) {
+			tmpEditor = path.join(os.tmpdir(), `hg-reword-editor-${tag}.js`);
+			tmpState = path.join(os.tmpdir(), `hg-reword-state-${tag}.json`);
+			fs.writeFileSync(tmpEditor, REWORD_EDITOR_JS);
+			fs.writeFileSync(tmpState, JSON.stringify({ counter: 0, subjects: rewordSubjects }));
+			env.GIT_EDITOR = `"${process.execPath}" "${tmpEditor}"`;
+			env.HYPERGIT_REWORD_STATE = tmpState;
+		} else {
+			env.GIT_EDITOR = ':';
+		}
+
 		try {
-			await service.execGit(['rebase', '-i', base], {
-				env: { ...process.env, GIT_SEQUENCE_EDITOR: `cp ${tmpTodo}`, GIT_EDITOR: ':' },
-			});
-			void vscode.window.showInformationMessage('Rebase 完成');
-			panel.dispose();
+			await service.execGit(['rebase', '-i', base], { env });
+			// rebase 可能因 edit / squash 暂停（exit 0 但 rebase-merge 仍在）：检测并提示
+			const gitDir = (await service.execGit(['rev-parse', '--absolute-git-dir'])).trim();
+			if (fs.existsSync(path.join(gitDir, 'rebase-merge'))) {
+				void vscode.window.showWarningMessage(
+					'Rebase 已暂停（遇到 edit 或需处理）。请在终端运行：git rebase --continue / --skip / --abort。',
+				);
+			} else {
+				void vscode.window.showInformationMessage('Rebase 完成');
+				panel.dispose();
+			}
 		} catch (e) {
-			void vscode.window.showErrorMessage(`Rebase 失败（可能需手动解冲突）：${errMsg(e)}`);
+			if (!(await handleGitConflict(service, 'Rebase'))) {
+				void vscode.window.showErrorMessage(`Rebase 失败：${errMsg(e)}`);
+			}
 		} finally {
-			try {
-				fs.unlinkSync(tmpTodo);
-			} catch {
-				/* ignore */
+			for (const f of [tmpTodo, tmpEditor, tmpState]) {
+				if (!f) {
+					continue;
+				}
+				try {
+					fs.unlinkSync(f);
+				} catch {
+					/* ignore */
+				}
 			}
 		}
 	}
@@ -97,15 +180,18 @@ export class RebaseWebview {
 		const nonce = crypto.randomBytes(16).toString('base64');
 		const rows = commits
 			.map(
-				(c, i) => `<tr data-hash="${c.hash}" data-subject="${escapeHtml(c.subject)}">
-<td><select class="action" data-index="${i}">
+				(c) => `<tr draggable="true" data-hash="${escapeHtml(c.hash)}">
+<td class="drag" title="拖拽以重排序">⠿</td>
+<td><select class="action">
 <option value="pick">pick</option>
+<option value="reword">reword</option>
+<option value="edit">edit</option>
 <option value="squash">squash</option>
 <option value="fixup">fixup</option>
 <option value="drop">drop</option>
 </select></td>
-<td class="hash">${c.hash.slice(0, 7)}</td>
-<td class="subject">${escapeHtml(c.subject)}</td>
+<td class="hash">${escapeHtml(c.hash.slice(0, 7))}</td>
+<td><input class="subject" value="${escapeHtml(c.subject)}" disabled spellcheck="false"></td>
 </tr>`,
 			)
 			.join('\n');
@@ -116,32 +202,87 @@ export class RebaseWebview {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'">
 <style>
 body { margin: 0; padding: 12px 16px; font-family: var(--vscode-font-family); color: var(--vscode-foreground); font-size: var(--vscode-font-size); background: var(--vscode-editor-background); }
-h3 { margin: 0 0 8px; font-weight: 600; }
+h3 { margin: 0 0 4px; font-weight: 600; }
+.hint { margin: 0 0 10px; font-size: 12px; color: var(--vscode-descriptionForeground); }
 table { width: 100%; border-collapse: collapse; }
-td { padding: 4px 6px; border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.2)); }
-td.hash { color: var(--vscode-editorWarning-foreground, #d29922); font-family: var(--vscode-editor-font-family); font-size: 12px; }
-td.subject { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-select { background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border, transparent); padding: 2px 4px; font-size: 12px; }
-button { margin-top: 12px; padding: 6px 16px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 2px; cursor: pointer; font-size: 13px; }
+th, td { padding: 4px 6px; border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.2)); text-align: left; }
+th { font-weight: 600; font-size: 12px; color: var(--vscode-descriptionForeground); }
+td.drag { color: var(--vscode-descriptionForeground); cursor: grab; user-select: none; width: 18px; }
+td.hash { color: var(--vscode-editorWarning-foreground, #d29922); font-family: var(--vscode-editor-font-family); font-size: 12px; width: 70px; }
+tr { background: transparent; }
+tr.dragging { opacity: 0.4; }
+tr.drop-target { border-top: 2px solid var(--vscode-focusBorder, #007fd4); }
+select, input.subject { background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); padding: 2px 4px; font-size: 12px; font-family: var(--vscode-font-family); }
+select { width: 80px; }
+input.subject { width: 100%; }
+input.subject:disabled { color: var(--vscode-descriptionForeground); opacity: 0.85; }
+input.subject:not(:disabled) { border-color: var(--vscode-focusBorder, #007fd4); }
+.row-actions { margin-top: 12px; }
+button { padding: 6px 16px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 2px; cursor: pointer; font-size: 13px; }
 button:hover { opacity: 0.9; }
+button.secondary { background: var(--vscode-button-secondaryBackground, transparent); color: var(--vscode-button-secondaryForeground, var(--vscode-foreground)); border: 1px solid var(--vscode-button-border, rgba(128,128,128,.4)); }
 </style>
 </head>
 <body>
 <h3>Interactive Rebase</h3>
-<table><thead><tr><th>Action</th><th>Hash</th><th>Subject</th></tr></thead>
+<p class="hint">拖拽 ⠿ 重排序 · 选 reword 可行内编辑 message · edit/squash 会暂停（终端 continue） · drop 删除提交</p>
+<table><thead><tr><th></th><th>Action</th><th>Hash</th><th>Subject</th></tr></thead>
 <tbody>${rows}</tbody></table>
+<div class="row-actions">
 <button id="rebase-btn">Start Rebase</button>
+</div>
 <script nonce="${nonce}">
-document.getElementById('rebase-btn').addEventListener('click', function() {
-  var rows = document.querySelectorAll('tbody tr');
-  var actions = [];
-  rows.forEach(function(row) {
-    var select = row.querySelector('.action');
-    actions.push({ hash: row.dataset.hash, action: select.value, subject: row.dataset.subject });
+(function () {
+  var tbody = document.querySelector('tbody');
+  var rows = function () { return Array.from(tbody.querySelectorAll('tr')); };
+
+  // action 变化：仅 reword 允许编辑 subject
+  tbody.addEventListener('change', function (e) {
+    if (e.target.classList.contains('action')) {
+      var input = e.target.closest('tr').querySelector('input.subject');
+      var isReword = e.target.value === 'reword';
+      input.disabled = !isReword;
+      if (isReword) { input.focus(); }
+    }
   });
-  var vscode = acquireVsCodeApi();
-  vscode.postMessage({ type: 'rebase', actions: actions });
-});
+
+  // 拖拽重排序
+  var dragged = null;
+  tbody.addEventListener('dragstart', function (e) {
+    if (e.target.tagName === 'TR') { dragged = e.target; e.target.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; }
+  });
+  tbody.addEventListener('dragend', function (e) {
+    if (e.target.tagName === 'TR') { e.target.classList.remove('dragging'); }
+    rows().forEach(function (r) { r.classList.remove('drop-target'); });
+  });
+  tbody.addEventListener('dragover', function (e) {
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    var tr = e.target.closest('tr');
+    rows().forEach(function (r) { r.classList.remove('drop-target'); });
+    if (tr && tr !== dragged) { tr.classList.add('drop-target'); }
+  });
+  tbody.addEventListener('drop', function (e) {
+    e.preventDefault();
+    var target = e.target.closest('tr');
+    if (!dragged || !target || dragged === target) { return; }
+    var rect = target.getBoundingClientRect();
+    var after = (e.clientY - rect.top) > rect.height / 2;
+    if (after && target.nextSibling) { tbody.insertBefore(dragged, target.nextSibling); }
+    else { tbody.insertBefore(dragged, target); }
+  });
+
+  // 提交：按 DOM 顺序收集
+  document.getElementById('rebase-btn').addEventListener('click', function () {
+    var actions = rows().map(function (row) {
+      return {
+        hash: row.dataset.hash,
+        action: row.querySelector('select.action').value,
+        subject: row.querySelector('input.subject').value,
+      };
+    });
+    acquireVsCodeApi().postMessage({ type: 'rebase', actions: actions });
+  });
+})();
 </script>
 </body>
 </html>`;
