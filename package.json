@@ -1,0 +1,391 @@
+{
+  "name": "hyper-git",
+  "displayName": "Hyper Git",
+  "icon": "media/icon.png",
+  "description": "在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口，并为未来 AI Agent 自主代理预留架构接缝。",
+  "version": "0.0.4",
+  "publisher": "threefish-ai",
+  "license": "MIT",
+  "preview": true,
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ThreeFish-AI/hyper-git.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "intellij",
+    "idea",
+    "commit",
+    "changelist",
+    "scm",
+    "version control",
+    "shelf",
+    "stash"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Hyper Git 依赖本地 git，不支持虚拟/web 工作区。"
+    }
+  },
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "hyper-git",
+          "title": "Hyper Git",
+          "icon": "media/hyper-git-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "hyper-git": [
+        {
+          "id": "hyperGit.changes",
+          "name": "Changes",
+          "visibility": "visible"
+        },
+        {
+          "id": "hyperGit.commit",
+          "name": "Commit",
+          "type": "webview",
+          "visibility": "visible"
+        },
+        {
+          "id": "hyperGit.log",
+          "name": "Log",
+          "visibility": "visible"
+        },
+        {
+          "id": "hyperGit.branches",
+          "name": "Branches",
+          "visibility": "visible"
+        },
+        {
+          "id": "hyperGit.stash",
+          "name": "Stash",
+          "visibility": "visible"
+        },
+        {
+          "id": "hyperGit.shelf",
+          "name": "Shelf",
+          "visibility": "visible"
+        },
+        {
+          "id": "hyperGit.worktrees",
+          "name": "Worktrees",
+          "visibility": "visible"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "hyperGit.changes",
+        "contents": "未检测到 Git 变更或仓库。\n在 Git 仓库中打开工作区，变更将按 Changelist 分组显示。\n[新建 Changelist](command:hyperGit.newChangelist)"
+      },
+      {
+        "view": "hyperGit.stash",
+        "contents": "暂无 Stash。\n[Stash 当前变更](command:hyperGit.stashCreate)"
+      },
+      {
+        "view": "hyperGit.worktrees",
+        "contents": "暂无 Worktree。\n[新建 Worktree](command:hyperGit.worktreeAdd)"
+      }
+    ],
+    "commands": [
+      { "command": "hyperGit.showVersion", "title": "显示版本", "category": "Hyper Git" },
+      { "command": "hyperGit.refresh", "title": "刷新", "category": "Hyper Git", "icon": "$(refresh)" },
+      { "command": "hyperGit.newChangelist", "title": "新建 Changelist", "category": "Hyper Git", "icon": "$(add)" },
+      { "command": "hyperGit.setActiveChangelist", "title": "设为活动 Changelist", "category": "Hyper Git" },
+      { "command": "hyperGit.renameChangelist", "title": "重命名 Changelist", "category": "Hyper Git" },
+      { "command": "hyperGit.deleteChangelist", "title": "删除 Changelist", "category": "Hyper Git" },
+      { "command": "hyperGit.moveChangelist", "title": "移至 Changelist…", "category": "Hyper Git" },
+      { "command": "hyperGit.openDiff", "title": "打开 Diff", "category": "Hyper Git" },
+      { "command": "hyperGit.commit", "title": "提交", "category": "Hyper Git", "icon": "$(check)" },
+      { "command": "hyperGit.commitAndPush", "title": "提交并推送", "category": "Hyper Git", "icon": "$(cloud-upload)" },
+      { "command": "hyperGit.refreshLog", "title": "刷新 Log", "category": "Hyper Git", "icon": "$(refresh)" },
+      { "command": "hyperGit.refreshBranches", "title": "刷新 Branches", "category": "Hyper Git", "icon": "$(refresh)" },
+      { "command": "hyperGit.logFilterAuthor", "title": "按作者过滤", "category": "Hyper Git" },
+      { "command": "hyperGit.logFilterPath", "title": "按路径过滤", "category": "Hyper Git" },
+      { "command": "hyperGit.logClearFilter", "title": "清除 Log 过滤", "category": "Hyper Git" },
+      { "command": "hyperGit.copyCommitHash", "title": "复制 Commit Hash", "category": "Hyper Git" },
+      { "command": "hyperGit.showHistory", "title": "显示文件历史", "category": "Hyper Git" },
+      { "command": "hyperGit.branchCreate", "title": "新建分支", "category": "Hyper Git", "icon": "$(add)" },
+      { "command": "hyperGit.branchCheckout", "title": "检出分支", "category": "Hyper Git" },
+      { "command": "hyperGit.branchDelete", "title": "删除分支", "category": "Hyper Git" },
+      { "command": "hyperGit.mergeBranch", "title": "合并到当前分支", "category": "Hyper Git" },
+      { "command": "hyperGit.rebaseBranch", "title": "变基当前分支到…", "category": "Hyper Git" },
+      { "command": "hyperGit.showBlame", "title": "显示 Blame", "category": "Hyper Git" },
+      { "command": "hyperGit.stashCreate", "title": "Stash 变更", "category": "Hyper Git", "icon": "$(archive)" },
+      { "command": "hyperGit.stashApply", "title": "应用 Stash", "category": "Hyper Git" },
+      { "command": "hyperGit.stashPop", "title": "Pop Stash", "category": "Hyper Git" },
+      { "command": "hyperGit.stashDrop", "title": "删除 Stash", "category": "Hyper Git" },
+      { "command": "hyperGit.discardChanges", "title": "丢弃改动", "category": "Hyper Git" },
+      { "command": "hyperGit.pull", "title": "Pull", "category": "Hyper Git", "icon": "$(arrow-down)" },
+      { "command": "hyperGit.push", "title": "Push", "category": "Hyper Git", "icon": "$(arrow-up)" },
+      { "command": "hyperGit.fetch", "title": "Fetch", "category": "Hyper Git", "icon": "$(repo-fetch)" },
+      { "command": "hyperGit.cherryPick", "title": "Cherry-Pick", "category": "Hyper Git", "icon": "$(repo-pull)" },
+      { "command": "hyperGit.revertCommit", "title": "Revert Commit", "category": "Hyper Git", "icon": "$(discard)" },
+      { "command": "hyperGit.resetHead", "title": "Reset HEAD…", "category": "Hyper Git", "icon": "$(history)" },
+      { "command": "hyperGit.branchRename", "title": "重命名分支", "category": "Hyper Git" },
+      { "command": "hyperGit.ignorePath", "title": "添加到 .gitignore", "category": "Hyper Git" },
+      { "command": "hyperGit.compareBranches", "title": "比较分支", "category": "Hyper Git" },
+      { "command": "hyperGit.toggleFavorite", "title": "收藏/取消收藏", "category": "Hyper Git", "icon": "$(star-full)" },
+      { "command": "hyperGit.checkoutAsNew", "title": "从选中分支新建并检出", "category": "Hyper Git" },
+      { "command": "hyperGit.compareWithCurrent", "title": "与当前分支比较", "category": "Hyper Git", "icon": "$(compare)" },
+      { "command": "hyperGit.tagCreate", "title": "新建标签", "category": "Hyper Git", "icon": "$(tag)" },
+      { "command": "hyperGit.tagDelete", "title": "删除标签", "category": "Hyper Git" },
+      { "command": "hyperGit.tagCheckout", "title": "检出标签", "category": "Hyper Git" },
+      { "command": "hyperGit.openCommitFileDiff", "title": "打开提交文件 Diff", "category": "Hyper Git" },
+      { "command": "hyperGit.resetToHere", "title": "Reset 当前分支到此提交…", "category": "Hyper Git", "icon": "$(history)" },
+      { "command": "hyperGit.createBranchFromCommit", "title": "从此提交新建分支", "category": "Hyper Git", "icon": "$(git-branch)" },
+      { "command": "hyperGit.createTagFromCommit", "title": "从此提交新建标签", "category": "Hyper Git", "icon": "$(tag)" },
+      { "command": "hyperGit.showContainingBranches", "title": "查看包含此提交的分支", "category": "Hyper Git" },
+      { "command": "hyperGit.logFilterGrep", "title": "按 message 过滤（grep）", "category": "Hyper Git" },
+      { "command": "hyperGit.logFilterMergeMode", "title": "合并提交过滤", "category": "Hyper Git" },
+      { "command": "hyperGit.logFilterDate", "title": "按日期过滤", "category": "Hyper Git" },
+      { "command": "hyperGit.logFilterRegex", "title": "按 message 正则过滤", "category": "Hyper Git" },
+      { "command": "hyperGit.rewordCommit", "title": "改写最新提交信息", "category": "Hyper Git" },
+      { "command": "hyperGit.showGraph", "title": "查看提交图（Graph）", "category": "Hyper Git", "icon": "$(git-commit)" },
+      { "command": "hyperGit.showConsole", "title": "打开 Console", "category": "Hyper Git" },
+      { "command": "hyperGit.partialStage", "title": "部分暂存（Hunk）…", "category": "Hyper Git" },
+      { "command": "hyperGit.partialUnstage", "title": "部分取消暂存（Hunk）…", "category": "Hyper Git" },
+      { "command": "hyperGit.stageHunkAtCursor", "title": "暂存光标处 Hunk", "category": "Hyper Git" },
+      { "command": "hyperGit.undoLastCommit", "title": "撤销最近提交（soft）", "category": "Hyper Git" },
+      { "command": "hyperGit.dropCommit", "title": "删除提交（rebase）", "category": "Hyper Git" },
+      { "command": "hyperGit.fixupCommit", "title": "Fixup 到提交（autosquash）", "category": "Hyper Git" },
+      { "command": "hyperGit.cleanupBranches", "title": "清理已合并分支", "category": "Hyper Git" },
+      { "command": "hyperGit.pushDialog", "title": "Push…", "category": "Hyper Git", "icon": "$(repo-push)" },
+      { "command": "hyperGit.updateProject", "title": "Update Project…", "category": "Hyper Git", "icon": "$(sync)" },
+      { "command": "hyperGit.mergeDialog", "title": "Merge…", "category": "Hyper Git", "icon": "$(git-merge)" },
+      { "command": "hyperGit.resolveConflicts", "title": "解决冲突（3-way Merge Editor）…", "category": "Hyper Git", "icon": "$(git-merge)" },
+      { "command": "hyperGit.acceptOurs", "title": "冲突文件：采用 Ours", "category": "Hyper Git" },
+      { "command": "hyperGit.acceptTheirs", "title": "冲突文件：采用 Theirs", "category": "Hyper Git" },
+      { "command": "hyperGit.copyBranchRef", "title": "复制分支引用", "category": "Hyper Git" },
+      { "command": "hyperGit.threeWayDiff", "title": "3-way Diff 概览", "category": "Hyper Git" },
+      { "command": "hyperGit.inlineCommitHunk", "title": "行内提交 Hunk", "category": "Hyper Git" },
+      { "command": "hyperGit.shelveChanges", "title": "Shelve Changes…", "category": "Hyper Git", "icon": "$(inbox)" },
+      { "command": "hyperGit.unshelveSilently", "title": "Unshelve Silently", "category": "Hyper Git" },
+      { "command": "hyperGit.unshelveWithMerge", "title": "Unshelve with Merge", "category": "Hyper Git" },
+      { "command": "hyperGit.deleteShelf", "title": "Delete Shelf", "category": "Hyper Git" },
+      { "command": "hyperGit.startRebase", "title": "Interactive Rebase…", "category": "Hyper Git" },
+      { "command": "hyperGit.moveHunkToChangelist", "title": "Move Hunk to Changelist", "category": "Hyper Git" },
+      { "command": "hyperGit.stashKeepIndex", "title": "Stash（保留已暂存）", "category": "Hyper Git" },
+      { "command": "hyperGit.stashClear", "title": "清空所有 Stash", "category": "Hyper Git" },
+      { "command": "hyperGit.stashBranch", "title": "从 Stash 创建分支", "category": "Hyper Git" },
+      { "command": "hyperGit.createPatch", "title": "导出 Patch…", "category": "Hyper Git", "icon": "$(diff)" },
+      { "command": "hyperGit.applyPatch", "title": "应用 Patch…", "category": "Hyper Git", "icon": "$(diff)" },
+      { "command": "hyperGit.showReflog", "title": "查看 Reflog", "category": "Hyper Git", "icon": "$(history)" },
+      { "command": "hyperGit.toggleBlameAnnotation", "title": "切换 Blame 注解", "category": "Hyper Git", "icon": "$(eye)" },
+      { "command": "hyperGit.worktreeRefresh", "title": "刷新 Worktrees", "category": "Hyper Git", "icon": "$(refresh)" },
+      { "command": "hyperGit.worktreeAdd", "title": "新建 Worktree", "category": "Hyper Git", "icon": "$(add)" },
+      { "command": "hyperGit.worktreeOpen", "title": "打开 Worktree", "category": "Hyper Git", "icon": "$(folder-opened)" },
+      { "command": "hyperGit.worktreeRemove", "title": "删除 Worktree", "category": "Hyper Git", "icon": "$(trash)" },
+      { "command": "hyperGit.worktreeCopyPath", "title": "复制 Worktree 路径", "category": "Hyper Git" },
+      { "command": "hyperGit.worktreeLock", "title": "锁定 Worktree", "category": "Hyper Git", "icon": "$(lock)" },
+      { "command": "hyperGit.worktreeUnlock", "title": "解锁 Worktree", "category": "Hyper Git" },
+      { "command": "hyperGit.worktreeMove", "title": "移动 Worktree…", "category": "Hyper Git" },
+      { "command": "hyperGit.worktreePrune", "title": "清理失效 Worktree", "category": "Hyper Git", "icon": "$(clear-all)" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "hyperGit.refresh", "when": "view == hyperGit.changes", "group": "navigation" },
+        { "command": "hyperGit.newChangelist", "when": "view == hyperGit.changes", "group": "navigation" },
+        { "command": "hyperGit.commit", "when": "view == hyperGit.changes", "group": "navigation" },
+        { "command": "hyperGit.commitAndPush", "when": "view == hyperGit.changes", "group": "navigation" },
+        { "command": "hyperGit.fetch", "when": "view == hyperGit.changes", "group": "navigation" },
+        { "command": "hyperGit.pull", "when": "view == hyperGit.changes", "group": "navigation" },
+        { "command": "hyperGit.push", "when": "view == hyperGit.changes", "group": "navigation" },
+        { "command": "hyperGit.pushDialog", "when": "view == hyperGit.changes", "group": "navigation" },
+        { "command": "hyperGit.updateProject", "when": "view == hyperGit.changes", "group": "navigation" },
+        { "command": "hyperGit.createPatch", "when": "view == hyperGit.changes" },
+        { "command": "hyperGit.applyPatch", "when": "view == hyperGit.changes" },
+        { "command": "hyperGit.refreshLog", "when": "view == hyperGit.log", "group": "navigation" },
+        { "command": "hyperGit.showGraph", "when": "view == hyperGit.log", "group": "navigation" },
+        { "command": "hyperGit.cherryPick", "when": "view == hyperGit.log", "group": "navigation" },
+        { "command": "hyperGit.revertCommit", "when": "view == hyperGit.log", "group": "navigation" },
+        { "command": "hyperGit.resetHead", "when": "view == hyperGit.log", "group": "navigation" },
+        { "command": "hyperGit.logFilterAuthor", "when": "view == hyperGit.log" },
+        { "command": "hyperGit.logFilterPath", "when": "view == hyperGit.log" },
+        { "command": "hyperGit.logClearFilter", "when": "view == hyperGit.log" },
+        { "command": "hyperGit.logFilterGrep", "when": "view == hyperGit.log" },
+        { "command": "hyperGit.logFilterMergeMode", "when": "view == hyperGit.log" },
+        { "command": "hyperGit.logFilterDate", "when": "view == hyperGit.log" },
+        { "command": "hyperGit.logFilterRegex", "when": "view == hyperGit.log" },
+        { "command": "hyperGit.showReflog", "when": "view == hyperGit.log", "group": "navigation" },
+        { "command": "hyperGit.refreshBranches", "when": "view == hyperGit.branches", "group": "navigation" },
+        { "command": "hyperGit.branchCreate", "when": "view == hyperGit.branches", "group": "navigation" },
+        { "command": "hyperGit.pull", "when": "view == hyperGit.branches", "group": "navigation" },
+        { "command": "hyperGit.push", "when": "view == hyperGit.branches", "group": "navigation" },
+        { "command": "hyperGit.fetch", "when": "view == hyperGit.branches", "group": "navigation" },
+        { "command": "hyperGit.mergeDialog", "when": "view == hyperGit.branches", "group": "navigation" },
+        { "command": "hyperGit.updateProject", "when": "view == hyperGit.branches", "group": "navigation" },
+        { "command": "hyperGit.tagCreate", "when": "view == hyperGit.branches", "group": "navigation" },
+        { "command": "hyperGit.stashCreate", "when": "view == hyperGit.stash", "group": "navigation" },
+        { "command": "hyperGit.stashKeepIndex", "when": "view == hyperGit.stash", "group": "navigation" },
+        { "command": "hyperGit.stashClear", "when": "view == hyperGit.stash" },
+        { "command": "hyperGit.shelveChanges", "when": "view == hyperGit.shelf", "group": "navigation" },
+        { "command": "hyperGit.worktreeRefresh", "when": "view == hyperGit.worktrees", "group": "navigation" },
+        { "command": "hyperGit.worktreeAdd", "when": "view == hyperGit.worktrees", "group": "navigation" },
+        { "command": "hyperGit.worktreePrune", "when": "view == hyperGit.worktrees", "group": "navigation" }
+      ],
+      "view/item/context": [
+        { "command": "hyperGit.setActiveChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.changelist", "group": "1_changelist@1" },
+        { "command": "hyperGit.renameChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.changelist", "group": "1_changelist@2" },
+        { "command": "hyperGit.deleteChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.changelist", "group": "1_changelist@3" },
+        { "command": "hyperGit.moveChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.fileChange", "group": "inline" },
+        { "command": "hyperGit.moveChangelist", "when": "view == hyperGit.changes && viewItem == hyperGit.fileChange", "group": "1_file@1" },
+        { "command": "hyperGit.showHistory", "when": "view == hyperGit.changes && viewItem == hyperGit.fileChange", "group": "1_file@2" },
+        { "command": "hyperGit.discardChanges", "when": "view == hyperGit.changes && viewItem == hyperGit.fileChange", "group": "1_file@3" },
+        { "command": "hyperGit.copyCommitHash", "when": "view == hyperGit.log && viewItem == hyperGit.commit", "group": "1_commit@1" },
+        { "command": "hyperGit.branchCheckout", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@1" },
+        { "command": "hyperGit.branchDelete", "when": "view == hyperGit.branches && viewItem == hyperGit.branch", "group": "1_branch@2" },
+        { "command": "hyperGit.mergeBranch", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@3" },
+        { "command": "hyperGit.rebaseBranch", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@4" },
+        { "command": "hyperGit.branchRename", "when": "view == hyperGit.branches && viewItem == hyperGit.branch", "group": "1_branch@5" },
+        { "command": "hyperGit.compareBranches", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@6" },
+        { "command": "hyperGit.copyBranchRef", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@7" },
+        { "command": "hyperGit.toggleFavorite", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "inline" },
+        { "command": "hyperGit.toggleFavorite", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@0" },
+        { "command": "hyperGit.checkoutAsNew", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/", "group": "1_branch@1.5" },
+        { "command": "hyperGit.compareWithCurrent", "when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch|hyperGit.tag/", "group": "1_branch@8" },
+        { "command": "hyperGit.tagCheckout", "when": "view == hyperGit.branches && viewItem == hyperGit.tag", "group": "1_tag@1" },
+        { "command": "hyperGit.tagDelete", "when": "view == hyperGit.branches && viewItem == hyperGit.tag", "group": "1_tag@2" },
+        { "command": "hyperGit.cherryPick", "when": "view == hyperGit.log && viewItem == hyperGit.commit", "group": "1_commit@1" },
+        { "command": "hyperGit.revertCommit", "when": "view == hyperGit.log && viewItem == hyperGit.commit", "group": "1_commit@2" },
+        { "command": "hyperGit.dropCommit", "when": "view == hyperGit.log && viewItem == hyperGit.commit", "group": "1_commit@3" },
+        { "command": "hyperGit.fixupCommit", "when": "view == hyperGit.log && viewItem == hyperGit.commit", "group": "1_commit@4" },
+        { "command": "hyperGit.createBranchFromCommit", "when": "view == hyperGit.log && viewItem == hyperGit.commit", "group": "1_commit@5" },
+        { "command": "hyperGit.createTagFromCommit", "when": "view == hyperGit.log && viewItem == hyperGit.commit", "group": "1_commit@6" },
+        { "command": "hyperGit.showContainingBranches", "when": "view == hyperGit.log && viewItem == hyperGit.commit", "group": "1_commit@7" },
+        { "command": "hyperGit.resetToHere", "when": "view == hyperGit.log && viewItem == hyperGit.commit", "group": "1_commit@8" },
+        { "command": "hyperGit.ignorePath", "when": "view == hyperGit.changes && viewItem == hyperGit.fileChange", "group": "1_file@4" },
+        { "command": "hyperGit.partialStage", "when": "view == hyperGit.changes && viewItem == hyperGit.fileChange", "group": "1_file@5" },
+        { "command": "hyperGit.partialUnstage", "when": "view == hyperGit.changes && viewItem == hyperGit.fileChange", "group": "1_file@6" },
+        { "command": "hyperGit.stashApply", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@1" },
+        { "command": "hyperGit.stashPop", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@2" },
+        { "command": "hyperGit.stashDrop", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@3" },
+        { "command": "hyperGit.stashBranch", "when": "view == hyperGit.stash && viewItem == hyperGit.stash", "group": "1_stash@4" },
+        { "command": "hyperGit.unshelveSilently", "when": "view == hyperGit.shelf && viewItem == hyperGit.shelf", "group": "1_shelf@1" },
+        { "command": "hyperGit.unshelveWithMerge", "when": "view == hyperGit.shelf && viewItem == hyperGit.shelf", "group": "1_shelf@2" },
+        { "command": "hyperGit.deleteShelf", "when": "view == hyperGit.shelf && viewItem == hyperGit.shelf", "group": "1_shelf@3" },
+        { "command": "hyperGit.worktreeOpen", "when": "view == hyperGit.worktrees && viewItem =~ /hyperGit.worktree|hyperGit.worktreeMain/", "group": "1_wt@1" },
+        { "command": "hyperGit.worktreeMove", "when": "view == hyperGit.worktrees && viewItem == hyperGit.worktree", "group": "1_wt@2" },
+        { "command": "hyperGit.worktreeLock", "when": "view == hyperGit.worktrees && viewItem == hyperGit.worktree", "group": "1_wt@3" },
+        { "command": "hyperGit.worktreeUnlock", "when": "view == hyperGit.worktrees && viewItem == hyperGit.worktree", "group": "1_wt@4" },
+        { "command": "hyperGit.worktreeCopyPath", "when": "view == hyperGit.worktrees && viewItem =~ /hyperGit.worktree|hyperGit.worktreeMain/", "group": "1_wt@5" },
+        { "command": "hyperGit.worktreeRemove", "when": "view == hyperGit.worktrees && viewItem == hyperGit.worktree", "group": "1_wt@6" }
+      ],
+      "editor/context": [
+        { "command": "hyperGit.toggleBlameAnnotation", "when": "resourceScheme == file", "group": "hyperGit@1" }
+      ],
+      "commandPalette": [
+        { "command": "hyperGit.openDiff", "when": "false" },
+        { "command": "hyperGit.setActiveChangelist", "when": "false" },
+        { "command": "hyperGit.renameChangelist", "when": "false" },
+        { "command": "hyperGit.deleteChangelist", "when": "false" },
+        { "command": "hyperGit.moveChangelist", "when": "false" },
+        { "command": "hyperGit.copyCommitHash", "when": "false" },
+        { "command": "hyperGit.showHistory", "when": "false" },
+        { "command": "hyperGit.branchCheckout", "when": "false" },
+        { "command": "hyperGit.branchDelete", "when": "false" },
+        { "command": "hyperGit.mergeBranch", "when": "false" },
+        { "command": "hyperGit.rebaseBranch", "when": "false" },
+        { "command": "hyperGit.stashApply", "when": "false" },
+        { "command": "hyperGit.stashPop", "when": "false" },
+        { "command": "hyperGit.stashDrop", "when": "false" },
+        { "command": "hyperGit.discardChanges", "when": "false" },
+        { "command": "hyperGit.cherryPick", "when": "false" },
+        { "command": "hyperGit.revertCommit", "when": "false" },
+        { "command": "hyperGit.branchRename", "when": "false" },
+        { "command": "hyperGit.compareBranches", "when": "false" },
+        { "command": "hyperGit.ignorePath", "when": "false" },
+        { "command": "hyperGit.copyBranchRef", "when": "false" },
+        { "command": "hyperGit.inlineCommitHunk", "when": "false" },
+        { "command": "hyperGit.unshelveSilently", "when": "false" },
+        { "command": "hyperGit.unshelveWithMerge", "when": "false" },
+        { "command": "hyperGit.deleteShelf", "when": "false" },
+        { "command": "hyperGit.moveHunkToChangelist", "when": "false" },
+        { "command": "hyperGit.toggleFavorite", "when": "false" },
+        { "command": "hyperGit.checkoutAsNew", "when": "false" },
+        { "command": "hyperGit.compareWithCurrent", "when": "false" },
+        { "command": "hyperGit.tagDelete", "when": "false" },
+        { "command": "hyperGit.tagCheckout", "when": "false" },
+        { "command": "hyperGit.openCommitFileDiff", "when": "false" },
+        { "command": "hyperGit.resetToHere", "when": "false" },
+        { "command": "hyperGit.createBranchFromCommit", "when": "false" },
+        { "command": "hyperGit.createTagFromCommit", "when": "false" },
+        { "command": "hyperGit.showContainingBranches", "when": "false" },
+        { "command": "hyperGit.worktreeOpen", "when": "false" },
+        { "command": "hyperGit.worktreeRemove", "when": "false" },
+        { "command": "hyperGit.worktreeCopyPath", "when": "false" },
+        { "command": "hyperGit.worktreeLock", "when": "false" },
+        { "command": "hyperGit.worktreeUnlock", "when": "false" },
+        { "command": "hyperGit.worktreeMove", "when": "false" },
+        { "command": "hyperGit.worktreeRefresh", "when": "false" }
+      ]
+    },
+    "configuration": {
+      "title": "Hyper Git",
+      "properties": {
+        "hyperGit.commit.template": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Commit message 模板（注入到 Commit 窗口编辑器）。"
+        },
+        "hyperGit.commit.conventional": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "对提交信息执行 Conventional Commits 实时校验。"
+        },
+        "hyperGit.ai.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "启用 AI 代理能力（M5，当前仅预留接缝，暂不生效）。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run package",
+    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
+    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint",
+    "watch": "node esbuild.js --watch",
+    "test:unit": "vitest run",
+    "test:integration": "node tests/run-integration.js",
+    "test": "pnpm run test:unit && pnpm run test:integration",
+    "clean": "rimraf dist out *.vsix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "@stylistic/eslint-plugin": "^2.9.0",
+    "@types/node": "^20.14.0",
+    "@types/vscode": "~1.85.0",
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.13.0",
+    "mocha": "^11.0.1",
+    "prettier": "^3.3.3",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.39.0",
+    "vitest": "^2.1.8"
+  }
+}
