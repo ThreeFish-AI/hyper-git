@@ -2,7 +2,10 @@
 
 > Hyper Git VS Code 扩展的里程碑实施记录、API 限制发现、功能达成矩阵与 M5 AI 设计（留存）。
 > 本文档随里程碑推进即时更新；调研与原始方案见 [工程实施方案](../architecture/engineering-plan.md) 与 [调研报告](../research/README.md)。
-> 最后更新：2026-06-27（M0-M4 落地完成，准备 v0.0.1-rc.1）。
+> 最后更新：2026-06-29（Parity Recovery Batch 5-12 全量对齐 IDEA 完成）。
+>
+> **⚠️ 重大更新（2026-06-29，Batch 5-12）**：经 IDEA Git 功能复刻评审，发现「功能多数已实现，但被 Branches 视图渲染 bug + 工具栏未浮现 + 命令 bug 掩盖」。本批 Recovery **先解除可见痛感，再全量补齐**：新增 13 个 engine 纯逻辑模块 + 21 个命令，单测 64 → 166、命令 56 → 77。**§3 所列 vscode.git 稳定 API 限制（cherry-pick/revert/reset/branch rename/hunk 暂存/stash list/graph topology/shelf/author 等）现均已通过 `GitRepositoryService.execGit`（复用 `api.git.path` 同一 git 二进制）受控 CLI 通道解决**。详见 [CHANGELOG](../../CHANGELOG.md) [Unreleased]。
+> AI M5 暂不启动（5 个接缝保留 Null 实现，本轮专注 IDE 对齐）。
 
 ---
 
@@ -23,7 +26,10 @@
 | M2 Commit 窗口 | 0.3.0 | [#4](https://github.com/ThreeFish-AI/hyper-git/pull/4) | Commit WebviewView（勾选+多行编辑器+Amend/signoff/skipHooks+CC 实时校验）、CommitPipeline（Checkin hook 链）、5 AI 接缝 Null 注入 | 集成：真实 git 提交闭环 |
 | M0-M2 审查修复 | 0.3.1 | [#5](https://github.com/ThreeFish-AI/hyper-git/pull/5) | 11 类正确性修复（订阅泄漏/仓库选取/indexChanges/commit 语义/push 警告/linter 等）+ 16 项测试补齐 | 单测 45/45 + 集成 3/3 |
 | M3 Log/Branches/Blame | 0.4.0 | [#6](https://github.com/ThreeFish-AI/hyper-git/pull/6) | Log TreeView（过滤+copy hash+Show History）、Branches TreeView（create/checkout/delete/merge/rebase）、Blame | 命令注册集成 |
-| M4 Stash/Shelf | 0.5.0 | [#7](https://github.com/ThreeFish-AI/hyper-git/pull/7) | Stash 视图（log refNames 枚举）+ create/apply/pop/drop；Shelf MVP（stash 近似） | 命令注册集成 |
+| M4 Stash/Shelf | 0.5.0 | [#7](https://github.com/ThreeFish-AI/hyper-git/pull/7) | Stash 视图（log refnames 枚举）+ create/apply/pop/drop；Shelf MVP（stash 近似） | 命令注册集成 |
+| **Parity Recovery Batch 5-7** | — | commit `00b5ba7`/`2105445`/`9699ee9` | Branches 渲染修复 + 工具栏 Action 组 + 冲突兜底；Branches 对齐 IDEA（Favorites/Tags/ahead-behind）；Rebase webview reword/edit/拖拽 1:1 复刻 | 单测 166/166 + 集成 3/3 |
+| **Parity Recovery Batch 8-9** | — | commit `efd888c`/`ed01883` | Log 提交详情面板 + 高级过滤 + per-commit 操作；真实 SVG 提交拓扑图（解析 git --graph 字符粒度渲染 + 可点击 + 实时刷新） | 同上 |
+| **Parity Recovery Batch 10-12** | — | commit `2274d8a`/`fcb6ffa`/`acdf53c` | Push/Update/Merge 对话框 + fetch prune + Co-authored-by trailer；自绘 3-way Merge Editor（自实现 diff3）；Stash 高级 + Patch + Reflog + Blame 行内注解 | 同上 |
 
 ## 2. P0/P1 功能达成矩阵（对照 [IDEA 功能矩阵](../requirements/idea-feature-matrix.md)）
 
