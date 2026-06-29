@@ -1,0 +1,18 @@
+<!-- Hyper Git marketplace logo source (256x256). Rasterized to ../media/icon.png. Glyph adapted from Tabler Icons (MIT). -->
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="hg-bg" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3B82F6" />
+      <stop offset="1" stop-color="#7C5CFC" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="256" height="256" rx="58" fill="url(#hg-bg)" />
+  <g transform="translate(26 26) scale(8.5)" fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="6" cy="6" r="2" />
+    <circle cx="6" cy="18" r="2" />
+    <path d="M6 8v8" />
+    <circle cx="18" cy="18" r="2" />
+    <path d="M11 6h5a2 2 0 0 1 2 2v8" />
+    <path d="M14 9l-3-3 3-3" />
+  </g>
+</svg>
