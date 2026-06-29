@@ -50,6 +50,9 @@ export async function handleGitConflict(service: GitRepositoryService, opName: s
 			} catch {
 				void vscode.window.showErrorMessage('中止操作失败，请手动处理');
 			}
+		} else if (choice === '解决冲突') {
+			// 打开自绘 3-way merge editor（resolveConflicts 列出冲突文件供选择）
+			void vscode.commands.executeCommand('hyperGit.resolveConflicts');
 		}
 		return true;
 	} catch {

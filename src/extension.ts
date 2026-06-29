@@ -24,6 +24,7 @@ import { showGitConsole } from './infra/git-console';
 import { InlineCommitCodeLensProvider, registerInlineCommitCommand } from './adapter/editor/inline-commit-codelens';
 import { ShelfService, ShelfTreeProvider, registerShelfCommands } from './adapter/shelf';
 import { RebaseWebview } from './adapter/webview/rebase-webview';
+import { registerMergeCommands } from './adapter/webview/merge-editor';
 import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
 import { createLogger } from './infra/logger';
@@ -97,6 +98,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		...registerPartialCommands(service, registry),
 		...registerAdvancedCommands(service, branchesTree),
 		...registerRemoteCommands(service, branchesTree, logTree),
+		...registerMergeCommands(service),
 		...registerStashCommands(service, stashTree),
 		...registerShelfCommands(service, shelfService, shelfTree),
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
