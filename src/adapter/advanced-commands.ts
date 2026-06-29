@@ -101,7 +101,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 			}
 			const headName = repo.state.HEAD?.name;
 			const base = headName ?? 'main';
-			let merged: string[] = [];
+			let merged: string[];
 			try {
 				const out = await service.execGit(['branch', '--merged', base]);
 				merged = filterMergeable(out, base, headName ? [headName] : []);
