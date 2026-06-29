@@ -10,7 +10,7 @@ import { BranchFavorites } from './adapter/branch-favorites';
 import { CommitService } from './adapter/commit/commit-service';
 import { BranchesTreeProvider } from './adapter/tree/branches-tree';
 import { ChangesTreeProvider, EmptyChangesProvider } from './adapter/tree/changes-tree';
-import { LogTreeProvider } from './adapter/tree/log-tree';
+import { LogWebviewProvider } from './adapter/webview/log-webview';
 import { registerHistoryCommands } from './adapter/history-commands';
 import { registerStashCommands } from './adapter/stash-commands';
 import { registerGitCliCommands } from './adapter/git-cli-commands';
@@ -21,7 +21,6 @@ import { StashTreeProvider } from './adapter/tree/stash-tree';
 import { WorktreeTreeProvider } from './adapter/tree/worktree-tree';
 import { registerWorktreeCommands } from './adapter/worktree-commands';
 import { CommitWebviewProvider } from './adapter/webview/commit-webview';
-import { GraphWebview } from './adapter/webview/graph-webview';
 import { showGitConsole } from './infra/git-console';
 import { InlineCommitCodeLensProvider, registerInlineCommitCommand } from './adapter/editor/inline-commit-codelens';
 import { BlameAnnotationController } from './adapter/editor/blame-annotation';
@@ -78,7 +77,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		conflict: new NullConflictResolver(),
 	});
 	const commitView = new CommitWebviewProvider(service, registry, commit);
-	const logTree = new LogTreeProvider(service);
+	const logTree = new LogWebviewProvider(service);
 	const branchesTree = new BranchesTreeProvider(service, favorites);
 	// Branches 视图启用多选（canSelectMany 仅 createTreeView 支持，registerTreeDataProvider 不支持）；
 	// 多选后批量操作（删除分支/标签、复制引用、收藏）作用于整个选区。
@@ -110,7 +109,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		changesView,
 		branchesView,
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
-		vscode.window.registerTreeDataProvider('hyperGit.log', logTree),
+		vscode.window.registerWebviewViewProvider(LogWebviewProvider.viewType, logTree),
 		vscode.window.registerTreeDataProvider('hyperGit.stash', stashTree),
 		vscode.window.registerTreeDataProvider('hyperGit.shelf', shelfTree),
 		vscode.window.registerTreeDataProvider('hyperGit.worktrees', worktreeTree),
@@ -128,7 +127,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		...registerWorktreeCommands(service, worktreeTree),
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
-		vscode.commands.registerCommand('hyperGit.showGraph', () => GraphWebview.open(service)),
 		vscode.commands.registerCommand('hyperGit.showConsole', () => showGitConsole()),
 		vscode.commands.registerCommand('hyperGit.startRebase', () => RebaseWebview.open(service)),
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, inlineLens),

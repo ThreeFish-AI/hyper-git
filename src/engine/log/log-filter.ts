@@ -18,6 +18,34 @@ export interface LogClientFilter {
 	readonly messageRegex?: RegExp;
 }
 
+/**
+ * Log 完整过滤器（单一事实源，engine 层）：author/path/grep 交 git log 服务端；
+ * mergeMode/dateFrom/dateTo/messageRegex 客户端（见 {@link toClientFilter}）。
+ */
+export interface LogFilter {
+	readonly author?: string;
+	readonly path?: string;
+	readonly grep?: string;
+	readonly mergeMode?: MergeMode;
+	readonly dateFrom?: Date;
+	readonly dateTo?: Date;
+	/** message 正则模式串（运行时经 {@link safeRegex} 编译）。 */
+	readonly messageRegex?: string;
+}
+
+/** 从完整过滤器抽取客户端维度（服务端维度交 git log，见 {@link buildLogArgs}）。 */
+export function toClientFilter(filter: LogFilter | undefined): LogClientFilter {
+	if (!filter) {
+		return {};
+	}
+	return {
+		mergeMode: filter.mergeMode,
+		dateFrom: filter.dateFrom,
+		dateTo: filter.dateTo,
+		messageRegex: filter.messageRegex ? safeRegex(filter.messageRegex) : undefined,
+	};
+}
+
 /** 过滤所需的最小 commit 投影（adapter 由 vscode.git Commit 映射而来）。 */
 export interface FilterableCommit {
 	readonly message: string;

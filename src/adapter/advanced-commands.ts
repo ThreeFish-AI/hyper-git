@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { BranchNode, BranchesTreeProvider } from './tree/branches-tree';
 import type { GitRepositoryService } from './git-repository-service';
-import type { LogNode } from './tree/log-tree';
+import type { LogNode } from './webview/log-webview';
 import { filterMergeable } from '../engine/ref/cleanup';
 import { selectedBranchRefs } from './branch-selection';
 

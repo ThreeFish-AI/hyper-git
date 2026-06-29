@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { GitRepositoryService } from './git-repository-service';
 import type { BranchesTreeProvider } from './tree/branches-tree';
-import type { LogTreeProvider } from './tree/log-tree';
+import type { LogFilterControl } from './webview/log-webview';
 import { handleGitConflict } from './conflict-ui';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -17,7 +17,7 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
 export function registerRemoteCommands(
 	service: GitRepositoryService,
 	branchesTree: BranchesTreeProvider,
-	logTree: LogTreeProvider,
+	logTree: LogFilterControl,
 ): vscode.Disposable[] {
 	const subs: vscode.Disposable[] = [];
 
