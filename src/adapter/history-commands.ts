@@ -6,6 +6,7 @@ import type { BranchFavorites } from './branch-favorites';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
 import type { LogNode, LogTreeProvider } from './tree/log-tree';
 import { handleGitConflict } from './conflict-ui';
+import type { MergeMode } from '../engine/log/log-filter';
 
 /** 注册 Log/Branches/Blame/History/Tags 相关命令。 */
 export function registerHistoryCommands(
@@ -353,6 +354,175 @@ export function registerHistoryCommands(
 			} catch (e) {
 				void vscode.window.showErrorMessage(`检出标签失败：${errMsg(e)}`);
 			}
+		}),
+	);
+
+	// —— IDEA Log 增强（Phase 2）：高级过滤 + 提交详情 diff + per-commit 操作 ——
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.openCommitFileDiff', async (hash: string, filePath: string, hasParent: boolean) => {
+			const repo = service.repo;
+			if (!repo) {
+				return;
+			}
+			const uri = vscode.Uri.joinPath(repo.rootUri, filePath);
+			const right = service.toGitUri(uri, hash);
+			try {
+				if (hasParent) {
+					const left = service.toGitUri(uri, `${hash}^`);
+					await vscode.commands.executeCommand('vscode.diff', left, right, `${filePath} · ${hash.slice(0, 7)} (commit diff)`, { preview: true });
+				} else {
+					await vscode.commands.executeCommand('vscode.open', right);
+				}
+			} catch (e) {
+				void vscode.window.showErrorMessage(`打开 diff 失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.resetToHere', async (node: LogNode) => {
+			if (node?.kind !== 'commit') {
+				return;
+			}
+			const hash = node.commit.hash;
+			const items = [
+				{ label: 'soft', description: '仅移动 HEAD，保留暂存区与工作区改动' },
+				{ label: 'mixed', description: '移动 HEAD + 取消暂存（默认），保留工作区改动' },
+				{ label: 'hard', description: '⚠ 移动 HEAD + 丢弃暂存区与工作区所有改动（不可撤销）' },
+				{ label: 'keep', description: '移动 HEAD + 保留已修改文件（遇冲突中止）' },
+			];
+			const pick = await vscode.window.showQuickPick(items, { placeHolder: `Reset 当前分支到 ${hash.slice(0, 7)} 的模式` });
+			if (!pick) {
+				return;
+			}
+			if (pick.label === 'hard') {
+				const ok = await vscode.window.showWarningMessage(`hard reset 到 ${hash.slice(0, 7)} 将丢弃所有改动，确认？`, { modal: true }, '确认 hard reset');
+				if (!ok) {
+					return;
+				}
+			}
+			try {
+				await service.execGit(['reset', `--${pick.label}`, hash]);
+				branchesTree.refresh();
+				logTree.refresh();
+				void vscode.window.showInformationMessage(`Reset (--${pick.label} ${hash.slice(0, 7)}) 完成`);
+			} catch (e) {
+				if (!(await handleGitConflict(service, 'Reset'))) {
+					void vscode.window.showErrorMessage(`Reset 失败：${errMsg(e)}`);
+				}
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.createBranchFromCommit', async (node: LogNode) => {
+			const repo = service.repo;
+			if (!repo || node?.kind !== 'commit') {
+				return;
+			}
+			const name = await vscode.window.showInputBox({ prompt: `从 ${node.commit.hash.slice(0, 7)} 新建并检出分支`, placeHolder: '新分支名' });
+			if (!name || !name.trim()) {
+				return;
+			}
+			try {
+				await repo.createBranch(name.trim(), true, node.commit.hash);
+				branchesTree.refresh();
+				void vscode.window.showInformationMessage(`已新建并检出 ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
+			} catch (e) {
+				void vscode.window.showErrorMessage(`新建分支失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.createTagFromCommit', async (node: LogNode) => {
+			if (node?.kind !== 'commit') {
+				return;
+			}
+			const name = await vscode.window.showInputBox({ prompt: `在 ${node.commit.hash.slice(0, 7)} 上新建标签`, placeHolder: '如 v1.0.0' });
+			if (!name || !name.trim()) {
+				return;
+			}
+			try {
+				await service.execGit(['tag', name.trim(), node.commit.hash]);
+				branchesTree.refresh();
+				void vscode.window.showInformationMessage(`已创建标签 ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
+			} catch (e) {
+				void vscode.window.showErrorMessage(`创建标签失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.showContainingBranches', async (node: LogNode) => {
+			if (node?.kind !== 'commit') {
+				return;
+			}
+			try {
+				const out = await service.execGit(['branch', '--contains', node.commit.hash]);
+				const doc = await vscode.workspace.openTextDocument({
+					content: `$ git branch --contains ${node.commit.hash.slice(0, 7)}\n\n${out}`,
+					language: 'plaintext',
+				});
+				await vscode.window.showTextDocument(doc, { preview: true });
+			} catch (e) {
+				void vscode.window.showErrorMessage(`查询失败：${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.logFilterGrep', async () => {
+			const grep = await vscode.window.showInputBox({ prompt: '按 message 文本/正则过滤（--grep）', placeHolder: '例如 fix|bug' });
+			const f = logTree.getFilter();
+			logTree.setFilter({ ...f, grep: grep && grep.trim() ? grep.trim() : undefined });
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.logFilterMergeMode', async () => {
+			const pick = await vscode.window.showQuickPick(
+				[
+					{ label: '全部提交', mode: 'all' as MergeMode },
+					{ label: '仅合并提交（merge）', mode: 'merge-only' as MergeMode },
+					{ label: '仅非合并提交', mode: 'no-merge' as MergeMode },
+				],
+				{ placeHolder: '合并提交过滤模式' },
+			);
+			if (!pick) {
+				return;
+			}
+			const f = logTree.getFilter();
+			logTree.setFilter({ ...f, mergeMode: pick.mode });
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.logFilterDate', async () => {
+			const now = Date.now();
+			const pick = await vscode.window.showQuickPick(
+				[
+					{ label: '最近 7 天', days: 7 },
+					{ label: '最近 30 天', days: 30 },
+					{ label: '最近 90 天', days: 90 },
+					{ label: '清除日期过滤', days: 0 },
+				],
+				{ placeHolder: '提交日期范围' },
+			);
+			if (!pick) {
+				return;
+			}
+			const f = logTree.getFilter();
+			logTree.setFilter({ ...f, dateFrom: pick.days === 0 ? undefined : new Date(now - pick.days * 86_400_000) });
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.logFilterRegex', async () => {
+			const re = await vscode.window.showInputBox({ prompt: '按 message 正则过滤（客户端）', placeHolder: '例如 ^feat:' });
+			const f = logTree.getFilter();
+			logTree.setFilter({ ...f, messageRegex: re && re.trim() ? re.trim() : undefined });
 		}),
 	);
 
