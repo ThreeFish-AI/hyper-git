@@ -54,4 +54,12 @@
 - **后续防范**：消费 vscode.git 公开 API 的路径类方法（add/revert/clean/restore）一律传绝对 fsPath；已加集成测试 `tests/suite/commit-flow.test.js` 守护。
 - **同类问题影响**：所有消费 vscode.git API 做 stage/revert 的扩展；git CLI 本身接受相对路径，但**公开 API 层不接受**，二者语义差异易踩。
 
+## #7 GitHub Release 缺少可本地安装的 `.vsix` 资产
+
+- **表因**：README 指引「从 Releases 下载 `.vsix` → `Extensions: Install from VSIX`」，但 rc.1/rc.2 的 GitHub Release 页面无任何 `.vsix` 资产，用户无法手动安装。
+- **根因**：`ci.yml` 的 `package` job 只把 `.vsix` 当作 **Actions artifact**（90 天即逝、非公开下载）上传，`publish` job 仅将其发往 VS Code Marketplace / OpenVSX；**全流程无任何 step 创建 GitHub Release 或向其上传资产**（rc.1/rc.2 的 Release 实为手工 `gh release create`，本就不含 `.vsix`）。
+- **处理方式**：新增独立 `github-release` job（`softprops/action-gh-release@v2`），`needs: package` 复用 vsix artifact，对 `v*` tag 自动建 Release 并 `files: '*.vsix'` 上传；`*rc*` 自动 `prerelease`；`fail_on_unmatched_files: true` 防空资产。
+- **后续防范**：该 job 与市场 `publish` **解耦**（不 `needs: publish`、不挂 `environment: production`），保证「Release 带 `.vsix`」不被市场审批门/密钥缺失阻塞；「仅出 Release、暂不发市场」时不审批 production 即可，无需改 publish job；最小权限仅本 job 提权 `contents: write`。
+- **同类问题影响**：所有「CI 只上传 artifact + 发市场、却在 README 承诺 Release 手动下载」的 VS Code 扩展；artifact ≠ Release 资产，二者可见性/留存期差异易被忽视。
+
 
