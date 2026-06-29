@@ -7,7 +7,7 @@
 <p align="center">在 VS Code 上完整复刻 IntelliJ IDEA 的 <b>Git 工具窗口</b> 与 <b>Commit 提交窗口</b>，并为未来 git 管理的 AI Agent 自主代理能力预留架构接缝。</p>
 
 <p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="https://github.com/ThreeFish-AI/hyper-git/blob/HEAD/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
 </p>
 
 ## 为什么需要 Hyper Git
