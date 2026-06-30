@@ -4,9 +4,9 @@
 
 > 面向用户的发布说明（含完整特性叙述与安装指引）见 [`docs/releases/`](./docs/releases/README.md)。
 
-## [0.0.1] - 2026-06-30 — 首个 MVP 正式版
+## [0.0.5] - 2026-06-30 — 首个 MVP 正式版
 
-首个对外正式版本，在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口。采用**路径 B**（消费 `vscode.git` 稳定 `Repository` API 为底座；稳定 API 未覆盖的能力经 `GitRepositoryService.execGit` 复用同一 git 二进制 `api.git.path` 的受控 CLI 通道实现），与原生 Source Control 平行共存、零冲突。规模：**7 视图 / ~92 命令 / 3 配置项**，**218 单元测试** + 集成测试，CI 三平台矩阵全程 GREEN。完整特性见 [Release Note v0.0.1](./docs/releases/v0.0.1.md)。
+首个对外正式版本，在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口。采用**路径 B**（消费 `vscode.git` 稳定 `Repository` API 为底座；稳定 API 未覆盖的能力经 `GitRepositoryService.execGit` 复用同一 git 二进制 `api.git.path` 的受控 CLI 通道实现），与原生 Source Control 平行共存、零冲突。规模：**7 视图 / 93 命令 / 6 配置项**，**280 单元测试** + 集成测试，CI 三平台矩阵全程 GREEN。完整特性见 [Release Note v0.0.5](./docs/releases/v0.0.5.md)。
 
 ### Added
 
@@ -20,6 +20,8 @@
 
 #### Log 提交图与历史
 - IDEA 风格 **Graph DAG** webview：基于父子关系自计算 lane 布局，彩色泳道 / 节点 / 分叉·合并连线 / HEAD·分支·标签徽标，`--topo-order` 保拓扑序，行宽随实际 lane 自适应；虚拟化滚动增量加载、↑↓ 键导航；选中提交内联展开变更文件并打开单文件 Diff。
+- **提交图 × CI 状态**：每条提交行最右侧显示 GitHub CI 最终状态（绿勾/红叉/运行中），悬停 Tooltip 展示各项检查 + 未通过原因 + 跳转链接；复用 VS Code 内置 GitHub 认证（`vscode.authentication`，凭证不经 chat/日志/webview），仅取可见行懒加载、批量 GraphQL（≤100 oid）+ 限流冷却、终态缓存；非 GitHub 远程零图标零请求，支持 github.com 与 GitHub Enterprise；配置 `hyperGit.log.ci.{enabled,remote,provider}`。
+- **Checkpointer 过滤**：Log 视图新增 Checkpointer 选项，默认剔除 AI 编码工具产生的自动快照（checkpoint）提交，提交图更干净，可按需开启。
 - **7 个可组合过滤器**：作者、路径、message（grep）、message（正则）、合并模式、日期、一键清除；复制 commit hash、刷新。
 - per-commit 操作：Reset 到此（soft/mixed/hard/keep）、从此新建分支 / 标签、查看包含此提交的分支、Cherry-Pick、Revert。
 
@@ -50,7 +52,7 @@
 
 #### 工具与配置
 - 导出 / 应用 Patch、查看 Reflog、3-way Diff 概览（HEAD ↔ Staged ↔ Working）、Console 命令输出面板。
-- 配置项：`hyperGit.commit.template`、`hyperGit.commit.conventional`、`hyperGit.ai.enabled`（M5 预留，暂不生效）。
+- 配置项：`hyperGit.commit.template`、`hyperGit.commit.conventional`、`hyperGit.ai.enabled`（M5 预留，暂不生效）、`hyperGit.log.ci.{enabled,remote,provider}`（提交图 CI 状态）。
 
 #### 架构与质量
 - 正交分层：`engine/`（纯逻辑，零 vscode 依赖、Vitest 可测）、`adapter/`（唯一接触 vscode API）、`agent/`（AI 接缝）、`ui/`、`shared/protocol.ts`（Webview ↔ Host 契约单一事实源）、`infra/`。
@@ -65,4 +67,4 @@
 - 目录 / folder diff（虚拟文档）、Submodules 管理。
 - M5 AI Agent（5 个接缝已预埋 Null 实现，本版未启动）。
 
-[0.0.1]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.1
+[0.0.5]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.5

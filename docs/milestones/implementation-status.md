@@ -104,6 +104,6 @@
 
 ## 7. 发布状态
 
-- **当前版本**：0.5.0（preview，内部里程碑）。
-- **首发候选**：v0.0.1-rc.1（package 版本 `0.0.1` + `--pre-release` + git tag `v0.0.1-rc.1`）。Marketplace 仅支持 `major.minor.patch`，预发布语义由 `--pre-release` 标记 + tag 体现。
+- **当前版本**：0.0.5（首个 MVP 正式版，对外首发）。
+- **首发历程**：经若干内部迭代与 `v0.0.1-rc.*` 预发布打磨后，以 `v0.0.5` 作为首个 MVP 正式版对外发布（package 版本 `0.0.5` + git tag `v0.0.5`）。Marketplace 仅支持 `major.minor.patch`，预发布语义由 `--pre-release` 标记 + tag 体现。
 - **发布前置**：publisher 账号（`threefish-ai`）、VSCE_PAT / OVSX_PAT secrets、PNG 图标。
