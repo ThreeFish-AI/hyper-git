@@ -2,8 +2,8 @@
  * 提交图 DAG 布局的数据契约（纯逻辑，零 vscode 依赖）。
  *
  * 引擎消费最小 commit 投影（{@link GraphCommit}，仅需 hash + parents），输出渲染器无关的
- * 逐行布局（{@link GraphLayoutRow}）。渲染层（adapter webview）据此绘制彩色泳道，完整复刻
- * IntelliJ IDEA Git Log 的 Graph 效果——不再依赖 `git log --graph` 的粗糙 ASCII（lane 由 git 分配、
+ * 逐行布局（{@link GraphLayoutRow}）。渲染层（adapter webview）据此绘制彩色泳道，自绘可视化
+ * Graph 效果——不再依赖 `git log --graph` 的粗糙 ASCII（lane 由 git 分配、
  * 不可控、随列号抖动着色）。算法参考 gitamine 的 nil-slot 复用 [1] 与 git-graph 的分支区间装箱 [2]。
  *
  * 调用方须保证 commits 按 `--topo-order`（newest-first 且子在父之上）排序——lane 增量算法依赖

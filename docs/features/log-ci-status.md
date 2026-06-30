@@ -1,7 +1,7 @@
 # Log 视图 CI 状态（GitHub Actions / Commit Status）
 
-> 在 Log 视图（`hyperGit.log`，IDEA 风格提交图）每条提交上显示其 **CI 最终状态**：绿勾=通过、红叉=失败、
-> 运行中=黄色旋转；悬停图标以浮层 Tooltip 展示「各项检查 + 未通过原因 + 运行链接」，效果对标 IntelliJ IDEA / GitHub。
+> 在 Log 视图（`hyperGit.log`，可视化提交图）每条提交上显示其 **CI 最终状态**：绿勾=通过、红叉=失败、
+> 运行中=黄色旋转；悬停图标以浮层 Tooltip 展示「各项检查 + 未通过原因 + 运行链接」。
 > 数据源为 GitHub（Checks API + Commit Status），按 origin 远程主机自动判定 github.com / GitHub Enterprise。
 
 ## 数据流

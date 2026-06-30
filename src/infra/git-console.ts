@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 /**
- * Hyper Git Console：对齐 IDEA Console 标签页，记录所有经 execGit 执行的 git 命令及其输出。
+ * Hyper Git Console：记录所有经 execGit 执行的 git 命令及其输出。
  * 复用单一 OutputChannel（懒构造）。
  */
 let channel: vscode.OutputChannel | undefined;

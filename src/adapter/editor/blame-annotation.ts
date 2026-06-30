@@ -6,7 +6,7 @@ import { formatAnnotation, parseBlamePorcelain } from '../../engine/blame/blame-
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /**
- * 编辑器内 Blame 注解（IDEA Annotate 等价）。
+ * 编辑器内 Blame 注解（逐行作者 / 日期 / 提交注解）。
  *
  * Toggle：对当前文件执行 `git blame --line-porcelain`，解析每行作者/日期，用行内
  * before 装饰渲染在每行行首（gutter 风格）。再次 toggle 关闭。切换编辑器/文档变更时清理。

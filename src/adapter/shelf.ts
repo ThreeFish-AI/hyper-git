@@ -27,7 +27,7 @@ export interface ShelfNode {
 }
 
 /**
- * ShelfService：IDEA 忠实 Shelf 实现。
+ * ShelfService：基于 patch 的 Shelf 实现（独立于 git stash）。
  *
  * - Shelve：`git diff -- <paths>` → 存 patch 到扩展存储 → `git checkout --` 移除工作区改动（变更保留在 patch）。
  * - Unshelve：读取 patch → `git apply`（静默）或 `git apply --3way`（三方合并冲突解决）。

@@ -30,7 +30,7 @@ export function mapRollupState(state: string | null | undefined): CiState {
 
 /**
  * CheckRun → {@link CiState}。未完成一律 pending；非阻塞结论（NEUTRAL/SKIPPED）算通过
- * （IDEA 语义：跳过的检查不视为失败）。
+ * （跳过的检查不视为失败）。
  */
 export function checkRunState(status: string | null | undefined, conclusion: string | null | undefined): CiState {
 	// 未完成（QUEUED/IN_PROGRESS/WAITING/PENDING/REQUESTED/null）一律 pending。

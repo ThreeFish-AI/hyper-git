@@ -1,7 +1,7 @@
 /**
  * 分支收藏（Favorites）纯逻辑（零 vscode 依赖）。
  *
- * IDEA 的「Set Favorite」能力：把常用分支标星置顶。本模块提供无状态集合运算，
+ * 分支收藏（Set Favorite）能力：把常用分支标星置顶。本模块提供无状态集合运算，
  * 持久化与事件由 adapter 层的 BranchFavorites（workspaceState）承载，便于单测。
  */
 

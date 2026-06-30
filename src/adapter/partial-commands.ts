@@ -9,7 +9,7 @@ import type { ChangeItem, GitRepositoryService } from './git-repository-service'
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /**
- * 注册 partial / 行级提交命令（Batch 3）—— IDEA PartialChangesUtil 等价物。
+ * 注册 partial / 行级提交命令（Batch 3）—— 行级暂存与提交（设计参考 JetBrains PartialChangesUtil）。
  *
  * hunk 选择暂存：解析 `git diff` 为 hunks，QuickPick 勾选 → 重建 patch → `git apply --cached`。
  * 光标处 hunk 暂存：定位光标所在 hunk → 暂存该 hunk。

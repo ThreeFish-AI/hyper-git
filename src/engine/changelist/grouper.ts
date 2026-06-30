@@ -1,8 +1,8 @@
 /**
  * Changelist 分组纯逻辑（零 vscode 依赖，可单测）。
  *
- * 仿 IntelliJ IDEA `ChangeListManager`：变更项（item）按 key（文件相对路径）
- * 分配到命名 changelist；未显式分配者落入 active changelist（IDEA 默认行为）。
+ * 参考 JetBrains `ChangeListManager` 设计：变更项（item）按 key（文件相对路径）
+ * 分配到命名 changelist；未显式分配者落入 active changelist（默认行为）。
  */
 
 export interface ChangelistDef {
@@ -35,7 +35,7 @@ export function groupByChangelist<T>(
 	assignments: ChangelistAssignment,
 	activeId: string,
 ): GroupedChangelist<T>[] {
-	// 未分配项始终落入 active changelist（IDEA 语义：新改动默认归活动列表）。
+	// 未分配项始终落入 active changelist（新改动默认归活动列表）。
 	const fallbackId = activeId;
 
 	const buckets = new Map<string, T[]>();

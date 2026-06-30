@@ -14,7 +14,7 @@ function repoRelative(root: string, fsPath: string): string | null {
 }
 
 /**
- * 行内提交 CodeLensProvider（IDEA editor inline commit 的 VS Code 等价）。
+ * 行内提交 CodeLensProvider（编辑器内逐 Hunk 提交）。
  *
  * 对当前文件每个未暂存 hunk，在其起始行上方渲染可点击 CodeLens「✓ 提交此 Hunk (+N -M)」。
  * 点击 → 仅暂存该 hunk（patch 重建 + `git apply --cached`）→ 输入 message → `git commit`。
@@ -70,7 +70,7 @@ export function registerInlineCommitCommand(service: GitRepositoryService, provi
 		if (!repo || !rel || hunkIndex === undefined) {
 			return;
 		}
-		// 其他已暂存内容会一并提交——给出提示（IDEA changelist 隔离在本工具由 stage 语义承载）
+		// 其他已暂存内容会一并提交——给出提示（changelist 隔离在本工具由 stage 语义承载）
 		const otherStaged = service.getChanges().filter((c) => c.staged && c.relativePath !== rel);
 		if (otherStaged.length > 0) {
 			const ok = await vscode.window.showWarningMessage(

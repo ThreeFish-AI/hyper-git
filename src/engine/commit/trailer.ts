@@ -1,7 +1,7 @@
 /**
  * Commit trailer 构造（纯逻辑，零 vscode 依赖）。
  *
- * 对齐 IDEA/Conventional Commits 的 Co-authored-by trailer 追加，以及 --author 参数值格式化。
+ * Co-authored-by trailer 追加（遵循 Conventional Commits），以及 --author 参数值格式化。
  * trailer 与 message body 之间需空行分隔；重复 trailer 不重复追加。
  */
 

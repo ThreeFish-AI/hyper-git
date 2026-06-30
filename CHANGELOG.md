@@ -6,7 +6,7 @@
 
 ## [0.0.5] - 2026-06-30 — 首个 MVP 正式版
 
-首个对外正式版本，在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口。采用**路径 B**（消费 `vscode.git` 稳定 `Repository` API 为底座；稳定 API 未覆盖的能力经 `GitRepositoryService.execGit` 复用同一 git 二进制 `api.git.path` 的受控 CLI 通道实现），与原生 Source Control 平行共存、零冲突。规模：**7 视图 / 93 命令 / 6 配置项**，**280 单元测试** + 集成测试，CI 三平台矩阵全程 GREEN。完整特性见 [Release Note v0.0.5](./docs/releases/v0.0.5.md)。
+首个对外正式版本，为 VS Code 提供统一的 Git 变更管理与提交工作流（多变更分组、自绘提交面板、可视化提交图、Shelf、行级提交）。采用**路径 B**（消费 `vscode.git` 稳定 `Repository` API 为底座；稳定 API 未覆盖的能力经 `GitRepositoryService.execGit` 复用同一 git 二进制 `api.git.path` 的受控 CLI 通道实现），与原生 Source Control 平行共存、零冲突。规模：**7 视图 / 93 命令 / 6 配置项**，**280 单元测试** + 集成测试，CI 三平台矩阵全程 GREEN。完整特性见 [Release Note v0.0.5](./docs/releases/v0.0.5.md)。
 
 ### Added
 
@@ -15,11 +15,11 @@
 - 文件级操作：丢弃改动、加入 `.gitignore`、显示文件历史。
 
 #### Commit 提交窗口
-- 自绘 IDEA 风格提交面板（WebviewView）：活动 Changelist 文件勾选 + 多行消息编辑器 + Amend / Signed-off-by / 跳过 Git Hooks + **提交** / **提交并推送**；勾选集即提交权威范围（对齐 IDEA「提交该集合」）；最近消息一键复用。
-- Conventional Commits 实时校验（可配置）+ 内置 `ConventionalCommitCheck` Checkin Hook；`CommitPipeline` 责任链对齐 IDEA `CheckinHandler`（校验 → 暂存 → Hook 链 → 提交 → 可选推送）。
+- 自绘提交面板（WebviewView）：活动 Changelist 文件勾选 + 多行消息编辑器 + Amend / Signed-off-by / 跳过 Git Hooks + **提交** / **提交并推送**；勾选集即提交权威范围（仅提交选中的文件集合）；最近消息一键复用。
+- Conventional Commits 实时校验（可配置）+ 内置 `ConventionalCommitCheck` Checkin Hook；`CommitPipeline` 责任链设计参考 JetBrains `CheckinHandler`（校验 → 暂存 → Hook 链 → 提交 → 可选推送）。
 
 #### Log 提交图与历史
-- IDEA 风格 **Graph DAG** webview：基于父子关系自计算 lane 布局，彩色泳道 / 节点 / 分叉·合并连线 / HEAD·分支·标签徽标，`--topo-order` 保拓扑序，行宽随实际 lane 自适应；虚拟化滚动增量加载、↑↓ 键导航；选中提交内联展开变更文件并打开单文件 Diff。
+- 自绘 **Graph DAG** webview：基于父子关系自计算 lane 布局，彩色泳道 / 节点 / 分叉·合并连线 / HEAD·分支·标签徽标，`--topo-order` 保拓扑序，行宽随实际 lane 自适应；虚拟化滚动增量加载、↑↓ 键导航；选中提交内联展开变更文件并打开单文件 Diff。
 - **提交图 × CI 状态**：每条提交行最右侧显示 GitHub CI 最终状态（绿勾/红叉/运行中），悬停 Tooltip 展示各项检查 + 未通过原因 + 跳转链接；复用 VS Code 内置 GitHub 认证（`vscode.authentication`，凭证不经 chat/日志/webview），仅取可见行懒加载、批量 GraphQL（≤100 oid）+ 限流冷却、终态缓存；非 GitHub 远程零图标零请求，支持 github.com 与 GitHub Enterprise；配置 `hyperGit.log.ci.{enabled,remote,provider}`。
 - **Checkpointer 过滤**：Log 视图新增 Checkpointer 选项，默认剔除 AI 编码工具产生的自动快照（checkpoint）提交，提交图更干净，可按需开启。
 - **7 个可组合过滤器**：作者、路径、message（grep）、message（正则）、合并模式、日期、一键清除；复制 commit hash、刷新。
@@ -32,7 +32,7 @@
 
 #### Stash 与 Shelf
 - Stash：创建、保留已暂存创建、应用、Pop、删除、从 Stash 创建分支、清空全部，按真实 `stash@{n}` 索引操作。
-- Shelf（IDEA 忠实复刻，基于 patch、独立于 git stash）：Shelve 暂存、静默 Unshelve、带 3-way 合并 Unshelve、删除；独立 TreeView。
+- Shelf（基于 patch、独立于 git stash 的改动搁置机制）：Shelve 暂存、静默 Unshelve、带 3-way 合并 Unshelve、删除；独立 TreeView。
 
 #### 远程与冲突
 - Pull / Push / Fetch（无上游分支自动选定 remote 并建立 `-u` 跟踪；`GitError.stderr` 优先暴露使失败可读）。
@@ -56,14 +56,14 @@
 
 #### 架构与质量
 - 正交分层：`engine/`（纯逻辑，零 vscode 依赖、Vitest 可测）、`adapter/`（唯一接触 vscode API）、`agent/`（AI 接缝）、`ui/`、`shared/protocol.ts`（Webview ↔ Host 契约单一事实源）、`infra/`。
-- AI 接缝预埋 5 接口 + Null 实现（`ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver`），对齐 IDEA `CheckinHandler` 生命周期，M5 替换为真实实现。
+- AI 接缝预埋 5 接口 + Null 实现（`ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver`），设计参考 JetBrains `CheckinHandler` 提交生命周期，M5 替换为真实实现。
 - 品牌图标统一为「Git Pull Request」造型（活动栏 SVG + Marketplace 徽标 + README 头图，字形改编自 Tabler Icons，MIT）；活动栏图标实时显示未提交文件数角标。
 - CI 流水线：lint → 类型 → 构建 → 三平台测试矩阵（Ubuntu/macOS/Windows，Linux 经 xvfb）→ 打包 vsix；`v*` 标签触发 GitHub Release（附带可本地安装的 `.vsix`，正文取自 `docs/releases/`）+ OpenVSX 发布；VS Code Marketplace 由 `ENABLE_MARKETPLACE_PUBLISH` 变量门控。
 
 ### 已知限制
 
 - Commit 窗口的 Co-authored-by / Author 覆盖（`--author`）/ 撤销最近提交按钮 UI 接线（engine `trailer` 已就绪，仅缺 webview 交互）。
-- Partial 多文件选择 UX、行级 split chunks（IDEA「Include Selected Lines」）。
+- Partial 多文件选择 UX、行级 split chunks（按选定行拆分提交）。
 - 目录 / folder diff（虚拟文档）、Submodules 管理。
 - M5 AI Agent（5 个接缝已预埋 Null 实现，本版未启动）。
 

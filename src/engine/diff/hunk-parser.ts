@@ -2,7 +2,7 @@
  * Unified Diff hunk 解析器（纯逻辑，零 vscode 依赖）。
  *
  * 这是 partial / 行级提交的命脉：解析 `git diff` 的 unified diff，切分为文件与 hunk，
- * 并能从「选中的 hunk 子集」重建一个合法 patch 供 `git apply --cached` 暂存（IDEA PartialChangesUtil 等价物）。
+ * 并能从「选中的 hunk 子集」重建一个合法 patch 供 `git apply --cached` 暂存（设计参考 JetBrains PartialChangesUtil）。
  */
 
 /** 一个 hunk：对应 `@@ -oldStart,oldCount +newStart,newCount @@ context`。 */

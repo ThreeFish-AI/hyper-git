@@ -231,7 +231,7 @@ sofia-git/
 - **陷阱**:VS Code 自带 Git 扩展已注册 `id: 'git'` 的 `SourceControl`。若本项目也提供 SCM provider,会出现两个并列的「源代码管理」条目,用户困惑;`gitDecoration.*` 主题色与 `scmProvider`/`scmResourceGroup` context key 易串。
 - **规避**:
   1. 本项目 SCM 用**独立 `id`(如 `sofia-git`)**,通过 `when: scmProvider == sofia-git` 隔离菜单项,绝不硬绑 `git`。
-  2. 产品定位上明确:本项目是「IDEA 风格增强层」,**默认不接管原生 Git**,而是作为并列的增强 SCM provider;若要替代,需提供 `configuration` 开关 `sofiaGit.replaceNativeGit`(关闭原生 git 扩展需 `extensions.json`,影响大,默认关闭)。
+  2. 产品定位上明确:本项目是「Git 变更管理增强层」,**默认不接管原生 Git**,而是作为并列的增强 SCM provider;若要替代,需提供 `configuration` 开关 `sofiaGit.replaceNativeGit`(关闭原生 git 扩展需 `extensions.json`,影响大,默认关闭)。
   3. 文件状态色复用 `ThemeColor('gitDecoration.modified')` 等**已存在的主题 token**,而非新造,保证深色模式一致。[Source Control API](https://code.visualstudio.com/api/extension-guides/scm-provider)
 
 ### 4.2 Webview 性能与内存

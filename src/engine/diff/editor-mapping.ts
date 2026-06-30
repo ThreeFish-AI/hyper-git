@@ -16,7 +16,7 @@ export interface EditorRegion {
 }
 
 /**
- * 把 DiffFile 的每个 hunk 映射为编辑器区域（IDEA LineStatusTracker 的纯逻辑等价）。
+ * 把 DiffFile 的每个 hunk 映射为编辑器区域（设计参考 JetBrains LineStatusTracker 的纯逻辑实现）。
  */
 export function mapFileToEditorRegions(file: DiffFile): EditorRegion[] {
 	return file.hunks.map((h, i) => mapHunkToRegion(h, i));

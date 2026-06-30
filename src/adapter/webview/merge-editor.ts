@@ -9,7 +9,7 @@ import { parseConflictState } from '../../engine/git-state/conflict-detector';
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /**
- * 自绘 3-way Merge Editor（WebviewPanel）—— 复刻 IDEA 冲突解决编辑器。
+ * 自绘 3-way Merge Editor（WebviewPanel）—— 自绘 3-way 冲突解决编辑器。
  *
  * 数据：经 `git show :1/:2/:3:<path>` 取 base/ours/theirs，diff3 产出 hunks。
  * UI：stable 段只读展示；conflict 段三栏（OURS | RESULT 可编辑 | THEIRS），Accept 按钮填 RESULT。
