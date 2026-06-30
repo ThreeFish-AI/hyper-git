@@ -38,7 +38,7 @@ export function registerMiscCommands(
 			if (!scope) {
 				return;
 			}
-			let patch = '';
+			let patch: string;
 			try {
 				patch = await service.execGit(scope.args);
 			} catch (e) {

@@ -252,7 +252,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				return;
 			}
 			// 不静默清理：先列出 prunable 项，无则提示；有则 modal 确认（防误删网络/移动盘合法 worktree）。
-			let prunablePaths: string[] = [];
+			let prunablePaths: string[];
 			try {
 				const out = await service.execGit(['worktree', 'list', '--porcelain', '-z']);
 				prunablePaths = parseWorktreeList(out)

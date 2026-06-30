@@ -23,9 +23,9 @@ export class MergeEditorWebview {
 			void vscode.window.showWarningMessage('No Git repository found');
 			return;
 		}
-		let base = '';
-		let ours = '';
-		let theirs = '';
+		let base: string;
+		let ours: string;
+		let theirs: string;
 		try {
 			// 并行取三阶段（冲突文件的 index stage 1/2/3）
 			[base, ours, theirs] = await Promise.all([

@@ -69,7 +69,7 @@ export class RebaseWebview {
 		const base = basePick.label;
 
 		// 获取 base..HEAD 提交（逆序 → 正序：rebase 按时间正序回放）
-		let rebaseCommits: RebaseCommit[] = [];
+		let rebaseCommits: RebaseCommit[];
 		try {
 			const out = await service.execGit(['log', '--reverse', '--format=%h|%s', `${base}..HEAD`]);
 			rebaseCommits = out
