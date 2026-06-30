@@ -490,12 +490,16 @@ let selectedHash = persisted.selectedHash || null;
 let scope = normalizeScope(persisted.scope);
 let model = { rows: [], maxLanes: 0, hasMore: false, repoRoot: '' };
 let renderedFirst = -1, renderedLast = -1, fetching = false;
-// ── CI 状态（懒加载、仅取可见行；ciByHash 缓存、ciRequested 去重、ciPending 防抖批量）──
+// ── CI 状态（懒加载、仅取可见行；ciByHash 稳定缓存、ciRequested 去重、ciPending 防抖批量）──
+// ciByHash 跨 graphData 刷新保留（CI 状态以不可变 hash 为键），杜绝每次 git 状态变化引发的重拉闪烁。
 const ciByHash = Object.create(null);
 const ciRequested = new Set();
 const ciPending = new Set();
 let ciMeta = { available: false, needsSignIn: false, error: '' };
 let ciReqTimer = null;
+// 准实时刷新：仅对可见行中 pending（运行中）状态定时复拉（host 侧 30s TTL 网络门控），终态不再变。
+let ciPendingRefreshTimer = null;
+let ciRefreshing = false;
 const ciTipEl = document.getElementById('ci-tip');
 const ciSignInEl = document.getElementById('ci-signin');
 let tipHash = null, tipShowT = null, tipHideT = null, overIcon = false, overTip = false;
@@ -611,7 +615,7 @@ function collectCiRequests(f, l) {
   if (!ciMeta.available) return;
   for (let i = f; i < l; i++) {
     const h = model.rows[i] && model.rows[i].hash;
-    if (!h || (h in ciByHash) || ciRequested.has(h)) continue;
+    if (!h || (h in ciByHash) || ciRequested.has(h) || ciPending.has(h)) continue;
     ciRequested.add(h);
     ciPending.add(h);
   }
@@ -626,7 +630,67 @@ function flushCiRequests() {
   vscode.postMessage({ type: 'log/requestCi', payload: { hashes: hashes } });
 }
 
-// ── CI Tooltip（自定义浮层：列明细 + 失败原因 + 跳转链接）──
+/**
+ * CI 数据到达后**就地**更新可见行图标：只改受影响行的 .ci 槽位（replaceChild/appendChild），
+ * 绝不重建整行/整页（reduce-reflows），从根源消除「每次 ciData 触发 innerHTML 重写」的全列闪烁。
+ * 状态类未变（如 pending 复拉、计数更新）时保留原元素，旋转动画不重启、零重绘。
+ */
+function applyCiData(map) {
+  const changed = Object.keys(map);
+  if (changed.length === 0) return;
+  for (const h of changed) {
+    ciByHash[h] = map[h];
+    ciRequested.add(h);
+  }
+  // 只遍历已渲染的可见行，命中受影响 hash 即就地标定其 .ci 槽位。
+  const kids = rowsEl.children;
+  for (let i = 0; i < kids.length; i++) {
+    const rowEl = kids[i];
+    const h = rowEl.getAttribute('data-hash');
+    if (!(h in map)) continue;
+    const slot = rowEl.querySelector('.ci');
+    const ci = ciByHash[h];
+    const wantCls = ci && ci.state !== 'unknown' ? 'ci-' + ci.state : 'ci-empty';
+    // 状态类未变（如 pending 复拉、计数更新）：保留元素，旋转动画不重启、零重绘。
+    if (slot && slot.classList.contains(wantCls)) continue;
+    const fresh = ciSlotHtml({ hash: h });
+    if (slot && slot.outerHTML === fresh) continue;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = fresh;
+    const newSlot = tmp.firstElementChild;
+    if (slot) {
+      if (newSlot) rowEl.replaceChild(newSlot, slot);
+      else rowEl.removeChild(slot);
+    } else if (newSlot) {
+      rowEl.appendChild(newSlot);
+    }
+  }
+}
+
+/** 准实时刷新：仅对可见行中 pending（运行中）状态的提交定时复拉，转终态后停拉。host 30s TTL 网络门控。 */
+function ensurePendingRefresh() {
+  if (ciPendingRefreshTimer) return;
+  ciPendingRefreshTimer = setInterval(schedulePendingRefresh, 20000);
+}
+function stopPendingRefresh() {
+  if (ciPendingRefreshTimer) { clearInterval(ciPendingRefreshTimer); ciPendingRefreshTimer = null; }
+}
+function schedulePendingRefresh() {
+  if (!ciMeta.available || ciRefreshing) return;
+  const total = model.rows.length;
+  if (total === 0 || renderedFirst < 0) return;
+  const pending = [];
+  for (let i = renderedFirst; i < renderedLast && i < total; i++) {
+    const h = model.rows[i] && model.rows[i].hash;
+    const ci = h && ciByHash[h];
+    if (ci && ci.state === 'pending') pending.push(h);
+  }
+  if (pending.length === 0) return;
+  ciRefreshing = true;
+  vscode.postMessage({ type: 'log/requestCi', payload: { hashes: pending } });
+}
+
+// ── CI Tooltip（自定义浮层：列明细 + 失败原因 + 跳转链接，仿 IDEA / GitHub）──
 function tipGlyph(state) {
   const svg = (state === 'unknown' || state === 'skipped')
     ? '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4 8h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>'
@@ -802,8 +866,8 @@ window.addEventListener('message', function (e) {
   if (m.type === 'log/graphData') {
     model = { rows: m.payload.rows, maxLanes: m.payload.maxLanes, hasMore: m.payload.hasMore, repoRoot: m.payload.repoRoot };
     scope = m.payload.scope; repoEl.textContent = m.payload.repoRoot; repoEl.title = m.payload.repoRoot;
-    // 图全量重置 → CI 缓存随之失效（提交集合被替换）。
-    for (const k in ciByHash) delete ciByHash[k];
+    // 保留 ciByHash 稳定缓存（CI 状态以不可变 hash 为键）：图重置只清请求去重集合，
+    // 已缓存的提交重绘时立即可见图标，避免「清缓存→重拉→整行重建」的闪烁。
     ciRequested.clear(); ciPending.clear();
     if (ciReqTimer) { clearTimeout(ciReqTimer); ciReqTimer = null; }
     hideTip();
@@ -822,21 +886,20 @@ window.addEventListener('message', function (e) {
   } else if (m.type === 'log/ciMeta') {
     ciMeta = { available: !!m.payload.available, needsSignIn: !!m.payload.needsSignIn, error: m.payload.error || '' };
     renderCiMeta();
+    if (ciMeta.available) ensurePendingRefresh(); else stopPendingRefresh();
     renderedFirst = -1; // 强制重绘可见行（CI 槽位/登录提示出现或消失）
     scheduleRender();
   } else if (m.type === 'log/ciData') {
     const map = m.payload.map;
-    let touched = false;
-    for (const h in map) { ciByHash[h] = map[h]; ciRequested.add(h); touched = true; }
-    if (touched) {
-      renderedFirst = -1; scheduleRender(); // 就地重绘可见行图标
-      // 数据到达后重锚开启中的 Tooltip（图标新增/pending→终态变化）。
+    ciRefreshing = false;
+    if (Object.keys(map).length === 0) return;
+    applyCiData(map); // 就地补丁可见行图标，杜绝整行重建闪烁
+    // 数据到达后重锚开启中的 Tooltip（图标新增/pending→终态变化）。
+    if (tipHash && (tipHash in map) && ciTipEl.classList.contains('show')) {
       requestAnimationFrame(function () {
-        if (tipHash && ciTipEl.classList.contains('show')) {
-          const el = rowsEl.querySelector('[data-ci="' + tipHash.replace(/[^a-f0-9]/gi, '') + '"]');
-          if (el) { buildTip(ciByHash[tipHash]); positionTip(el.getBoundingClientRect()); }
-          else hideTip();
-        }
+        const el = rowsEl.querySelector('[data-ci="' + tipHash.replace(/[^a-f0-9]/gi, '') + '"]');
+        if (el) { buildTip(ciByHash[tipHash]); positionTip(el.getBoundingClientRect()); }
+        else hideTip();
       });
     }
   }
