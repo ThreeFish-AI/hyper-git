@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { GitRepositoryService } from './git-repository-service';
 import { handleGitConflict } from './conflict-ui';
+import { mdTooltip, relativeDate } from './tree/tree-tooltip';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -26,6 +27,14 @@ export interface ShelfNode {
 	readonly timestamp: string;
 }
 
+/** Shelf 内单文件叶子（展开 shelf 节点暴露其包含的文件路径）。 */
+export interface ShelfFileNode {
+	readonly kind: 'file';
+	readonly path: string;
+}
+
+export type ShelfTreeNode = ShelfNode | ShelfFileNode;
+
 /**
  * ShelfService：基于 patch 的 Shelf 实现（独立于 git stash）。
  *
@@ -45,11 +54,11 @@ export class ShelfService {
 	async shelve(name: string, paths: readonly string[], timestamp: string): Promise<void> {
 		const repo = this.service.repo;
 		if (!repo) {
-			throw new Error('未找到 Git 仓库');
+			throw new Error('No Git repository found');
 		}
 		const patch = await this.service.execGit(['diff', '--', ...paths]);
 		if (!patch.trim()) {
-			throw new Error('所选文件无改动（或为未跟踪文件）');
+			throw new Error('Selected files have no changes (or are untracked)');
 		}
 		fs.mkdirSync(this.shelvesDir, { recursive: true });
 		const entry: ShelfEntry = { name, paths, timestamp, patch };
@@ -61,7 +70,7 @@ export class ShelfService {
 	async unshelve(name: string, threeWay: boolean): Promise<void> {
 		const entry = this.readEntry(name);
 		if (!entry) {
-			throw new Error(`Shelf「${name}」不存在`);
+			throw new Error(`Shelf "${name}" does not exist`);
 		}
 		const tmp = path.join(os.tmpdir(), `hg-unshelve-${Date.now()}.patch`);
 		fs.writeFileSync(tmp, entry.patch);
@@ -124,9 +133,9 @@ export class ShelfService {
 	}
 }
 
-/** Shelf TreeView：显示已存储的 shelf 条目。 */
-export class ShelfTreeProvider implements vscode.TreeDataProvider<ShelfNode>, vscode.Disposable {
-	private readonly _onDidChange = new vscode.EventEmitter<ShelfNode | undefined>();
+/** Shelf TreeView：显示已存储的 shelf 条目，展开可见其包含的文件。 */
+export class ShelfTreeProvider implements vscode.TreeDataProvider<ShelfTreeNode>, vscode.Disposable {
+	private readonly _onDidChange = new vscode.EventEmitter<ShelfTreeNode | undefined>();
 	readonly onDidChangeTreeData = this._onDidChange.event;
 
 	constructor(private readonly shelfService: ShelfService) {}
@@ -135,17 +144,38 @@ export class ShelfTreeProvider implements vscode.TreeDataProvider<ShelfNode>, vs
 		this._onDidChange.fire(undefined);
 	}
 
-	getChildren(): ShelfNode[] {
-		return this.shelfService.listShelves();
+	getChildren(element?: ShelfTreeNode): ShelfTreeNode[] {
+		if (!element) {
+			return this.shelfService.listShelves();
+		}
+		if (element.kind === 'shelf') {
+			return element.paths.map((p): ShelfFileNode => ({ kind: 'file', path: p }));
+		}
+		return [];
 	}
 
-	getTreeItem(node: ShelfNode): vscode.TreeItem {
-		const item = new vscode.TreeItem(node.name, vscode.TreeItemCollapsibleState.None);
+	getTreeItem(node: ShelfTreeNode): vscode.TreeItem {
+		if (node.kind === 'file') {
+			const item = new vscode.TreeItem(node.path, vscode.TreeItemCollapsibleState.None);
+			item.id = `shelf-file:${node.path}`;
+			item.contextValue = 'hyperGit.shelfFile';
+			item.tooltip = mdTooltip([['Path', node.path]]);
+			return item;
+		}
+		const count = node.paths.length;
+		const item = new vscode.TreeItem(node.name, vscode.TreeItemCollapsibleState.Collapsed);
 		item.id = `shelf:${node.name}`;
-		item.description = `${node.paths.length} files · ${node.timestamp}`;
-		item.tooltip = `${node.name}\n${node.paths.length} files\nShelved: ${node.timestamp}`;
+		item.description = `${count} ${count === 1 ? 'file' : 'files'} · ${relativeDate(node.timestamp)}`;
 		item.contextValue = 'hyperGit.shelf';
-		item.iconPath = new vscode.ThemeIcon('inbox');
+		item.iconPath = new vscode.ThemeIcon('library');
+		item.tooltip = mdTooltip(
+			[
+				['Files', String(count)],
+				['Shelved', relativeDate(node.timestamp)],
+				['Timestamp', node.timestamp],
+			],
+			{ title: node.name },
+		);
 		return item;
 	}
 
@@ -166,16 +196,16 @@ export function registerShelfCommands(service: GitRepositoryService, shelfServic
 			}
 			const changes = service.getChanges().filter((c) => !c.staged);
 			if (changes.length === 0) {
-				void vscode.window.showInformationMessage('无未暂存改动可 shelve');
+				void vscode.window.showInformationMessage('No unstaged changes to shelve');
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: 'Shelf 名称', placeHolder: '例如 feature-x-wip' });
+			const name = await vscode.window.showInputBox({ prompt: 'Shelf name', placeHolder: 'e.g. feature-x-wip' });
 			if (!name || !name.trim()) {
 				return;
 			}
 			const picks = await vscode.window.showQuickPick(
 				changes.map((c) => ({ label: c.relativePath, picked: true })),
-				{ canPickMany: true, title: '选择要 shelve 的文件' },
+				{ canPickMany: true, title: 'Select files to shelve' },
 			);
 			if (!picks || picks.length === 0) {
 				return;
@@ -183,9 +213,9 @@ export function registerShelfCommands(service: GitRepositoryService, shelfServic
 			try {
 				await shelfService.shelve(name.trim(), picks.map((p) => p.label), new Date().toISOString());
 				shelfTree.refresh();
-				void vscode.window.showInformationMessage(`已 shelve「${name.trim()}」(${picks.length} files)`);
+				void vscode.window.showInformationMessage(`Shelved "${name.trim()}" (${picks.length} files)`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Shelve 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to shelve: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -198,9 +228,9 @@ export function registerShelfCommands(service: GitRepositoryService, shelfServic
 			try {
 				await shelfService.unshelveAndDrop(node.name, false);
 				shelfTree.refresh();
-				void vscode.window.showInformationMessage(`已 unshelve「${node.name}」`);
+				void vscode.window.showInformationMessage(`Unshelved "${node.name}"`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Unshelve 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to unshelve: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -213,10 +243,10 @@ export function registerShelfCommands(service: GitRepositoryService, shelfServic
 			try {
 				await shelfService.unshelveAndDrop(node.name, true);
 				shelfTree.refresh();
-				void vscode.window.showInformationMessage(`已 unshelve（3-way）「${node.name}」`);
+				void vscode.window.showInformationMessage(`Unshelved "${node.name}" (3-way)`);
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Unshelve'))) {
-					void vscode.window.showErrorMessage(`Unshelve 失败：${errMsg(e)}`);
+					void vscode.window.showErrorMessage(`Failed to unshelve: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -227,8 +257,8 @@ export function registerShelfCommands(service: GitRepositoryService, shelfServic
 			if (!node) {
 				return;
 			}
-			const ok = await vscode.window.showWarningMessage(`删除 Shelf「${node.name}」？`, { modal: true }, '删除');
-			if (ok === '删除') {
+			const ok = await vscode.window.showWarningMessage(`Delete shelf "${node.name}"?`, { modal: true }, 'Delete');
+			if (ok === 'Delete') {
 				shelfService.drop(node.name);
 				shelfTree.refresh();
 			}

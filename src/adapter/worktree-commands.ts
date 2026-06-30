@@ -29,11 +29,11 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 			// ① 分支模式
 			const modePick = await vscode.window.showQuickPick(
 				[
-					{ label: '新建分支', description: '创建新分支并检出', mode: 'new' as const },
-					{ label: '检出已有分支', description: '检出已存在的本地分支', mode: 'checkout' as const },
-					{ label: 'Detached HEAD', description: '在指定提交/分支上 detached 检出', mode: 'detached' as const },
+					{ label: 'New branch', description: 'Create a new branch and check it out', mode: 'new' as const },
+					{ label: 'Checkout existing branch', description: 'Check out an existing local branch', mode: 'checkout' as const },
+					{ label: 'Detached HEAD', description: 'Check out a commit/branch in detached state', mode: 'detached' as const },
 				],
-				{ placeHolder: 'Worktree 分支模式' },
+				{ placeHolder: 'Worktree branch mode' },
 			);
 			if (!modePick) {
 				return;
@@ -43,11 +43,11 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 			let branch: string | undefined;
 			let sourceRef: string | undefined;
 			if (modePick.mode === 'new') {
-				branch = await vscode.window.showInputBox({ prompt: '新分支名', placeHolder: 'feature/y' });
+				branch = await vscode.window.showInputBox({ prompt: 'New branch name', placeHolder: 'feature/y' });
 				if (!branch?.trim()) {
 					return;
 				}
-				const start = await vscode.window.showInputBox({ prompt: '基于（start-point，留空 = HEAD）', placeHolder: 'HEAD / main / abc1234' });
+				const start = await vscode.window.showInputBox({ prompt: 'Start point (leave empty = HEAD)', placeHolder: 'HEAD / main / abc1234' });
 				if (start === undefined) {
 					return; // Esc 取消；空字符串 = HEAD（允许）
 				}
@@ -66,7 +66,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 					// 列表读取失败 → 退化为空列表（下方 pick 为空时取消）
 				}
 				const pick = await vscode.window.showQuickPick(items, {
-					placeHolder: modePick.mode === 'detached' ? '选择提交/分支（detached）' : '选择本地分支',
+					placeHolder: modePick.mode === 'detached' ? 'Select commit/branch (detached)' : 'Select a local branch',
 				});
 				if (!pick) {
 					return;
@@ -77,7 +77,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 			// ③ Worktree 路径
 			const safeName = (branch ?? sourceRef ?? 'worktree').replace(/[^A-Za-z0-9._-]+/g, '-');
 			const wtPath = await vscode.window.showInputBox({
-				prompt: 'Worktree 路径（相对仓库根 / 绝对）',
+				prompt: 'Worktree path (relative to repo root / absolute)',
 				value: `../${safeName}-wt`,
 				placeHolder: '../feature-y-wt',
 			});
@@ -102,9 +102,9 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 			try {
 				await service.execGit(args);
 				worktreeTree.refresh();
-				void vscode.window.showInformationMessage(`已创建 Worktree：${wtPath.trim()}`);
+				void vscode.window.showInformationMessage(`Worktree created: ${wtPath.trim()}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`创建 Worktree 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to create Worktree: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -127,29 +127,29 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				return;
 			}
 			if (node.isMain) {
-				void vscode.window.showWarningMessage('主工作树不可删除');
+				void vscode.window.showWarningMessage('The main worktree cannot be deleted');
 				return;
 			}
 			if (worktreeTree.isCurrent(node)) {
-				void vscode.window.showWarningMessage('当前打开的 Worktree 不可删除，请先切换到其他窗口');
+				void vscode.window.showWarningMessage('The currently open Worktree cannot be deleted; please switch to another window first');
 				return;
 			}
 			const forcePick = await vscode.window.showQuickPick(
 				[
-					{ label: '删除', description: '含未提交改动将失败', f: false as const },
-					{ label: '强制删除', description: '忽略未提交改动（不可逆）', f: true as const },
+					{ label: 'Delete', description: 'Fails if there are uncommitted changes', f: false as const },
+					{ label: 'Force delete', description: 'Ignore uncommitted changes (irreversible)', f: true as const },
 				],
-				{ placeHolder: '删除 Worktree' },
+				{ placeHolder: 'Delete Worktree' },
 			);
 			if (!forcePick) {
 				return;
 			}
 			const ok = await vscode.window.showWarningMessage(
-				`删除 Worktree？\n${node.path}\n（${node.ref}）`,
+				`Delete Worktree?\n${node.path}\n(${node.ref})`,
 				{ modal: true },
-				'删除',
+				'Delete',
 			);
-			if (ok !== '删除') {
+			if (ok !== 'Delete') {
 				return;
 			}
 			try {
@@ -160,9 +160,9 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				args.push(node.path);
 				await service.execGit(args);
 				worktreeTree.refresh();
-				void vscode.window.showInformationMessage(`已删除 Worktree：${node.name}`);
+				void vscode.window.showInformationMessage(`Worktree deleted: ${node.name}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`删除 Worktree 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to delete Worktree: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -173,7 +173,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				return;
 			}
 			await vscode.env.clipboard.writeText(node.path);
-			void vscode.window.showInformationMessage('已复制 Worktree 路径');
+			void vscode.window.showInformationMessage('Worktree path copied');
 		}),
 	);
 
@@ -183,7 +183,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 			if (!repo || !node || node.kind !== 'worktree') {
 				return;
 			}
-			const reason = await vscode.window.showInputBox({ prompt: '锁定原因（可空）', placeHolder: '正在备份' });
+			const reason = await vscode.window.showInputBox({ prompt: 'Lock reason (optional)', placeHolder: 'Backing up' });
 			if (reason === undefined) {
 				return; // Esc 取消；空字符串 = 无原因（允许）
 			}
@@ -195,9 +195,9 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				args.push(node.path);
 				await service.execGit(args);
 				worktreeTree.refresh();
-				void vscode.window.showInformationMessage(`已锁定 Worktree：${node.name}`);
+				void vscode.window.showInformationMessage(`Worktree locked: ${node.name}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`锁定 Worktree 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to lock Worktree: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -211,9 +211,9 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 			try {
 				await service.execGit(['worktree', 'unlock', node.path]);
 				worktreeTree.refresh();
-				void vscode.window.showInformationMessage(`已解锁 Worktree：${node.name}`);
+				void vscode.window.showInformationMessage(`Worktree unlocked: ${node.name}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`解锁 Worktree 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to unlock Worktree: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -225,11 +225,11 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				return;
 			}
 			if (node.isMain) {
-				void vscode.window.showWarningMessage('主工作树不可移动');
+				void vscode.window.showWarningMessage('The main worktree cannot be moved');
 				return;
 			}
 			const dest = await vscode.window.showInputBox({
-				prompt: '新路径（相对仓库根 / 绝对）',
+				prompt: 'New path (relative to repo root / absolute)',
 				placeHolder: '../new-location',
 			});
 			if (!dest?.trim()) {
@@ -238,9 +238,9 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 			try {
 				await service.execGit(['worktree', 'move', node.path, dest.trim()]);
 				worktreeTree.refresh();
-				void vscode.window.showInformationMessage(`已移动 Worktree → ${dest.trim()}`);
+				void vscode.window.showInformationMessage(`Worktree moved → ${dest.trim()}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`移动 Worktree 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to move Worktree: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -259,27 +259,27 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 					.filter((p) => p.prunable)
 					.map((p) => p.path);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`读取 Worktree 列表失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to read Worktree list: ${errMsg(e)}`);
 				return;
 			}
 			if (prunablePaths.length === 0) {
-				void vscode.window.showInformationMessage('无可清理的失效 Worktree');
+				void vscode.window.showInformationMessage('No stale Worktrees to prune');
 				return;
 			}
 			const ok = await vscode.window.showWarningMessage(
-				`清理 ${prunablePaths.length} 个失效 Worktree 元数据？\n${prunablePaths.join('\n')}`,
+				`Prune metadata for ${prunablePaths.length} stale Worktree(s)?\n${prunablePaths.join('\n')}`,
 				{ modal: true },
-				'清理',
+				'Prune',
 			);
-			if (ok !== '清理') {
+			if (ok !== 'Prune') {
 				return;
 			}
 			try {
 				await service.execGit(['worktree', 'prune', '-v']);
 				worktreeTree.refresh();
-				void vscode.window.showInformationMessage(`已清理 ${prunablePaths.length} 个失效 Worktree`);
+				void vscode.window.showInformationMessage(`Pruned ${prunablePaths.length} stale Worktree(s)`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`清理 Worktree 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to prune Worktrees: ${errMsg(e)}`);
 			}
 		}),
 	);

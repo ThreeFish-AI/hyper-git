@@ -1,10 +1,13 @@
 import * as vscode from 'vscode';
 import type { GitRepositoryService } from '../git-repository-service';
+import { mdTooltip } from './tree-tooltip';
 
 export interface StashEntryNode {
 	readonly kind: 'stash';
 	readonly index: number;
 	readonly message: string;
+	/** 相对时间（来自 git stash list --date=relative），可能缺失。 */
+	readonly date?: string;
 }
 
 export type StashNode = StashEntryNode;
@@ -32,13 +35,22 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashNode>, vs
 			return [];
 		}
 		try {
-			const out = await this.service.execGit(['stash', 'list']);
+			const out = await this.service.execGit(['stash', 'list', '--date=relative']);
 			return out
 				.split('\n')
 				.filter((line) => line.trim().length > 0)
 				.map((line): StashEntryNode => {
 					const m = line.match(/^stash@\{(\d+)\}:\s*(.*)$/);
-					return { kind: 'stash', index: m ? Number(m[1]) : 0, message: m ? m[2] : line };
+					const index = m ? Number(m[1]) : 0;
+					let rest = m ? m[2] : line;
+					let date: string | undefined;
+					// --date=relative 追加形如 "(2 days ago)" 的尾缀：拆出日期，其余留作 message。
+					const dm = rest.match(/\s*\(([^)]+)\)\s*$/);
+					if (dm && dm.index !== undefined) {
+						date = dm[1];
+						rest = rest.slice(0, dm.index);
+					}
+					return { kind: 'stash', index, message: rest, date };
 				});
 		} catch {
 			return [];
@@ -47,12 +59,20 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashNode>, vs
 
 	getTreeItem(node: StashNode): vscode.TreeItem {
 		const subject = node.message.split(':').slice(1).join(':').trim() || node.message;
-		const item = new vscode.TreeItem(subject.slice(0, 60), vscode.TreeItemCollapsibleState.None);
+		const trimmed = subject.length > 60 ? `${subject.slice(0, 60)}…` : subject;
+		const item = new vscode.TreeItem(trimmed, vscode.TreeItemCollapsibleState.None);
 		item.id = `stash:${node.index}`;
-		item.description = `stash@{${node.index}}`;
-		item.tooltip = `stash@{${node.index}}\n${node.message}`;
+		item.description = node.date || `stash@{${node.index}}`;
 		item.contextValue = 'hyperGit.stash';
 		item.iconPath = new vscode.ThemeIcon('archive');
+		const rows: Array<[string, string]> = [['Ref', `stash@{${node.index}}`]];
+		if (node.date) {
+			rows.push(['Date', node.date]);
+		}
+		rows.push(['Message', subject]);
+		item.tooltip = mdTooltip(rows);
+		// 单击查看 stash diff（只读，比 apply 更安全；apply/pop/drop 仍在右键菜单）。
+		item.command = { command: 'hyperGit.stashView', title: 'View Stash Diff', arguments: [node] };
 		return item;
 	}
 

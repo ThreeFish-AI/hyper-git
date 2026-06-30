@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { GitRepositoryService } from '../git-repository-service';
 import { parseWorktreeList, type ParsedWorktree } from '../../engine/worktree/worktree-list';
+import { mdTooltip } from './tree-tooltip';
 
 /** Worktrees 视图节点：单个工作树（扁平，无分组——工作树数量通常 ≤ 个位数）。 */
 export interface WorktreeNode {
@@ -92,12 +93,13 @@ export class WorktreeTreeProvider implements vscode.TreeDataProvider<WorktreeNod
 		item.tooltip = this.tooltip(node, isCurrent);
 		item.contextValue = node.isMain ? 'hyperGit.worktreeMain' : 'hyperGit.worktree';
 
-		const icon = node.isMain ? 'home' : node.detached ? 'git-commit' : 'git-branch';
-		// prunable 警示色优先（红色 > 高亮），其次当前打开高亮，对齐 branches-tree 的 ThemeIcon 高亮范式。
+		// 锁定优先用 lock 图标（替代原 🔒 emoji）；main 用 root-folder-opened。
+		const icon = node.locked ? 'lock' : node.isMain ? 'root-folder-opened' : node.detached ? 'git-commit' : 'git-branch';
+		// prunable 警示色优先（红 > 蓝），当前打开高亮用 charts.blue（与 branches-tree 活动色全局一致）。
 		const color = node.prunable
 			? new vscode.ThemeColor('gitDecoration.deletedResourceForeground')
 			: isCurrent
-				? new vscode.ThemeColor('gitDecoration.modifiedResourceForeground')
+				? new vscode.ThemeColor('charts.blue')
 				: undefined;
 		item.iconPath = new vscode.ThemeIcon(icon, color);
 		return item;
@@ -106,33 +108,36 @@ export class WorktreeTreeProvider implements vscode.TreeDataProvider<WorktreeNod
 	private describe(node: WorktreeNode, isCurrent: boolean): string {
 		const parts: string[] = [];
 		if (node.isMain) {
-			parts.push('主');
+			parts.push('Main');
 		}
 		if (isCurrent) {
-			parts.push('当前');
-		}
-		if (node.locked) {
-			parts.push('🔒');
+			parts.push('Current');
 		}
 		if (node.prunable) {
-			parts.push('⚠ 可清理');
+			parts.push('Prunable');
 		}
 		parts.push(node.ref);
 		return parts.join(' · ');
 	}
 
-	private tooltip(node: WorktreeNode, isCurrent: boolean): string {
-		const lines: string[] = [];
-		lines.push(`${node.name}${node.isMain ? '（主工作树）' : ''}${isCurrent ? '（当前打开）' : ''}`);
-		lines.push(`路径：${node.path}`);
-		lines.push(`HEAD：${node.ref}${node.detached ? '（detached）' : ''}`);
+	private tooltip(node: WorktreeNode, isCurrent: boolean): vscode.MarkdownString {
+		const rows: Array<[string, string]> = [
+			['Path', node.path],
+			['HEAD', `${node.ref}${node.detached ? ' (detached)' : ''}`],
+		];
+		if (node.isMain) {
+			rows.push(['Type', 'Main worktree']);
+		}
+		if (isCurrent) {
+			rows.push(['State', 'Current']);
+		}
 		if (node.locked) {
-			lines.push('已锁定（防止自动清理）');
+			rows.push(['Lock', 'Locked (excluded from prune)']);
 		}
 		if (node.prunable) {
-			lines.push('⚠ 可清理（目录已失效）');
+			rows.push(['Status', 'Prunable (directory is stale)']);
 		}
-		return lines.join('\n');
+		return mdTooltip(rows, { title: `${node.name}${isCurrent ? ' (current)' : ''}` });
 	}
 
 	/** 该节点是否当前打开的 worktree（供命令层删除/移动守护复用）。 */

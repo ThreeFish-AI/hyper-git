@@ -29,11 +29,11 @@ export function registerMiscCommands(
 			}
 			const scope = await vscode.window.showQuickPick(
 				[
-					{ label: '未暂存改动', args: ['diff'] },
-					{ label: '已暂存改动', args: ['diff', '--cached'] },
-					{ label: '全部改动（HEAD↔工作区）', args: ['diff', 'HEAD'] },
+					{ label: 'Unstaged changes', args: ['diff'] },
+					{ label: 'Staged changes', args: ['diff', '--cached'] },
+					{ label: 'All changes (HEAD ↔ Working tree)', args: ['diff', 'HEAD'] },
 				],
-				{ placeHolder: '导出哪部分改动为 patch' },
+				{ placeHolder: 'Which changes to export as patch' },
 			);
 			if (!scope) {
 				return;
@@ -42,11 +42,11 @@ export function registerMiscCommands(
 			try {
 				patch = await service.execGit(scope.args);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`生成 patch 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to generate patch: ${errMsg(e)}`);
 				return;
 			}
 			if (!patch.trim()) {
-				void vscode.window.showInformationMessage('无改动可导出');
+				void vscode.window.showInformationMessage('No changes to export');
 				return;
 			}
 			const target = await vscode.window.showSaveDialog({
@@ -58,9 +58,9 @@ export function registerMiscCommands(
 			}
 			try {
 				await fs.promises.writeFile(target.fsPath, patch, 'utf8');
-				void vscode.window.showInformationMessage(`已导出 patch：${target.fsPath}`);
+				void vscode.window.showInformationMessage(`Patch exported: ${target.fsPath}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`写入 patch 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to write patch: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -74,18 +74,18 @@ export function registerMiscCommands(
 			const sel = await vscode.window.showOpenDialog({
 				canSelectMany: false,
 				filters: { Patch: ['patch', 'diff'], All: ['*'] },
-				title: '选择要应用的 patch 文件',
+				title: 'Select a patch file to apply',
 			});
 			if (!sel?.[0]) {
 				return;
 			}
 			const mode = await vscode.window.showQuickPick(
 				[
-					{ label: '应用到工作区', args: [] as string[] },
-					{ label: '应用并暂存（--index）', args: ['--index'] },
-					{ label: '3-way 应用（冲突可解）', args: ['--3way'] },
+					{ label: 'Apply to working tree', args: [] as string[] },
+					{ label: 'Apply and stage (--index)', args: ['--index'] },
+					{ label: '3-way apply (resolves conflicts)', args: ['--3way'] },
 				],
-				{ placeHolder: 'Apply 模式' },
+				{ placeHolder: 'Apply mode' },
 			);
 			if (!mode) {
 				return;
@@ -94,10 +94,10 @@ export function registerMiscCommands(
 				await service.execGit(['apply', ...mode.args, sel[0].fsPath]);
 				branchesTree.refresh();
 				logTree.refresh();
-				void vscode.window.showInformationMessage('已应用 patch');
+				void vscode.window.showInformationMessage('Patch applied');
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Apply Patch'))) {
-					void vscode.window.showErrorMessage(`应用 patch 失败：${errMsg(e)}`);
+					void vscode.window.showErrorMessage(`Failed to apply patch: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -111,10 +111,10 @@ export function registerMiscCommands(
 			}
 			try {
 				const out = await service.execGit(['reflog', '-n', '200', '--date=relative']);
-				const doc = await vscode.workspace.openTextDocument({ content: `# git reflog（最近 200 条）\n\n${out}`, language: 'plaintext' });
+				const doc = await vscode.workspace.openTextDocument({ content: `# git reflog (latest 200 entries)\n\n${out}`, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`读取 reflog 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to read reflog: ${errMsg(e)}`);
 			}
 		}),
 	);
