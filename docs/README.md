@@ -7,6 +7,9 @@
 - [工程实施方案](./architecture/engineering-plan.md) — 全链路调研结论 + 路径 B 架构 + M0-M5 里程碑路线图 + 风险与验证（**开发蓝图**）。
 - [IDEA 功能复刻矩阵](./requirements/idea-feature-matrix.md) — 56 个原子功能点 / 8 组 + CheckinHandler 生命周期（**验收基线**）。
 
+## 发布说明
+- [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.1 首个 MVP](./releases/v0.0.1.md)。
+
 ## 调研报告（循证依据）
 - [02 · VS Code SCM API 与 vscode.git 集成路径](./research/02-vscode-scm-integration.md) — 路径 B 决策依据、SCM 稳定/proposed API 边界、changelist 模型映射。
 - [03 · VS Code 扩展工程蓝图](./research/03-extension-blueprint.md) — 技术栈决策、工程骨架、IDEA→VS Code UI 表面映射表。
@@ -15,4 +18,4 @@
 
 ## 协作与规范
 - [AGENTS.md](../AGENTS.md) — 协作协议与工程行为准则。
-- [知识索引](../.agents/knowledge-map.md) · [Issue 记录](../.agents/issue.md) · [引用规范 IEEE](../.agents/reference-specifications.md)。
+- [知识索引](./.agents/knowledge-map.md) · [Issue 记录](./.agents/issue.md) · [引用规范 IEEE](./.agents/reference-specifications.md)。

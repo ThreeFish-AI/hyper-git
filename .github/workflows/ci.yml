@@ -83,6 +83,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      # 检出仓库：使 body_path 指向的 Release Note 文件可见
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: vsix
@@ -91,7 +93,8 @@ jobs:
         with:
           files: '*.vsix'
           prerelease: ${{ contains(github.ref_name, 'rc') }}
-          generate_release_notes: true
+          # Release 正文取自版本控制的 Release Note（单一事实源，按 tag 名取对应文件）
+          body_path: docs/releases/${{ github.ref_name }}.md
           fail_on_unmatched_files: true
 
   # 发布：仅 tag 触发；OpenVSX 默认发布，VS Code Marketplace 由 ENABLE_MARKETPLACE_PUBLISH 变量门控（默认关闭）；生产环境审批门
@@ -122,7 +125,10 @@ jobs:
           pnpm dlx @vscode/vsce publish --packagePath *.vsix $PRE_FLAG
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      # OpenVSX 不支持覆盖已存在版本：若该版本号已发布则此步报错。
+      # 以 continue-on-error 隔离——不阻断 GitHub Release 产出，亦不让首发 workflow 标红。
       - name: 发布到 OpenVSX（覆盖 Cursor / Windsurf 等 AI IDE）
+        continue-on-error: true
         run: |
           PRE_FLAG=$([[ "${GITHUB_REF_NAME}" == *rc* ]] && echo "--pre-release" || echo "")
           pnpm dlx ovsx publish *.vsix $PRE_FLAG
