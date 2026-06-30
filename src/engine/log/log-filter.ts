@@ -16,6 +16,12 @@ export interface LogClientFilter {
 	/** 截止日期（含），按 authorDate 过滤。 */
 	readonly dateTo?: Date;
 	readonly messageRegex?: RegExp;
+	/**
+	 * 是否保留 Conductor 等 Agent 工具自动创建的 checkpoint 提交（subject 以 `checkpoint:` 开头，见
+	 * {@link isCheckpointSubject}）。`false` 时剔除；缺省或 `true` 时保留。由 Log 视图 scope 驱动
+	 * （Checkpointer 视图保留完整历史，All/Current 剔除以呈现干净的人类提交历史）。
+	 */
+	readonly keepCheckpoint?: boolean;
 }
 
 /**
@@ -65,9 +71,27 @@ export function safeRegex(pattern: string): RegExp | undefined {
 	}
 }
 
+/**
+ * Conductor 等 Agent 工具自动创建的「状态快照」提交前缀（LangGraph Checkpointer 语义）。
+ * 已知模式：`checkpoint:session-<uuid>-turn-<uuid>-start/end`、`checkpoint:conductor-archive-<uuid>`、
+ * `checkpoint:conductor-getdiff`。锚定 subject 行首、大小写不敏感；集中于此为单一事实源，
+ * adapter / 测试一律引用本常量或谓词，杜绝识别规则分散。
+ */
+export const CHECKPOINT_SUBJECT_RE = /^checkpoint:/i;
+
+/** 判定提交 subject 是否为 checkpoint 自动提交（{@link CHECKPOINT_SUBJECT_RE} 的谓词封装）。 */
+export function isCheckpointSubject(subject: string): boolean {
+	return CHECKPOINT_SUBJECT_RE.test(subject);
+}
+
 /** 对已取回的提交施加客户端过滤（不可变，返回新数组）。 */
 export function applyClientFilters<T extends FilterableCommit>(commits: readonly T[], filter: LogClientFilter): T[] {
 	let result: T[] = [...commits];
+	// checkpoint 剔除置链首：其高密度特性可减少后续 mergeMode/date/regex 的计算量；
+	// 与其他维度同为 AND 语义、可交换，顺序不影响结果正确性。
+	if (filter.keepCheckpoint === false) {
+		result = result.filter((c) => !isCheckpointSubject(c.message));
+	}
 	if (filter.mergeMode === 'merge-only') {
 		result = result.filter((c) => c.parents.length > 1);
 	} else if (filter.mergeMode === 'no-merge') {

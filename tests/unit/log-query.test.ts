@@ -14,6 +14,10 @@ describe('buildLogArgs — 顺序与必选项', () => {
 		expect(buildLogArgs(noFilter, 'current', { maxCount: 300 })).not.toContain('--all');
 	});
 
+	it('scope=checkpointer 与 all 同为全分支（含 --all）', () => {
+		expect(buildLogArgs(noFilter, 'checkpointer', { maxCount: 300 })).toContain('--all');
+	});
+
 	it('max-count 与 skip', () => {
 		expect(buildLogArgs(noFilter, 'all', { maxCount: 500 })).toContain('--max-count=500');
 		expect(buildLogArgs(noFilter, 'all', { maxCount: 500, skip: 500 })).toContain('--skip=500');

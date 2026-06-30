@@ -10,8 +10,15 @@
 import type { LogFilter } from './log-filter';
 import { LOG_GRAPH_FORMAT } from './log-line';
 
-/** 提交范围：`all` = 全部分支（`--all`，IDEA 默认）；`current` = 当前分支（HEAD）。 */
-export type LogScope = 'all' | 'current';
+/**
+ * 提交范围（工具栏互斥单选）：
+ * - `all` = 全分支（`--all`），剔除 checkpoint 自动提交（干净的人类历史，默认）；
+ * - `current` = 当前分支（HEAD），剔除 checkpoint 自动提交；
+ * - `checkpointer` = 全分支（`--all`），保留 checkpoint 自动提交（原始完整视图）。
+ * checkpoint 的保留/剔除由 adapter 层据 scope 注入 `LogClientFilter.keepCheckpoint`，
+ * engine query 层仅据本类型决定 `--all` 分支范围，对 checkpoint 概念无感知（职责单一）。
+ */
+export type LogScope = 'all' | 'current' | 'checkpointer';
 
 /** 分页参数。 */
 export interface LogQueryOptions {
@@ -26,7 +33,7 @@ export interface LogQueryOptions {
  */
 export function buildLogArgs(filter: LogFilter | undefined, scope: LogScope, opts: LogQueryOptions): string[] {
 	const args: string[] = ['--topo-order'];
-	if (scope === 'all') {
+	if (scope === 'all' || scope === 'checkpointer') {
 		args.push('--all');
 	}
 	args.push(`--max-count=${opts.maxCount}`);
