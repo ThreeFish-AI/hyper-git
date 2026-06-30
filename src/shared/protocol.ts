@@ -6,10 +6,13 @@
  */
 
 import type { ConventionalValidation, ConventionalSeverity } from '../engine/commit/conventional-linter';
+import type { CiCheckVM, CiState, CiStatusVM } from '../engine/ci/types';
 import type { GraphLayoutRow } from '../engine/log/graph-types';
 import type { LogScope } from '../engine/log/log-query';
 
 export type { ConventionalValidation, ConventionalSeverity };
+// CI 状态 VM 从 engine 复用并 re-export（指针非副本，单一事实源）。
+export type { CiCheckVM, CiState, CiStatusVM };
 
 /** Commit 视图中的文件条目（选中态由 webview 端管理，host 不回写以避免覆盖用户操作）。 */
 export interface CommitFileItem {
@@ -110,6 +113,16 @@ export type LogCommitOp =
 	| 'reset'
 	| 'menu';
 
+/** CI 功能元信息（graphData 后即发；登录完成/会话撤销/限流时再发，避免整图重传重置滚动/选中）。 */
+export interface CiMetaVM {
+	/** 远程为 GitHub 且功能启用时为 true；否则整列隐藏、不发起任何请求。 */
+	readonly available: boolean;
+	/** 远程是 GitHub 但尚未授权：webview 显示「登录 GitHub 查看 CI」提示。 */
+	readonly needsSignIn: boolean;
+	/** 软错误（限流/网络）摘要，供 webview 给出一次性提示；为空表示正常。 */
+	readonly error?: string;
+}
+
 /** Host → Webview（Log Graph）。 */
 export type LogHostToWebviewMessage =
 	| { readonly type: 'log/graphData'; readonly payload: LogGraphState }
@@ -118,7 +131,9 @@ export type LogHostToWebviewMessage =
 		readonly payload: { readonly rows: readonly GraphRowVM[]; readonly maxLanes: number; readonly hasMore: boolean };
 	}
 	| { readonly type: 'log/commitFiles'; readonly payload: { readonly hash: string; readonly files: readonly LogCommitFileItem[] } }
-	| { readonly type: 'log/busy'; readonly payload: { readonly busy: boolean } };
+	| { readonly type: 'log/busy'; readonly payload: { readonly busy: boolean } }
+	| { readonly type: 'log/ciMeta'; readonly payload: CiMetaVM }
+	| { readonly type: 'log/ciData'; readonly payload: { readonly map: Readonly<Record<string, CiStatusVM>> } };
 
 /** Webview → Host（Log Graph）。 */
 export type LogWebviewToHostMessage =
@@ -127,4 +142,7 @@ export type LogWebviewToHostMessage =
 	| { readonly type: 'log/selectCommit'; readonly payload: { readonly hash: string } }
 	| { readonly type: 'log/commitAction'; readonly payload: { readonly op: LogCommitOp; readonly hash: string } }
 	| { readonly type: 'log/setScope'; readonly payload: { readonly scope: LogScope } }
-	| { readonly type: 'log/openFile'; readonly payload: { readonly hash: string; readonly path: string; readonly hasParent: boolean } };
+	| { readonly type: 'log/openFile'; readonly payload: { readonly hash: string; readonly path: string; readonly hasParent: boolean } }
+	| { readonly type: 'log/requestCi'; readonly payload: { readonly hashes: readonly string[] } }
+	| { readonly type: 'log/ciSignIn' }
+	| { readonly type: 'log/openExternal'; readonly payload: { readonly url: string } };

@@ -7,7 +7,10 @@ import { DEFAULT_LANE_PALETTE } from '../../engine/log/graph-color';
 import { computeGraphLayout, maxLanes } from '../../engine/log/graph-layout';
 import { parseLogLines } from '../../engine/log/log-line';
 import { buildLogArgs, type LogScope } from '../../engine/log/log-query';
+import type { GitHubCiService } from '../ci/github-ci-service';
 import type {
+	CiMetaVM,
+	CiStatusVM,
 	GraphRowVM,
 	LogCommitFileItem,
 	LogGraphState,
@@ -84,7 +87,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 	private refreshTimer: ReturnType<typeof setTimeout> | undefined;
 	private readonly disposables: vscode.Disposable[] = [];
 
-	constructor(private readonly service: GitRepositoryService) {
+	constructor(private readonly service: GitRepositoryService, private readonly ciService: GitHubCiService) {
 		// 兜底实时刷新：git 状态变化（commit/checkout 等）防抖重拉首页。
 		let t: ReturnType<typeof setTimeout> | undefined;
 		this.disposables.push(
@@ -162,6 +165,15 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 					void this.handleCommitMenu(msg.payload.hash);
 				}
 				break;
+			case 'log/requestCi':
+				void this.handleRequestCi(msg.payload.hashes);
+				break;
+			case 'log/openExternal':
+				void this.ciService.openExternal(msg.payload.url);
+				break;
+			case 'log/ciSignIn':
+				void this.handleCiSignIn();
+				break;
 		}
 	}
 
@@ -189,6 +201,47 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			repoRoot: this.service.repoRoot ?? '',
 		};
 		this.post({ type: 'log/graphData', payload: state });
+		// CI 元信息异步随附（不阻塞建图）：远程为 GitHub 才启用，未授权则提示登录。
+		void this.pushCiMeta();
+	}
+
+	/** 推送 CI 能力/授权态（status() 廉价：复用缓存会话）。失败静默回退为不可用。 */
+	private async pushCiMeta(): Promise<void> {
+		if (!this.view) {
+			return;
+		}
+		let meta: CiMetaVM;
+		try {
+			const s = await this.ciService.status();
+			meta = { available: s.available, needsSignIn: s.needsAuth, error: s.error };
+		} catch {
+			meta = { available: false, needsSignIn: false };
+		}
+		if (this.view) {
+			this.post({ type: 'log/ciMeta', payload: meta });
+		}
+	}
+
+	/** 懒加载可见行 CI（webview 滚动按需请求），取数后守卫 view 仍存在再回填。 */
+	private async handleRequestCi(hashes: readonly string[]): Promise<void> {
+		if (hashes.length === 0) {
+			return;
+		}
+		const map = await this.ciService.getStatuses(hashes);
+		if (!this.view || map.size === 0) {
+			return;
+		}
+		const rec: Record<string, CiStatusVM> = {};
+		for (const [hash, vm] of map) {
+			rec[hash] = vm;
+		}
+		this.post({ type: 'log/ciData', payload: { map: rec } });
+	}
+
+	/** 用户点击「登录 GitHub 查看 CI」：走原生授权，完成后刷新 CI 元信息。 */
+	private async handleCiSignIn(): Promise<void> {
+		await this.ciService.signIn();
+		await this.pushCiMeta();
 	}
 
 	private async loadMore(cursor: number): Promise<void> {
@@ -373,6 +426,39 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #details .file .nm { overflow: hidden; text-overflow: ellipsis; }
 #empty { padding: 16px; text-align: center; opacity: 0.6; font-size: 12px; }
 #spinner { position: absolute; bottom: 6px; right: 8px; font-size: 11px; opacity: 0.6; display: none; }
+/* ── CI 状态图标（提交行最右侧，固定 16px 槽位，保证 author/date 列对齐）── */
+.ci { flex: 0 0 16px; width: 16px; display: inline-flex; align-items: center; justify-content: center; }
+.ci svg { display: block; shape-rendering: geometricPrecision; pointer-events: none; }
+.ci-success { color: var(--vscode-testing-iconPassed, #3fb950); }
+.ci-failure { color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground, #f85149)); }
+.ci-pending { color: var(--vscode-testing-iconQueued, var(--vscode-editorWarning-foreground, #d29922)); }
+.ci:not(.ci-empty):hover { filter: brightness(1.15); }
+.ci:not(.ci-empty):focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; border-radius: 3px; }
+/* narrow 模式隐藏 author/date，但 CI 图标例外保留（核心信号）。 */
+#viewport.narrow .ci { display: inline-flex; }
+@keyframes ci-rot { to { transform: rotate(360deg); } }
+.ci-spin { transform-origin: 50% 50%; animation: ci-rot 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ci-spin { animation: none; } }
+.ci-signin { display: none; background: transparent; border: 1px solid var(--vscode-button-border, var(--vscode-input-border, transparent)); color: var(--vscode-textLink-foreground); font-size: 10px; padding: 1px 6px; border-radius: 3px; cursor: pointer; opacity: 0.85; }
+.ci-signin:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
+/* ── CI Tooltip（自定义浮层，置于 #rows 之外，虚拟滚动重写不销毁）── */
+#ci-tip { position: fixed; z-index: 50; display: none; max-width: 360px; min-width: 220px; max-height: 320px; overflow: hidden; background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background)); color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, rgba(128,128,128,.3))); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.35); font-size: 12px; }
+#ci-tip.show { display: flex; flex-direction: column; }
+#ci-tip .tip-h { padding: 7px 10px; font-weight: 600; border-bottom: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); display: flex; align-items: center; gap: 6px; }
+#ci-tip .tip-h .g { flex: 0 0 14px; display: inline-flex; }
+#ci-tip .tip-list { overflow-y: auto; max-height: 240px; padding: 2px 0; }
+#ci-tip .tip-row { display: flex; align-items: flex-start; gap: 7px; padding: 4px 10px; cursor: pointer; }
+#ci-tip .tip-row:hover { background: var(--vscode-list-hoverBackground); }
+#ci-tip .tip-row .g { flex: 0 0 14px; display: inline-flex; margin-top: 1px; }
+#ci-tip .tip-row .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+#ci-tip .tip-row .nm .desc { display: block; font-size: 11px; opacity: 0.7; white-space: normal; word-break: break-word; margin-top: 1px; }
+#ci-tip .tip-foot { padding: 6px 10px; border-top: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); }
+#ci-tip .tip-foot a { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: none; }
+#ci-tip .tip-foot a:hover { text-decoration: underline; }
+#ci-tip .g-success { color: var(--vscode-testing-iconPassed, #3fb950); }
+#ci-tip .g-failure { color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground, #f85149)); }
+#ci-tip .g-pending { color: var(--vscode-testing-iconQueued, var(--vscode-editorWarning-foreground, #d29922)); }
+#ci-tip .g-skipped { color: var(--vscode-descriptionForeground, #8b949e); }
 </style>
 </head>
 <body>
@@ -382,6 +468,7 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
     <button id="scope-current">Current</button>
   </span>
   <span class="repo" id="repo"></span>
+  <button id="ci-signin" class="ci-signin" title="登录 GitHub 查看 CI 状态">登录 GitHub</button>
 </div>
 <div id="viewport" tabindex="0">
   <div id="spacer"><div id="rows"></div></div>
@@ -389,6 +476,7 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
   <div id="spinner">加载中…</div>
 </div>
 <div id="details"><div class="dh" id="details-head"></div><div id="details-list"></div></div>
+<div id="ci-tip" role="dialog" aria-label="CI 检查详情"></div>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 const PALETTE = ${palette};
@@ -398,6 +486,15 @@ let selectedHash = persisted.selectedHash || null;
 let scope = persisted.scope || 'all';
 let model = { rows: [], maxLanes: 0, hasMore: false, repoRoot: '' };
 let renderedFirst = -1, renderedLast = -1, fetching = false;
+// ── CI 状态（懒加载、仅取可见行；ciByHash 缓存、ciRequested 去重、ciPending 防抖批量）──
+const ciByHash = Object.create(null);
+const ciRequested = new Set();
+const ciPending = new Set();
+let ciMeta = { available: false, needsSignIn: false, error: '' };
+let ciReqTimer = null;
+const ciTipEl = document.getElementById('ci-tip');
+const ciSignInEl = document.getElementById('ci-signin');
+let tipHash = null, tipShowT = null, tipHideT = null, overIcon = false, overTip = false;
 const viewport = document.getElementById('viewport');
 const spacer = document.getElementById('spacer');
 const rowsEl = document.getElementById('rows');
@@ -444,6 +541,27 @@ function chipsHtml(row) {
   return parts.join('');
 }
 
+function ciGlyph(state) {
+  if (state === 'success') return '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.8 8.2l2.1 2.1 4.3-4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  if (state === 'failure') return '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
+  if (state === 'pending') return '<svg class="ci-spin" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="10 30"/></svg>';
+  return '';
+}
+
+/** 提交行最右侧的 CI 槽位（固定 16px 保列对齐；available=false 零宽；无数据=空槽不交互）。 */
+function ciSlotHtml(row) {
+  if (!ciMeta.available) return '';
+  const ci = ciByHash[row.hash];
+  if (!ci || ci.state === 'unknown') {
+    return '<span class="ci ci-empty" aria-hidden="true"></span>';
+  }
+  const failed = ci.total - ci.passed;
+  const a11y = ci.state === 'success' ? 'CI 通过 ' + ci.passed + '/' + ci.total
+    : ci.state === 'failure' ? 'CI 失败 ' + failed + '/' + ci.total + ' 项未通过'
+    : 'CI 运行中 ' + ci.passed + '/' + ci.total;
+  return '<span class="ci ci-' + ci.state + '" data-ci="' + esc(row.hash) + '" tabindex="0" role="button" aria-label="' + esc(a11y) + '">' + ciGlyph(ci.state) + '</span>';
+}
+
 function rowHtml(row, idx) {
   const sel = row.hash === selectedHash ? ' selected' : '';
   const merge = row.isMerge ? '<span class="merge" title="合并提交">⇠</span>' : '';
@@ -452,6 +570,7 @@ function rowHtml(row, idx) {
     + '<span class="subject">' + chipsHtml(row) + '<span class="msg">' + esc(row.subject) + '</span>' + merge + '</span>'
     + '<span class="author">' + esc(row.authorName) + '</span>'
     + '<span class="date">' + fmtDate(row.authorDate) + '</span>'
+    + ciSlotHtml(row)
     + '</div>';
 }
 
@@ -469,6 +588,7 @@ function render() {
     rowsEl.innerHTML = html.join('');
     rowsEl.style.transform = 'translateY(' + (f * ROW_H) + 'px)';
   }
+  collectCiRequests(f, l);
   spacer.style.height = (total * ROW_H) + 'px';
   emptyEl.style.display = total === 0 ? 'block' : 'none';
   document.getElementById('scope-all').classList.toggle('active', scope === 'all');
@@ -480,6 +600,91 @@ function render() {
 }
 
 function scheduleRender() { requestAnimationFrame(render); }
+
+/** 收集可见行中尚未取数的 hash（O(可见行)，幂等），防抖后批量请求，绝不重复请求已知项。 */
+function collectCiRequests(f, l) {
+  if (!ciMeta.available) return;
+  for (let i = f; i < l; i++) {
+    const h = model.rows[i] && model.rows[i].hash;
+    if (!h || (h in ciByHash) || ciRequested.has(h)) continue;
+    ciRequested.add(h);
+    ciPending.add(h);
+  }
+  if (ciPending.size === 0 || ciReqTimer) return;
+  ciReqTimer = setTimeout(flushCiRequests, 200);
+}
+function flushCiRequests() {
+  ciReqTimer = null;
+  if (ciPending.size === 0) return;
+  const hashes = Array.from(ciPending);
+  ciPending.clear();
+  vscode.postMessage({ type: 'log/requestCi', payload: { hashes: hashes } });
+}
+
+// ── CI Tooltip（自定义浮层：列明细 + 失败原因 + 跳转链接，仿 IDEA / GitHub）──
+function tipGlyph(state) {
+  if (state === 'skipped' || state === 'unknown') {
+    return '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4 8h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
+  }
+  return ciGlyph(state);
+}
+function buildTip(ci) {
+  const headState = ci.state === 'success' ? 'success' : ci.state === 'failure' ? 'failure' : 'pending';
+  const headTxt = ci.state === 'success' ? ('全部 ' + ci.total + ' 项检查通过')
+    : ci.state === 'failure' ? ((ci.total - ci.passed) + ' / ' + ci.total + ' 项检查未通过')
+    : ci.state === 'pending' ? ('检查运行中 ' + ci.passed + ' / ' + ci.total) : 'CI 状态未知';
+  // 失败项前置，悬停即可见未通过原因。
+  const ordered = ci.checks.slice().sort(function (a, b) {
+    return (a.state === 'failure' ? 0 : 1) - (b.state === 'failure' ? 0 : 1);
+  });
+  const parts = ['<div class="tip-h"><span class="g g-', headState, '">', ciGlyph(headState), '</span>', esc(headTxt), '</div><div class="tip-list">'];
+  if (ordered.length === 0) parts.push('<div class="tip-row" style="opacity:.6;cursor:default">暂无检查明细</div>');
+  for (const c of ordered) {
+    const desc = (c.state === 'failure' && c.description) ? '<span class="desc">' + esc(c.description) + '</span>' : '';
+    parts.push('<div class="tip-row" data-url="', esc(c.url || ''), '" role="link" tabindex="0">', tipGlyph(c.state), '<span class="nm">', esc(c.name), desc, '</span></div>');
+  }
+  parts.push('</div>');
+  if (ci.url) parts.push('<div class="tip-foot"><a data-url="', esc(ci.url), '" role="link" tabindex="0">在 GitHub 上查看</a></div>');
+  ciTipEl.innerHTML = parts.join('');
+}
+function positionTip(rect) {
+  ciTipEl.style.display = 'flex';
+  const tw = ciTipEl.offsetWidth, th = ciTipEl.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight, pad = 6;
+  let left = rect.left;
+  if (left + tw > vw - pad) left = vw - pad - tw;
+  if (left < pad) left = pad;
+  let top = rect.bottom + 4;
+  if (top + th > vh - pad) top = rect.top - th - 4;
+  if (top < pad) top = pad;
+  ciTipEl.style.left = left + 'px';
+  ciTipEl.style.top = top + 'px';
+}
+function scheduleShow(hash, iconEl) {
+  clearTimeout(tipHideT);
+  if (tipHash === hash && ciTipEl.classList.contains('show')) return;
+  clearTimeout(tipShowT);
+  tipShowT = setTimeout(function () {
+    const ci = ciByHash[hash];
+    if (!ci || ci.state === 'unknown') return;
+    tipHash = hash;
+    buildTip(ci);
+    positionTip(iconEl.getBoundingClientRect());
+    ciTipEl.classList.add('show');
+  }, 350);
+}
+function scheduleHide() {
+  clearTimeout(tipShowT);
+  clearTimeout(tipHideT);
+  tipHideT = setTimeout(function () { if (!overIcon && !overTip) hideTip(); }, 220);
+}
+function hideTip() {
+  ciTipEl.classList.remove('show');
+  ciTipEl.style.display = 'none';
+  tipHash = null;
+}
+function openCiUrl(url) { if (url) vscode.postMessage({ type: 'log/openExternal', payload: { url: url } }); }
+function renderCiMeta() { ciSignInEl.style.display = ciMeta.needsSignIn ? 'inline-block' : 'none'; }
 
 function selectRow(hash) {
   selectedHash = hash;
@@ -504,9 +709,47 @@ function moveSel(delta) {
 }
 
 rowsEl.addEventListener('click', function (e) {
+  if (e.target.closest('.ci')) return; // 点击 CI 图标不选中提交行
   const r = e.target.closest('.row'); if (!r) return;
   selectRow(r.getAttribute('data-hash'));
 });
+rowsEl.addEventListener('mouseover', function (e) {
+  const icon = e.target.closest && e.target.closest('.ci');
+  if (!icon || icon.classList.contains('ci-empty')) return;
+  overIcon = true;
+  scheduleShow(icon.getAttribute('data-ci'), icon);
+});
+rowsEl.addEventListener('mouseout', function (e) {
+  const icon = e.target.closest && e.target.closest('.ci');
+  if (!icon) return;
+  overIcon = false;
+  scheduleHide();
+});
+rowsEl.addEventListener('keydown', function (e) {
+  const icon = e.target.closest && e.target.closest('.ci');
+  if (!icon || icon.classList.contains('ci-empty')) return;
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault(); e.stopPropagation(); // 阻止冒泡到 viewport 的 Enter→菜单
+    const ci = ciByHash[icon.getAttribute('data-ci')];
+    if (!ci || ci.state === 'unknown') return;
+    tipHash = icon.getAttribute('data-ci');
+    buildTip(ci);
+    positionTip(icon.getBoundingClientRect());
+    ciTipEl.classList.add('show');
+    const first = ciTipEl.querySelector('[data-url]'); if (first) first.focus();
+  }
+});
+ciTipEl.addEventListener('mouseenter', function () { overTip = true; clearTimeout(tipHideT); });
+ciTipEl.addEventListener('mouseleave', function () { overTip = false; scheduleHide(); });
+ciTipEl.addEventListener('click', function (e) {
+  const t = e.target.closest('[data-url]'); if (!t) return;
+  openCiUrl(t.getAttribute('data-url'));
+});
+ciTipEl.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') { hideTip(); }
+  else if (e.key === 'Enter') { const t = e.target.closest('[data-url]'); if (t) openCiUrl(t.getAttribute('data-url')); }
+});
+ciSignInEl.addEventListener('click', function () { vscode.postMessage({ type: 'log/ciSignIn' }); });
 rowsEl.addEventListener('dblclick', function (e) {
   const r = e.target.closest('.row'); if (!r) return;
   vscode.postMessage({ type: 'log/commitAction', payload: { op: 'menu', hash: r.getAttribute('data-hash') } });
@@ -519,6 +762,7 @@ rowsEl.addEventListener('contextmenu', function (e) {
 document.getElementById('scope-all').addEventListener('click', function () { if (scope !== 'all') { scope = 'all'; vscode.setState({ selectedHash: selectedHash, scope: scope }); vscode.postMessage({ type: 'log/setScope', payload: { scope: 'all' } }); } });
 document.getElementById('scope-current').addEventListener('click', function () { if (scope !== 'current') { scope = 'current'; vscode.setState({ selectedHash: selectedHash, scope: scope }); vscode.postMessage({ type: 'log/setScope', payload: { scope: 'current' } }); } });
 viewport.addEventListener('scroll', scheduleRender, { passive: true });
+viewport.addEventListener('scroll', function () { if (tipHash) hideTip(); }, { passive: true });
 viewport.addEventListener('keydown', function (e) {
   if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-1); }
@@ -550,6 +794,11 @@ window.addEventListener('message', function (e) {
   if (m.type === 'log/graphData') {
     model = { rows: m.payload.rows, maxLanes: m.payload.maxLanes, hasMore: m.payload.hasMore, repoRoot: m.payload.repoRoot };
     scope = m.payload.scope; repoEl.textContent = m.payload.repoRoot; repoEl.title = m.payload.repoRoot;
+    // 图全量重置 → CI 缓存随之失效（提交集合被替换）。
+    for (const k in ciByHash) delete ciByHash[k];
+    ciRequested.clear(); ciPending.clear();
+    if (ciReqTimer) { clearTimeout(ciReqTimer); ciReqTimer = null; }
+    hideTip();
     renderedFirst = -1; renderedLast = -1; viewport.scrollTop = 0; fetching = false; spinnerEl.style.display = 'none';
     if (!model.rows.some(function (r) { return r.hash === selectedHash; })) selectedHash = null;
     scheduleRender();
@@ -562,6 +811,26 @@ window.addEventListener('message', function (e) {
     renderDetails(m.payload.hash, m.payload.files);
   } else if (m.type === 'log/busy') {
     spinnerEl.style.display = m.payload.busy ? 'block' : 'none';
+  } else if (m.type === 'log/ciMeta') {
+    ciMeta = { available: !!m.payload.available, needsSignIn: !!m.payload.needsSignIn, error: m.payload.error || '' };
+    renderCiMeta();
+    renderedFirst = -1; // 强制重绘可见行（CI 槽位/登录提示出现或消失）
+    scheduleRender();
+  } else if (m.type === 'log/ciData') {
+    const map = m.payload.map;
+    let touched = false;
+    for (const h in map) { ciByHash[h] = map[h]; ciRequested.add(h); touched = true; }
+    if (touched) {
+      renderedFirst = -1; scheduleRender(); // 就地重绘可见行图标
+      // 数据到达后重锚开启中的 Tooltip（图标新增/pending→终态变化）。
+      requestAnimationFrame(function () {
+        if (tipHash && ciTipEl.classList.contains('show')) {
+          const el = rowsEl.querySelector('[data-ci="' + tipHash.replace(/[^a-f0-9]/gi, '') + '"]');
+          if (el) { buildTip(ciByHash[tipHash]); positionTip(el.getBoundingClientRect()); }
+          else hideTip();
+        }
+      });
+    }
   }
 });
 

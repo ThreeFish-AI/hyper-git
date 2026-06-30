@@ -30,6 +30,8 @@ import { registerMergeCommands } from './adapter/webview/merge-editor';
 import { registerMiscCommands } from './adapter/misc-commands';
 import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
+import { GitHubAuth } from './adapter/ci/github-auth';
+import { GitHubCiService } from './adapter/ci/github-ci-service';
 import { createLogger } from './infra/logger';
 
 /**
@@ -63,6 +65,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const service = new GitRepositoryService(api);
 	const registry = new ChangelistRegistry(context.workspaceState, service.repoRoot ?? workspaceRoot);
 	const favorites = new BranchFavorites(context.workspaceState, service.repoRoot ?? workspaceRoot);
+	const githubAuth = new GitHubAuth(context.subscriptions);
+	const ciService = new GitHubCiService(service, githubAuth, logger);
 	const tree = new ChangesTreeProvider(service, registry);
 	// createTreeView（registerTreeDataProvider 的超集）以获取 TreeView 句柄承载 .badge；
 	// 活动栏容器图标的数字角标 = 容器内各视图 badge.value 之和，故此处点亮即映射到 Hyper Git 图标。
@@ -77,7 +81,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		conflict: new NullConflictResolver(),
 	});
 	const commitView = new CommitWebviewProvider(service, registry, commit);
-	const logTree = new LogWebviewProvider(service);
+	const logTree = new LogWebviewProvider(service, ciService);
 	const branchesTree = new BranchesTreeProvider(service, favorites);
 	// Branches 视图启用多选（canSelectMany 仅 createTreeView 支持，registerTreeDataProvider 不支持）；
 	// 多选后批量操作（删除分支/标签、复制引用、收藏）作用于整个选区。
@@ -100,6 +104,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		registry,
 		favorites,
 		commit,
+		ciService,
 		logTree,
 		branchesTree,
 		stashTree,
@@ -127,6 +132,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		...registerWorktreeCommands(service, worktreeTree),
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
+		vscode.commands.registerCommand('hyperGit.ci.signIn', () => ciService.signIn()),
 		vscode.commands.registerCommand('hyperGit.showConsole', () => showGitConsole()),
 		vscode.commands.registerCommand('hyperGit.startRebase', () => RebaseWebview.open(service)),
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, inlineLens),

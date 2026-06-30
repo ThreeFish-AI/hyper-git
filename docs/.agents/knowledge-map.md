@@ -16,6 +16,7 @@
 
 ## 项目文档（docs/）
 - [文档中心](../docs/README.md) — 文档与调研资产总索引。
+- [Log 视图 CI 状态](../docs/features/log-ci-status.md) — 按提交显示 GitHub CI 最终状态（绿勾/红叉 + Tooltip 明细）：认证、限流、懒加载、边界与配置。
 - [实施状态总览](../docs/milestones/implementation-status.md) — M0-M5 交付记录 + API 限制 + M5 AI 设计 + 验证/发布（**实施看板**）。
 - [工程实施方案](../docs/architecture/engineering-plan.md) — 路径 B 架构 + M0-M5 里程碑（**开发蓝图**）。
 - [IDEA 功能复刻矩阵](../docs/requirements/idea-feature-matrix.md) — 56 功能点 / 8 组（**验收基线**）。
