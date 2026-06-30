@@ -1,7 +1,9 @@
 const assert = require('assert');
 const vscode = require('vscode');
+const pkg = require('../../package.json');
 
-const EXT_ID = 'threefish-ai.hyper-git';
+// 从 package.json 动态推导 extension ID（publisher.name），避免硬编码导致改名后失效。
+const EXT_ID = `${pkg.publisher}.${pkg.name}`;
 
 suite('扩展冒烟测试', function () {
 	this.timeout(30000);
