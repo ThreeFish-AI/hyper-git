@@ -91,7 +91,12 @@ export class MergeEditorWebview {
 
 	private static renderHtml(filePath: string, hunks: readonly MergeHunk[], conflicts: number): string {
 		const nonce = crypto.randomBytes(16).toString('base64');
-		const dataJson = escapeHtml(JSON.stringify(hunks));
+		// JSON 注入 <script> 内的 JS 字符串上下文：按 JS-string 转义（反斜杠/引号）+ < → < 防 </script> 破出。
+		// 不可用 escapeHtml——其产出 &quot; 在 <script> raw-text 中不被解码，会令 JSON.parse 失败。
+		const dataJson = JSON.stringify(hunks)
+			.replace(/\\/g, '\\\\')
+			.replace(/"/g, '\\"')
+			.replace(/</g, '\\u003c');
 		return `<!DOCTYPE html>
 <html lang="en">
 <head>
