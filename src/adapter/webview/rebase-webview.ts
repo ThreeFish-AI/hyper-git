@@ -37,7 +37,7 @@ if (idx < subjects.length) {
 `;
 
 /**
- * 交互式 Rebase Webview（1:1 复刻 IDEA Git Log → Edit Rebase 编辑器）。
+ * 交互式 Rebase Webview（交互式 Rebase 编辑器）。
  *
  * 展示 base..HEAD 的提交列表，每条可设 pick/reword/edit/squash/fixup/drop 动作；
  * reword 支持行内编辑新 message；行可拖拽重排序。

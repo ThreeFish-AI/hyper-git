@@ -71,7 +71,7 @@ interface GraphPage {
 }
 
 /**
- * Log 视图（WebviewView）：完整复刻 IntelliJ IDEA Git Log 的提交图（DAG）。
+ * Log 视图（WebviewView）：可视化提交图（DAG）。
  *
  * 自计算 lane 布局（engine/log/graph-layout）→ 渲染彩色泳道；host 侧单次 `git log --topo-order`
  * 取数 + `for-each-ref` 取引用标签；webview 端虚拟化 SVG 行 + 文本列。保留全部既有交互：
@@ -626,7 +626,7 @@ function flushCiRequests() {
   vscode.postMessage({ type: 'log/requestCi', payload: { hashes: hashes } });
 }
 
-// ── CI Tooltip（自定义浮层：列明细 + 失败原因 + 跳转链接，仿 IDEA / GitHub）──
+// ── CI Tooltip（自定义浮层：列明细 + 失败原因 + 跳转链接）──
 function tipGlyph(state) {
   const svg = (state === 'unknown' || state === 'skipped')
     ? '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4 8h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>'

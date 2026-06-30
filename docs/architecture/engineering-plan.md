@@ -1,13 +1,13 @@
 # Hyper Git — VS Code 扩展工程实施方案
 
-> 复刻 IntelliJ IDEA 社区版「Git 工具窗口 + Commit 提交窗口」全功能，并为未来 AI Agent 自主代理预留架构接缝。
+> 提供完整的「Git 变更管理 + Commit 提交工作流」（功能完备性参考 IntelliJ IDEA 等成熟实现），并为未来 AI Agent 自主代理预留架构接缝。
 > 决策已与用户确认：**路径 B**（消费 `vscode.git` API + 自建 changelist registry + 独立视图容器）、扩展命名 **Hyper Git**、**双市场发布**、**AI 现仅预留接缝 + Null 实现、延后至 M5**。
 
 ---
 
 ## 0. Context（背景与目标）
 
-**为什么做**：IntelliJ IDEA 的统一 Git 工具窗口（顶部 `Commit/Shelf/Stash` 标签页 + Changes 变更树 + Commit Message 编辑区 + 提交前 Inspection）是 Java/全栈开发者高频依赖的工作流，但迁移到 VS Code 后只能用原生 Source Control 视图（无多 changelist、无忠实 Commit 窗口、无提交前检查流水线）。本项目目标是**在 VS Code 上 1:1 复刻该体验**，并在未来为 git 管理引入 AI Agent（提交信息生成 / 提交前代码审查 / 变更语义分组 / 冲突解决）。
+**为什么做**：IntelliJ IDEA 的统一 Git 工具窗口（顶部 `Commit/Shelf/Stash` 标签页 + Changes 变更树 + Commit Message 编辑区 + 提交前 Inspection）是 Java/全栈开发者高频依赖的工作流，但迁移到 VS Code 后只能用原生 Source Control 视图（无多 changelist、无独立 Commit 窗口、无提交前检查流水线）。本项目目标是**在 VS Code 上提供同等完备的 Git 变更管理与提交工作流**，并在未来为 git 管理引入 AI Agent（提交信息生成 / 提交前代码审查 / 变更语义分组 / 冲突解决）。
 
 **当前状态**：仓库为全新 greenfield 工程（仅有 `.agents/` 文档脚手架与 AGENTS.md 协议，无源码 / 无 package.json / 无 README）。本方案从零搭建。
 
@@ -23,13 +23,13 @@
 | 决策项 | 结论 | 循证依据 |
 |---|---|---|
 | **git 操作底座** | 消费内置 `vscode.git` 扩展导出的 `API`（`getAPI(1)` → `Repository`），**不自调 git CLI、不重造状态机** | `git.d.ts` 已暴露 commit/add/revert/diff/blame/log/stash/branch/merge/rebase 全套；GitHub PR 扩展即此模式 |
-| **changelist 表达** | **自建 changelist registry**（仿 IDEA `ChangeListManager`），以 TreeView 渲染；**不**注册竞争性 SCM Provider | Track1：IDEA active 列表 + 跨列表行级归属，原生 SCM group 无法表达 |
+| **changelist 表达** | **自建 changelist registry**（借鉴 JetBrains `ChangeListManager` 设计），以 TreeView 渲染；**不**注册竞争性 SCM Provider | Track1：IDEA active 列表 + 跨列表行级归属，原生 SCM group 无法表达 |
 | **视图容器** | 活动栏新建独立视图容器 `hyper-git`，承载 Changes/Commit/Log/Branches/Shelf/Stash；**不接管/不替代原生 Source Control 视图**（避免双胞胎冲突） | Track2：注册独立 SCM 会与原生 git 视图并列混淆 |
 | **Commit 编辑器** | WebviewView 自绘（多行 / 模板 / Conventional Commits 校验 / Amend / Author / sign-off） | 原生 `SourceControlInputBox` 仅 `value` 字段，Provider 已删除 |
 | **Log 提交图** | Webview 自绘 SVG graph + 消费 `Repository.log()` | `scmHistoryProvider` 为 proposed，上架不可用 |
 | **Diff 预览** | 复用 `vscode.diff` + `api.toGitUri(uri,'HEAD')`（零成本） | Track2 §5.5 |
 | **发布** | 双市场（Marketplace + OpenVSX） | Cursor/Windsurf 走 OpenVSX；AI 受众主战场 |
-| **AI** | 现仅定义接缝 + Null 实现，实现延后 M5 | YAGNI + 复用 IDEA `CheckinHandler` 语义 |
+| **AI** | 现仅定义接缝 + Null 实现，实现延后 M5 | YAGNI + 借鉴 JetBrains `CheckinHandler` 责任链语义 |
 
 **架构总览（Mermaid，深色模式高对比）**：
 
@@ -105,7 +105,7 @@ hyper-git/
     ├── engine/               # 【引擎层】纯领域逻辑，零 vscode 依赖
     │   ├── model/            #   FileChange / Changelist / Commit / Branch / StashEntry / ConflictHunk
     │   ├── diff/             #   diff 解析 + 行级 patch（partial commit 基础）
-    │   ├── commit/           #   CommitPipeline（Checkin hook 责任链，仿 IDEA CheckinHandler）
+    │   ├── commit/           #   CommitPipeline（Checkin hook 责任链，借鉴 JetBrains CheckinHandler 设计）
     │   └── scm-mapping/      #   Status(M/A/D/U/R/C) → decorations 映射（纯函数）
     ├── adapter/              # 【适配层】唯一接触 vscode API
     │   ├── git-repository.ts #   GitRepositoryAdapter：封装 vscode.git Repository（add/commit/diff/log/stash/branch…）
@@ -118,7 +118,7 @@ hyper-git/
     ├── agent/                # 【代理层】AI 接缝（预留，Null 实现）
     │   ├── llm-provider.ts   #   ILlmProvider（模型来源抽象：vscodeLM/byok/openaiCompatible）
     │   ├── commit-message.ts #   ICommitMessageProvider（生成 + Conventional Commits 校验）
-    │   ├── pre-commit.ts     #   IPreCommitInspector（对齐 IDEA beforeCheckin/CommitCheck）
+    │   ├── pre-commit.ts     #   IPreCommitInspector（借鉴 JetBrains beforeCheckin/CommitCheck 机制）
     │   ├── grouper.ts        #   IChangelistGrouper（语义分组）
     │   ├── conflict.ts       #   IConflictResolver（三方合并建议）
     │   └── chat-tools.ts     #   IChatToolRegistrar（M5 暴露 git 能力给 Agent）
@@ -157,9 +157,9 @@ hyper-git/
 
 ---
 
-## 4. IDEA 功能复刻优先级矩阵
+## 4. 功能优先级矩阵
 
-> 基于 Track1 的 56 功能点，按价值×依赖×难度分入 P0(MVP)/P1(核心对齐)/P2(高级对齐)/P3(AI 增强)。完整 56 项明细见 [IDEA 功能复刻矩阵](../requirements/idea-feature-matrix.md)（后续验收的需求基线）。
+> 基于 Track1 的 56 功能点，按价值×依赖×难度分入 P0(MVP)/P1(核心功能)/P2(高级功能)/P3(AI 增强)。完整 56 项明细见 [功能矩阵](../requirements/idea-feature-matrix.md)（后续验收的需求基线）。
 
 | 优先级 | 功能域 | 代表功能（来源 Track1 编号） |
 |---|---|---|
@@ -168,9 +168,9 @@ hyper-git/
 | **P1 核心** | Commit 检查流水线 | 提交前 Inspection 框架(#10，对接 VS Code Diagnostics)、Commit Checks 顺序闸门(#11)、CRLF/大文件预检(#12)、Conventional Commits 校验(#4，IDEA 无内置需自建 linter) |
 | **P1 核心** | Branches | 创建/检出/删除/重命名(#45/#46)、Merge/Rebase/Pull/Push/Fetch(#48)、Compare(#47) |
 | **P1 核心** | Stash + Diff | Stash apply/pop/drop(#29/#30)、Annotate(blame)(#37)、Show History(#38) |
-| **P2 高级** | Partial / 行级提交 | 按代码块提交(#23)、按行提交(#24)、Move Lines to Changelist(#25)——最难，仿 `PartialChangesUtil` |
+| **P2 高级** | Partial / 行级提交 | 按代码块提交(#23)、按行提交(#24)、Move Lines to Changelist(#25)——最难，参考 `PartialChangesUtil` 实现 |
 | **P2 高级** | Log 提交图 | graph 自绘(#39)、filter(#40)、cherry-pick/revert from log(#41/#42)、Undo Commit(#43) |
-| **P2 高级** | Shelf | 忠实 shelve/unshelve with conflict(#27/#28，patch 存储+三方合并)；MVP 先用 stash 近似 |
+| **P2 高级** | Shelf | 完整 shelve/unshelve with conflict(#27/#28，patch 存储+三方合并)；MVP 先用 stash 近似 |
 | **P3 AI 增强** | （M5，接缝现已埋） | AI 提交信息生成、AI 提交前审查、AI 语义分组、AI 冲突解决、AI release notes、Chat Tools 暴露 git 能力 |
 
 ---
@@ -199,8 +199,8 @@ hyper-git/
 - 验收：Log 图正确渲染拓扑；分支操作经真实 git 验证；blame 行级显示作者。
 - 依赖：M1、M2。
 
-**M4 — Shelf + Partial/行级提交 + Stash UI（Parity 收口，0.6.0）**
-- 交付：忠实 Shelf（patch 存储 + unshelve 三方合并）、行级 partial commit（仿 `PartialChangesUtil` + 行级 hunk staging）、Stash 完整 UI（apply/pop/drop/clear/keep-index）、Git Staging Area 模式开关。
+**M4 — Shelf + Partial/行级提交 + Stash UI（功能收口，0.6.0）**
+- 交付：完整 Shelf（patch 存储 + unshelve 三方合并）、行级 partial commit（参考 `PartialChangesUtil` 实现 + 行级 hunk staging）、Stash 完整 UI（apply/pop/drop/clear/keep-index）、Git Staging Area 模式开关。
 - 验收：shelve/unshelve with conflict 可解；单文件部分行可单独提交。
 - 依赖：M2、M3。
 
@@ -213,13 +213,13 @@ hyper-git/
 
 ## 6. AI 集成架构预留点（现建接缝，M5 实现）
 
-> 对齐 IDEA `CheckinHandler` 生命周期（Track1 D 节：`beforeCheckin`/`CommitCheck.runCheck`/`includedChangesChanged`/`checkinSuccessful`/`checkinFailed`）。**只定义契约 + Null 实现，不引入 Copilot 依赖**（未启用 AI 用户零负担）。
+> 借鉴 JetBrains `CheckinHandler` 生命周期设计（Track1 D 节：`beforeCheckin`/`CommitCheck.runCheck`/`includedChangesChanged`/`checkinSuccessful`/`checkinFailed`）。**只定义契约 + Null 实现，不引入 Copilot 依赖**（未启用 AI 用户零负担）。
 
-| 接缝（Agent 层） | 对齐 IDEA | 为何现在抽 |
+| 接缝（Agent 层） | 借鉴 JetBrains 机制 | 为何现在抽 |
 |---|---|---|
 | `ILlmProvider`（模型来源抽象） | — | **最关键**：未来切换 vscodeLM/byok/自带 key 的命脉；晚抽则所有 AI 调用散落、迁移成本爆炸 |
 | `ICommitMessageProvider` | （IDEA 无内置，插件有） | 提交信息是 commit 流水线核心产物，留接缝让"无 AI→LM→自带 key"平滑切换 |
-| `IPreCommitInspector` | `beforeCheckin`/`CommitCheck.runCheck`（返回 COMMIT/CANCEL/DEFER，对齐 `ReturnResult`） | 复用 IDEA 20+ 年验证的 hook 闸门机制；AI 审查最佳挂载点 |
+| `IPreCommitInspector` | `beforeCheckin`/`CommitCheck.runCheck`（返回 COMMIT/CANCEL/DEFER，参考 `ReturnResult`） | 借鉴 JetBrains 20+ 年验证的 hook 闸门机制设计；AI 审查最佳挂载点 |
 | `IChangelistGrouper` | （IDEA 无内置） | 写回 changelist 模型（回写工作流，差异化于内置 Copilot） |
 | `IConflictResolver` | （IDEA 无内置） | 必须 `prepareInvocation` 用户确认（VS Code 工具确认机制，安全红线） |
 
@@ -259,7 +259,7 @@ hyper-git/
 - **单元测试（Vitest，< 30s）**：`engine/model`、`engine/diff`（行级 patch）、`engine/scm-mapping`（Status→decorations）、`engine/commit`（hook 责任链顺序/阻断）、Conventional Commits linter 纯函数。
 - **集成测试（@vscode/test-electron + Mocha，< 2min）**：`adapter/git-repository`（真实 fixture 仓库读 changes/commit/stash）、`adapter/changelist-registry`（持久化往返）、`adapter/webview`（postMessage 协议契约）、Commit 全链路（勾选→message→commit→验证 `git log`）。
 - **手动回归清单**：多 changelist 新建/移动/删除/重启持久化；Amend；Commit and Push；Conventional Commits 拦截；Log 图过滤；分支 merge/rebase；shelve/unshelve with conflict；行级 partial commit。
-- **浏览器/编辑器验证**：按 AGENTS.md 浏览器验证协议——用户已认证 Chrome 主 profile 打开真实仓库，截图验证 UI 还原度（Commit 窗口 vs 图1/图2 对齐）。
+- **浏览器/编辑器验证**：按 AGENTS.md 浏览器验证协议——用户已认证 Chrome 主 profile 打开真实仓库，截图验证 Commit 窗口的 UI 渲染与交互完整性（对照设计参考图1/图2）。
 - **发布前自证**：Diff 分析、测试覆盖、三平台 CI 绿、`.vsix` 在干净 VS Code + Cursor 实机安装回归。
 
 ---

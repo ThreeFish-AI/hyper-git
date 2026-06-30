@@ -3,7 +3,7 @@
  *
  * line-porcelain 格式：每行一个 header 块（首行 "<sha> <origLine> <finalLine> [groupCount]"），
  * 随后若干 "key value" 元数据（author / author-time / summary 等），以 "\t<原始行内容>" 结束。
- * 解析为每个最终行号 → BlameLine，供编辑器 gutter 注解（IDEA Annotate 等价）。
+ * 解析为每个最终行号 → BlameLine，供编辑器 gutter 注解（逐行作者 / 日期 / 提交注解）。
  */
 
 export interface BlameLine {

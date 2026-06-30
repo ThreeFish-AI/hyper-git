@@ -25,7 +25,7 @@ export type BranchNode = BranchGroupNode | BranchRefNode;
  *
  * 数据源策略（解除「视图空白」根因）：主路径读 `Repository.state.refs`（API，零成本）；
  * 为空（首帧未填充 / 仓库初始化竞态）时经 CLI 通道 `git for-each-ref` 兜底（含 ahead/behind track）。
- * 四段分组：Favorites（收藏置顶，仿 IDEA）/ Local / Remote / Tags。
+ * 四段分组：Favorites（收藏置顶，参考 JetBrains 分组设计）/ Local / Remote / Tags。
  * 构造函数自订阅 service.onDidChange + favorites.onDidChange 做即时刷新。
  */
 export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>, vscode.Disposable {

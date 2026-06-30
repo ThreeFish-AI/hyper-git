@@ -1,10 +1,10 @@
 /**
  * 提交前检查流水线（有序责任链）。
  *
- * 对齐 IntelliJ IDEA `CheckinHandler` 生命周期（platform/vcs-api/.../checkin/CheckinHandler.java）：
- * - `CheckinResult` 对齐 `CheckinHandler.ReturnResult`（COMMIT / CANCEL / CLOSE_WINDOW→映射为 DEFER）；
- * - `CheckinHook.beforeCheckin` 对齐 `beforeCheckin()` 闸门；
- * - `executionOrder` 对齐 `CommitCheck.ExecutionOrder`（越小越早，默认 100）。
+ * 参考 JetBrains `CheckinHandler.beforeCheckin()` 责任链设计（platform/vcs-api/.../checkin/CheckinHandler.java）：
+ * - `CheckinResult` 对应 `CheckinHandler.ReturnResult`（COMMIT / CANCEL / CLOSE_WINDOW→映射为 DEFER）；
+ * - `CheckinHook.beforeCheckin` 对应 `beforeCheckin()` 闸门；
+ * - `executionOrder` 对应 `CommitCheck.ExecutionOrder`（越小越早，默认 100）。
  *
  * 任一 hook 返回 CANCEL 即阻断提交。M2 起注入内置检查与（M5）AI 审查。
  */

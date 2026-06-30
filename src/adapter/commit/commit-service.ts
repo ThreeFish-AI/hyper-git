@@ -44,7 +44,7 @@ const RECENT_KEY = 'hyperGit.recentCommitMessages';
 const RECENT_MAX = 10;
 
 /**
- * CommitService：编排提交流水线（对齐 IDEA checkin 流程）。
+ * CommitService：编排提交流水线（参考 JetBrains checkin 流程设计）。
  *
  * 流程：校验信息 → 解析选中文件 → stage → CommitPipeline 责任链（Checkin hook）→ commit → 可选 push。
  * 注入 5 个 AI 接缝（Null 实现），为 M5 即插即用预留。
@@ -133,7 +133,7 @@ export class CommitService implements vscode.Disposable {
 		}
 
 		try {
-			// 让勾选集成为提交的权威范围：未勾选的已暂存文件先 unstage（对齐 IDEA「提交该集合」语义）
+			// 让勾选集成为提交的权威范围：未勾选的已暂存文件先 unstage（参考 JetBrains「提交该集合」语义）
 			const toUnstage = changes.filter((c) => c.staged && !checkedSet.has(c.relativePath)).map((c) => c.uri.fsPath);
 			if (toUnstage.length > 0) {
 				await repo.restore(toUnstage, { staged: true });

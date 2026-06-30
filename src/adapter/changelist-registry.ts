@@ -12,7 +12,7 @@ interface PersistedState {
 }
 
 /**
- * ChangelistRegistry：仿 IDEA ChangeListManager 的多 changelist 管理。
+ * ChangelistRegistry：参考 JetBrains ChangeListManager 设计的多 changelist 管理。
  * 维护命名 changelist 列表 + fileKey→changelist 分配表 + active changelist；
  * 持久化于 workspaceState（按仓库根隔离），重启后恢复。
  */

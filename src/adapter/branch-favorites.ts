@@ -4,7 +4,7 @@ import { toggleFavorite } from '../engine/ref/favorites';
 /**
  * BranchFavorites：分支收藏持久化（仿 {@link ChangelistRegistry}）。
  *
- * IDEA「Set Favorite」能力：把常用分支标星置顶。收藏名列表存于 workspaceState（按仓库根隔离），
+ * 分支收藏（Set Favorite）能力：把常用分支标星置顶。收藏名列表存于 workspaceState（按仓库根隔离），
  * 重启后恢复。集合运算复用纯逻辑 {@link toggleFavorite}，便于单测。
  */
 export class BranchFavorites implements vscode.Disposable {

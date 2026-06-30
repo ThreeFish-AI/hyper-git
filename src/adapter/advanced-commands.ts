@@ -8,7 +8,7 @@ import { selectedBranchRefs } from './branch-selection';
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /**
- * 注册高级 git 操作（Batch 3）—— 补齐 IDEA Log/Branches 的高级动作。
+ * 注册高级 git 操作（Batch 3）—— Log/Branches 的高级动作。
  * undo commit（soft reset）/ drop commit（rebase --onto）/ fixup（autosquash，经 env 注入 GIT_SEQUENCE_EDITOR）
  * / cleanup branches（--merged 批量删）/ copy branch ref / 3-way diff 概览。
  */

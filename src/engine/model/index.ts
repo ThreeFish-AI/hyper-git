@@ -5,7 +5,7 @@
  * 但作为本扩展自有领域模型独立定义，避免 Engine 层反向依赖 vscode。
  */
 
-/** 文件变更状态。字母值对齐 IDEA / VS Code 文件状态色约定。 */
+/** 文件变更状态。字母值对应 VS Code 文件状态色约定（着色语义参考 JetBrains 文件状态色）。 */
 export enum FileStatus {
 	Modified = 'M',
 	Added = 'A',
@@ -40,7 +40,7 @@ export interface FileChange {
 	readonly oldUri?: string;
 }
 
-/** 命名变更列表（仿 IDEA LocalChangeList）。active 列表为新改动默认落入目标。 */
+/** 命名变更列表（参考 JetBrains LocalChangeList 设计）。active 列表为新改动默认落入目标。 */
 export interface Changelist {
 	readonly id: string;
 	readonly name: string;

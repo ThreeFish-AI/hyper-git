@@ -308,7 +308,7 @@ export function registerHistoryCommands(
 		}),
 	);
 
-	// —— IDEA 风格 Branches 高级操作（Phase 1）——
+	// —— Branches 高级操作（Phase 1）——
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.toggleFavorite', async (node: BranchNode, nodes?: BranchNode[]) => {
@@ -442,7 +442,7 @@ export function registerHistoryCommands(
 		}),
 	);
 
-	// —— IDEA Log 增强（Phase 2）：高级过滤 + 提交详情 diff + per-commit 操作 ——
+	// —— Log 增强（Phase 2）：高级过滤 + 提交详情 diff + per-commit 操作 ——
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.openCommitFileDiff', async (hash: string, filePath: string, hasParent: boolean) => {

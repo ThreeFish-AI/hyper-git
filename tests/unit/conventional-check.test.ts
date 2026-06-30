@@ -28,7 +28,7 @@ describe('ConventionalCommitCheck', () => {
 		expect(r).toBe(CheckinResult.Cancel);
 	});
 
-	it('executionOrder 较小（早执行，对齐 IDEA ExecutionOrder.EARLY）', () => {
+	it('executionOrder 较小（早执行，参考 JetBrains ExecutionOrder.EARLY）', () => {
 		const check = new ConventionalCommitCheck(() => true);
 		expect(check.executionOrder ?? 100).toBeLessThanOrEqual(50);
 	});

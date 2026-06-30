@@ -12,7 +12,7 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
  *
  * - Create Patch：将工作区或已暂存改动导出为 .patch 文件（git diff [--cached]）。
  * - Apply Patch：选择 .patch 文件应用到工作区（git apply）。
- * - Show Reflog：git reflog 渲染为只读文档（IDEA Git → Show Reflog 等价）。
+ * - Show Reflog：git reflog 渲染为只读文档（等价于 Git Reflog 查看）。
  */
 export function registerMiscCommands(
 	service: GitRepositoryService,

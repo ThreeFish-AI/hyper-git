@@ -1,9 +1,9 @@
 {
-  "name": "hyper-git",
-  "displayName": "Hyper Git",
+  "name": "hyper-git-agentic-git",
+  "displayName": "Hyper Git - Agentic Git",
   "icon": "media/icon.png",
-  "description": "在 VS Code 上完整复刻 IntelliJ IDEA 的 Git 工具窗口与 Commit 提交窗口，并为未来 AI Agent 自主代理预留架构接缝。",
-  "version": "0.0.1",
+  "description": "为 VS Code 提供统一的 Git 变更管理与提交工作流：多变更分组、自绘提交面板、可视化提交图、Shelf、行级提交，并为未来 AI Agent 自主代理预留架构接缝。",
+  "version": "0.0.6",
   "publisher": "threefish-ai",
   "license": "MIT",
   "preview": true,

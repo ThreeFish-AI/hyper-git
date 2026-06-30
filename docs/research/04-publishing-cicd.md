@@ -1,6 +1,6 @@
 # Track4: VS Code 扩展发布策略 + CI/CD 流水线蓝图
 
-> 复刻目标:把"IDEA Git 工具窗口 + Commit 窗口"的 VS Code 扩展,从源码可靠、安全、自动化地交付到所有目标编辑器用户(原生 VS Code、Cursor、Windsurf、Gitpod、VSCodium/Code-OSS)。
+> 交付目标:把"提供统一 Git 变更管理与提交工作流"的 VS Code 扩展,从源码可靠、安全、自动化地交付到所有目标编辑器用户(原生 VS Code、Cursor、Windsurf、Gitpod、VSCodium/Code-OSS)。
 > 所有事实论断均附 GitHub 路径或官方文档 URL;不确定项标注"待核实"。
 
 ---

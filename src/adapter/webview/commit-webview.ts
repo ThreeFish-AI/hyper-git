@@ -9,7 +9,7 @@ import type { CommitFileItem, CommitViewState, HostToWebviewMessage, WebviewToHo
 import type { CommitService } from '../commit/commit-service';
 
 /**
- * Commit 提交窗口（WebviewView，自绘 IDEA 风格）。
+ * Commit 提交窗口（WebviewView，自绘提交面板）。
  *
  * 文件勾选 + 多行 Commit Message 编辑器 + Amend/sign-off/skip-hooks 选项 + Commit/Commit and Push 按钮 +
  * Conventional Commits 实时校验 + 最近消息复用。选中态由 webview 端管理（host 不回写，避免覆盖用户操作）。
