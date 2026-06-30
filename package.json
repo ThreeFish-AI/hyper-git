@@ -119,6 +119,7 @@
       { "command": "hyperGit.commit", "title": "提交", "category": "Hyper Git", "icon": "$(check)" },
       { "command": "hyperGit.commitAndPush", "title": "提交并推送", "category": "Hyper Git", "icon": "$(cloud-upload)" },
       { "command": "hyperGit.refreshLog", "title": "刷新 Log", "category": "Hyper Git", "icon": "$(refresh)" },
+      { "command": "hyperGit.ci.signIn", "title": "登录 GitHub 查看 CI 状态", "category": "Hyper Git" },
       { "command": "hyperGit.refreshBranches", "title": "刷新 Branches", "category": "Hyper Git", "icon": "$(refresh)" },
       { "command": "hyperGit.logFilterAuthor", "title": "按作者过滤", "category": "Hyper Git" },
       { "command": "hyperGit.logFilterPath", "title": "按路径过滤", "category": "Hyper Git" },
@@ -344,6 +345,22 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "启用 AI 代理能力（M5，当前仅预留接缝，暂不生效）。"
+        },
+        "hyperGit.log.ci.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "在 Log 视图每条提交上显示 CI 最终状态（GitHub Actions + Commit Statuses）。绿勾=通过、红叉=失败、悬停查看各项检查与未通过原因。需远程为 GitHub。"
+        },
+        "hyperGit.log.ci.remote": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "查询 CI 状态使用的远程名（留空=自动，优先 `origin`）。多远程仓库可指定如 `upstream`。"
+        },
+        "hyperGit.log.ci.provider": {
+          "type": "string",
+          "enum": ["auto", "github.com", "github-enterprise"],
+          "default": "auto",
+          "markdownDescription": "CI 数据来源。`auto` 按 origin 主机判定（github.com → github.com，其余 → GitHub Enterprise）。"
         }
       }
     }
