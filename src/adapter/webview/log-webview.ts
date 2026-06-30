@@ -459,7 +459,7 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #ci-tip .g-success { color: var(--vscode-testing-iconPassed, #3fb950); }
 #ci-tip .g-failure { color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground, #f85149)); }
 #ci-tip .g-pending { color: var(--vscode-testing-iconQueued, var(--vscode-editorWarning-foreground, #d29922)); }
-#ci-tip .g-skipped { color: var(--vscode-descriptionForeground, #8b949e); }
+#ci-tip .g-skipped, #ci-tip .g-unknown { color: var(--vscode-descriptionForeground, #8b949e); }
 </style>
 </head>
 <body>
@@ -628,10 +628,11 @@ function flushCiRequests() {
 
 // ── CI Tooltip（自定义浮层：列明细 + 失败原因 + 跳转链接，仿 IDEA / GitHub）──
 function tipGlyph(state) {
-  if (state === 'skipped' || state === 'unknown') {
-    return '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4 8h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
-  }
-  return ciGlyph(state);
+  const svg = (state === 'unknown' || state === 'skipped')
+    ? '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4 8h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>'
+    : ciGlyph(state);
+  // 必须包裹 .g-{state} 才能上色（绿=通过/红=失败/黄=运行中/灰=未知），否则继承前景色呈单色。
+  return '<span class="g g-' + state + '">' + svg + '</span>';
 }
 function buildTip(ci) {
   const headState = ci.state === 'success' ? 'success' : ci.state === 'failure' ? 'failure' : 'pending';
