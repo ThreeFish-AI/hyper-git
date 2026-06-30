@@ -120,7 +120,7 @@ export class RebaseWebview {
 		const rewordSubjects: string[] = [];
 		for (const a of actions) {
 			if (!isValidAction(a.action)) {
-				void vscode.window.showErrorMessage(`非法动作：${a.action}`);
+				void vscode.window.showErrorMessage(`Invalid action: ${a.action}`);
 				return;
 			}
 			todoItems.push({ action: a.action, hash: a.hash, subject: a.subject });

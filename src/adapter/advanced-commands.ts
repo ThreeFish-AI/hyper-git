@@ -21,16 +21,16 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 			if (!repo) {
 				return;
 			}
-			const ok = await vscode.window.showWarningMessage('撤销最近一次提交（soft reset，保留改动到暂存区）？', { modal: true }, '撤销');
-			if (ok !== '撤销') {
+			const ok = await vscode.window.showWarningMessage('Undo the last commit (soft reset, keeps changes in the index)?', { modal: true }, 'Undo');
+			if (ok !== 'Undo') {
 				return;
 			}
 			try {
 				await service.execGit(['reset', '--soft', 'HEAD~1']);
 				branchesTree.refresh();
-				void vscode.window.showInformationMessage('已撤销最近提交（soft）');
+				void vscode.window.showInformationMessage('Undo last commit complete (soft)');
 			} catch (e) {
-				void vscode.window.showErrorMessage(`撤销失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to undo: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -46,19 +46,19 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 				return;
 			}
 			const ok = await vscode.window.showWarningMessage(
-				`删除提交 ${hash.slice(0, 7)}？将用 rebase 重写历史（可能冲突；已推送的提交勿用）。`,
+				`Drop commit ${hash.slice(0, 7)}? This rewrites history via rebase (may conflict; do not use on pushed commits).`,
 				{ modal: true },
-				'删除提交',
+				'Drop commit',
 			);
-			if (ok !== '删除提交') {
+			if (ok !== 'Drop commit') {
 				return;
 			}
 			try {
 				await service.execGit(['rebase', '--onto', `${hash}^`, hash]);
 				branchesTree.refresh();
-				void vscode.window.showInformationMessage(`已删除提交 ${hash.slice(0, 7)}`);
+				void vscode.window.showInformationMessage(`Dropped commit ${hash.slice(0, 7)}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`删除失败（可能需手动解冲突）：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to drop (may need manual conflict resolution): ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -74,7 +74,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 				return;
 			}
 			const ok = await vscode.window.showWarningMessage(
-				`将当前已暂存改动 fixup 到 ${hash.slice(0, 7)}？将重写历史（autosquash rebase）。`,
+				`Fixup the currently staged changes into ${hash.slice(0, 7)}? This rewrites history (autosquash rebase).`,
 				{ modal: true },
 				'Fixup',
 			);
@@ -87,9 +87,9 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 					env: { ...process.env, GIT_SEQUENCE_EDITOR: ':' },
 				});
 				branchesTree.refresh();
-				void vscode.window.showInformationMessage(`已 fixup 到 ${hash.slice(0, 7)}`);
+				void vscode.window.showInformationMessage(`Fixup into ${hash.slice(0, 7)} complete`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Fixup 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Fixup failed: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -107,16 +107,16 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 				const out = await service.execGit(['branch', '--merged', base]);
 				merged = filterMergeable(out, base, headName ? [headName] : []);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`查询已合并分支失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to query merged branches: ${errMsg(e)}`);
 				return;
 			}
 			if (merged.length === 0) {
-				void vscode.window.showInformationMessage('无可清理的已合并分支');
+				void vscode.window.showInformationMessage('No merged branches to clean up');
 				return;
 			}
 			const picks = await vscode.window.showQuickPick(
 				merged.map((b) => ({ label: b, picked: true })),
-				{ canPickMany: true, title: `已合并到 ${base} 的本地分支（勾选删除）` },
+				{ canPickMany: true, title: `Local branches merged into ${base} (check to delete)` },
 			);
 			if (!picks || picks.length === 0) {
 				return;
@@ -131,7 +131,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 				}
 			}
 			branchesTree.refresh();
-			void vscode.window.showInformationMessage(`已删除 ${deleted} 个已合并分支`);
+			void vscode.window.showInformationMessage(`Deleted ${deleted} merged branch(es)`);
 		}),
 	);
 
@@ -145,7 +145,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 				return;
 			}
 			await vscode.env.clipboard.writeText(names.join('\n'));
-			void vscode.window.showInformationMessage(names.length === 1 ? `已复制 ${names[0]}` : `已复制 ${names.length} 个引用`);
+			void vscode.window.showInformationMessage(names.length === 1 ? `Copied ${names[0]}` : `Copied ${names.length} refs`);
 		}),
 	);
 
@@ -159,21 +159,21 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 				const staged = await service.execGit(['diff', '--cached', '--stat']);
 				const working = await service.execGit(['diff', '--stat']);
 				const content = [
-					'# 3-way Diff 概览（HEAD ↔ Staged ↔ Working）',
+					'# 3-way Diff Overview (HEAD ↔ Staged ↔ Working)',
 					'',
-					'## 已暂存改动（HEAD ↔ Staged）',
+					'## Staged Changes (HEAD ↔ Staged)',
 					'',
-					staged.trim() || '_(无)_)',
+					staged.trim() || '_(none)_)',
 					'',
-					'## 未暂存改动（Staged ↔ Working）',
+					'## Unstaged Changes (Staged ↔ Working)',
 					'',
-					working.trim() || '_(无)_',
+					working.trim() || '_(none)_',
 					'',
 				].join('\n');
 				const doc = await vscode.workspace.openTextDocument({ content, language: 'markdown' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`3-way diff 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`3-way diff failed: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -192,6 +192,6 @@ async function pickCommitHash(service: GitRepositoryService): Promise<string | u
 		description: `${c.authorName ?? ''} · ${c.hash.slice(0, 7)}`,
 		hash: c.hash,
 	}));
-	const pick = await vscode.window.showQuickPick(items, { placeHolder: '选择 commit' });
+	const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select a commit' });
 	return pick?.hash;
 }

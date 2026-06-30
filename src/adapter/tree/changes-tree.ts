@@ -4,6 +4,7 @@ import { fileStatusLabel } from '../../engine/model';
 import { getDecoration } from '../../engine/scm-mapping/status-decoration';
 import type { ChangelistRegistry } from '../changelist-registry';
 import type { ChangeItem, GitRepositoryService } from '../git-repository-service';
+import { mdTooltip } from './tree-tooltip';
 
 export interface ChangesChangelistNode {
 	readonly kind: 'changelist';
@@ -73,9 +74,16 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
 		const item = new vscode.TreeItem(node.name, state);
 		item.contextValue = 'hyperGit.changelist';
 		item.id = `cl:${node.id}`;
-		item.iconPath = new vscode.ThemeIcon('folder');
+		// 活动 changelist 用 folder-opened 区分（视觉锚定提交目标）。
+		item.iconPath = new vscode.ThemeIcon(node.active ? 'folder-opened' : 'folder');
 		item.description = `${count} ${count === 1 ? 'file' : 'files'}${node.active ? ' · active' : ''}`;
-		item.tooltip = `${node.name}${node.active ? ' (active)' : ''}\n${count} changes`;
+		item.tooltip = mdTooltip(
+			[
+				['Status', node.active ? 'Active changelist' : 'Changelist'],
+				['Changes', String(count)],
+			],
+			{ title: node.name },
+		);
 		return item;
 	}
 
@@ -88,9 +96,15 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesNode>
 		treeItem.id = `file:${change.relativePath}`;
 		treeItem.resourceUri = change.uri;
 		treeItem.description = `${decoration.letter}${dir && dir !== '.' ? ' · ' + dir : ''}`;
-		treeItem.tooltip = `${change.relativePath}\n状态：${fileStatusLabel(change.status)}${change.staged ? '（已暂存）' : ''}`;
+		// Deleted → tooltip 路径以删除线呈现（消费 strikeThrough 语义位；TreeItem 稳定 API 无行删除线字段）。
+		const pathMd = decoration.strikeThrough ? `~~${change.relativePath}~~` : `\`${change.relativePath}\``;
+		const md = new vscode.MarkdownString('', true);
+		md.isTrusted = false;
+		md.appendMarkdown(`${pathMd}  \n`);
+		md.appendMarkdown(`**Status:** ${fileStatusLabel(change.status)}${change.staged ? ' (staged)' : ''}  \n`);
+		treeItem.tooltip = md;
 		treeItem.iconPath = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor(decoration.themeColor));
-		treeItem.command = { command: 'hyperGit.openDiff', title: '打开 Diff', arguments: [change] };
+		treeItem.command = { command: 'hyperGit.openDiff', title: 'Open Diff', arguments: [change] };
 		return treeItem;
 	}
 }

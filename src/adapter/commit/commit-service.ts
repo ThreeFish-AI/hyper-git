@@ -103,18 +103,18 @@ export class CommitService implements vscode.Disposable {
 	async executeCommit(req: CommitRequest): Promise<CommitOutcome> {
 		const repo = this.service.repo;
 		if (!repo) {
-			return { ok: false, error: '未找到 Git 仓库' };
+			return { ok: false, error: 'No Git repository found' };
 		}
 		const message = req.message.trim();
 		if (!message) {
-			return { ok: false, error: '提交信息不能为空' };
+			return { ok: false, error: 'Commit message cannot be empty' };
 		}
 
 		// CC 即时校验（pipeline 内的 hook 亦会拦截，此处给出明确原因）
 		if (this.conventionalEnabled()) {
 			const v = validateConventional(message);
 			if (v.severity === 'error') {
-				return { ok: false, error: v.reason ?? '提交信息不符合 Conventional Commits 规范' };
+				return { ok: false, error: v.reason ?? 'Commit message does not conform to Conventional Commits' };
 			}
 		}
 
@@ -123,13 +123,13 @@ export class CommitService implements vscode.Disposable {
 		const checkedSet = new Set(req.selectedPaths);
 		const absPaths = this.resolveAbsolute(req.selectedPaths, changes);
 		if (absPaths.length === 0) {
-			return { ok: false, error: '未选择任何待提交文件' };
+			return { ok: false, error: 'No files selected to commit' };
 		}
 
 		// Checkin hook 责任链（传绝对路径，供未来 AI hook 读取文件内容）
 		const hookResult = await this.pipeline.run({ message, filePaths: absPaths });
 		if (hookResult === CheckinResult.Cancel) {
-			return { ok: false, error: '提交被检查拦截（Checkin hook）' };
+			return { ok: false, error: 'Commit blocked by check (Checkin hook)' };
 		}
 
 		try {
@@ -146,7 +146,7 @@ export class CommitService implements vscode.Disposable {
 				try {
 					await repo.push();
 				} catch (e) {
-					return { ok: true, warning: `提交已成功，但推送失败：${this.normalizeError(e)}` };
+					return { ok: true, warning: `Commit succeeded, but push failed: ${this.normalizeError(e)}` };
 				}
 			}
 			return { ok: true };

@@ -14,17 +14,39 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 	const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 	subs.push(
+		vscode.commands.registerCommand('hyperGit.stashView', async (node?: StashNode) => {
+			// 只读查看 stash diff（单击叶子触发；比 apply 更安全，apply/pop/drop 仍在右键菜单）。
+			const repo = service.repo;
+			if (!repo) {
+				return;
+			}
+			const index = node?.kind === 'stash' ? node.index : 0;
+			try {
+				const patch = await service.execGit(['stash', 'show', '-p', '--no-color', `stash@{${index}}`]);
+				if (!patch.trim()) {
+					void vscode.window.showInformationMessage(`stash@{${index}} has no changes to show`);
+					return;
+				}
+				const doc = await vscode.workspace.openTextDocument({ content: patch, language: 'diff' });
+				await vscode.window.showTextDocument(doc, { preview: true });
+			} catch (e) {
+				void vscode.window.showErrorMessage(`Failed to show stash: ${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
 		vscode.commands.registerCommand('hyperGit.stashCreate', async () => {
 			const repo = service.repo;
 			if (!repo) {
 				return;
 			}
-			const message = await vscode.window.showInputBox({ prompt: 'Stash 信息（可空）', placeHolder: 'WIP' });
+			const message = await vscode.window.showInputBox({ prompt: 'Stash message (optional)', placeHolder: 'WIP' });
 			try {
 				await repo.createStash({ message: message && message.trim() ? message.trim() : undefined, includeUntracked: true });
 				stashTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Stash 创建失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to create stash: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -40,7 +62,7 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 				await repo.applyStash(index);
 				stashTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Stash 应用失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to apply stash: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -57,7 +79,7 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 				stashTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Stash pop'))) {
-					void vscode.window.showErrorMessage(`Stash pop 失败：${errMsg(e)}`);
+					void vscode.window.showErrorMessage(`Failed to pop stash: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -70,13 +92,13 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 				return;
 			}
 			const index = node?.kind === 'stash' ? node.index : 0;
-			const choice = await vscode.window.showWarningMessage(`删除 stash@{${index}}？`, { modal: true }, '删除');
-			if (choice === '删除') {
+			const choice = await vscode.window.showWarningMessage(`Drop stash@{${index}}?`, { modal: true }, 'Drop');
+			if (choice === 'Drop') {
 				try {
 					await repo.dropStash(index);
 					stashTree.refresh();
 				} catch (e) {
-					void vscode.window.showErrorMessage(`Stash 删除失败：${errMsg(e)}`);
+					void vscode.window.showErrorMessage(`Failed to drop stash: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -90,7 +112,7 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 			if (!repo) {
 				return;
 			}
-			const message = await vscode.window.showInputBox({ prompt: 'Stash 信息（保留已暂存改动在工作区）', placeHolder: 'WIP' });
+			const message = await vscode.window.showInputBox({ prompt: 'Stash message (keep staged changes in the working tree)', placeHolder: 'WIP' });
 			try {
 				const args = ['stash', 'push', '--keep-index'];
 				if (message && message.trim()) {
@@ -98,9 +120,9 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 				}
 				await service.execGit(args);
 				stashTree.refresh();
-				void vscode.window.showInformationMessage('已 Stash（保留已暂存）');
+				void vscode.window.showInformationMessage('Stashed (index kept)');
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Stash 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to stash: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -111,16 +133,16 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 			if (!repo) {
 				return;
 			}
-			const ok = await vscode.window.showWarningMessage('清空所有 stash（不可撤销）？', { modal: true }, '清空');
-			if (ok !== '清空') {
+			const ok = await vscode.window.showWarningMessage('Clear ALL stashes (irreversible)?', { modal: true }, 'Clear All');
+			if (ok !== 'Clear All') {
 				return;
 			}
 			try {
 				await service.execGit(['stash', 'clear']);
 				stashTree.refresh();
-				void vscode.window.showInformationMessage('已清空所有 stash');
+				void vscode.window.showInformationMessage('Cleared all stashes');
 			} catch (e) {
-				void vscode.window.showErrorMessage(`清空失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to clear stashes: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -145,29 +167,29 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 						})
 						.filter((x): x is { label: string; description: string; index: number } => x !== null);
 					if (items.length === 0) {
-						void vscode.window.showInformationMessage('无 stash');
+						void vscode.window.showInformationMessage('No stashes');
 						return;
 					}
-					const pick = await vscode.window.showQuickPick(items, { placeHolder: '选择要转为分支的 stash' });
+					const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select a stash to turn into a branch' });
 					if (!pick) {
 						return;
 					}
 					index = pick.index;
 				} catch (e) {
-					void vscode.window.showErrorMessage(`读取 stash 列表失败：${errMsg(e)}`);
+					void vscode.window.showErrorMessage(`Failed to read stash list: ${errMsg(e)}`);
 					return;
 				}
 			}
-			const name = await vscode.window.showInputBox({ prompt: `从 stash@{${index}} 创建并检出新分支`, placeHolder: '新分支名' });
+			const name = await vscode.window.showInputBox({ prompt: `Create and checkout a new branch from stash@{${index}}`, placeHolder: 'New branch name' });
 			if (!name || !name.trim()) {
 				return;
 			}
 			try {
 				await service.execGit(['stash', 'branch', name.trim(), `stash@{${index}}`]);
 				stashTree.refresh();
-				void vscode.window.showInformationMessage(`已从 stash@{${index}} 创建分支 ${name.trim()}`);
+				void vscode.window.showInformationMessage(`Created branch ${name.trim()} from stash@{${index}}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`创建分支失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to create branch: ${errMsg(e)}`);
 			}
 		}),
 	);

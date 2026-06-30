@@ -40,7 +40,7 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 	const pickHunks = async (diff: string, title: string): Promise<{ indices: number[] } | undefined> => {
 		const files = parseUnifiedDiff(diff);
 		if (files.length === 0) {
-			void vscode.window.showInformationMessage('无改动');
+			void vscode.window.showInformationMessage('No changes');
 			return undefined;
 		}
 		const file = files[0];
@@ -50,7 +50,7 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 			detail: h.body.slice(0, 6).join('\n'),
 			index: i,
 		}));
-		const sel = await vscode.window.showQuickPick(picks, { canPickMany: true, title, placeHolder: '勾选 hunk（详见 detail）' });
+		const sel = await vscode.window.showQuickPick(picks, { canPickMany: true, title, placeHolder: 'Select hunks (see detail)' });
 		if (!sel || sel.length === 0) {
 			return undefined;
 		}
@@ -70,18 +70,18 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 			try {
 				const diff = await service.execGit(['diff', '--', rel]);
 				if (!diff.trim()) {
-					void vscode.window.showInformationMessage('该文件无未暂存改动');
+					void vscode.window.showInformationMessage('No unstaged changes for this file');
 					return;
 				}
-				const sel = await pickHunks(diff, `暂存 hunk：${rel}`);
+				const sel = await pickHunks(diff, `Stage hunks: ${rel}`);
 				if (!sel) {
 					return;
 				}
 				const file = parseUnifiedDiff(diff)[0];
 				await applyToIndex(buildPatch(file, sel.indices), false);
-				void vscode.window.showInformationMessage(`已暂存 ${sel.indices.length} 个 hunk`);
+				void vscode.window.showInformationMessage(`Staged ${sel.indices.length} hunk(s)`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`暂存失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to stage: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -99,18 +99,18 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 			try {
 				const diff = await service.execGit(['diff', '--cached', '--', rel]);
 				if (!diff.trim()) {
-					void vscode.window.showInformationMessage('该文件无已暂存改动');
+					void vscode.window.showInformationMessage('No staged changes for this file');
 					return;
 				}
-				const sel = await pickHunks(diff, `取消暂存 hunk：${rel}`);
+				const sel = await pickHunks(diff, `Unstage hunks: ${rel}`);
 				if (!sel) {
 					return;
 				}
 				const file = parseUnifiedDiff(diff)[0];
 				await applyToIndex(buildPatch(file, sel.indices), true);
-				void vscode.window.showInformationMessage(`已取消暂存 ${sel.indices.length} 个 hunk`);
+				void vscode.window.showInformationMessage(`Unstaged ${sel.indices.length} hunk(s)`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`取消暂存失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to unstage: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -124,7 +124,7 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 			}
 			const rel = repoRelative(repo.rootUri.fsPath, editor.document.uri.fsPath);
 			if (!rel) {
-				void vscode.window.showWarningMessage('文件不在当前仓库内');
+				void vscode.window.showWarningMessage('File is not inside the current repository');
 				return;
 			}
 			const cursorLine = editor.selection.active.line + 1;
@@ -132,7 +132,7 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 				const diff = await service.execGit(['diff', '--', rel]);
 				const files = parseUnifiedDiff(diff);
 				if (files.length === 0) {
-					void vscode.window.showInformationMessage('无未暂存改动');
+					void vscode.window.showInformationMessage('No unstaged changes');
 					return;
 				}
 				const file = files[0];
@@ -140,13 +140,13 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 					.map((h, i) => ({ h, i }))
 					.filter(({ h }) => cursorLine >= h.newStart && cursorLine < h.newStart + Math.max(h.newCount, 1));
 				if (overlapping.length === 0) {
-					void vscode.window.showInformationMessage('光标不在改动 hunk 内');
+					void vscode.window.showInformationMessage('Cursor is not within a changed hunk');
 					return;
 				}
 				await applyToIndex(buildPatch(file, overlapping.map((o) => o.i)), false);
-				void vscode.window.showInformationMessage('已暂存光标处 hunk');
+				void vscode.window.showInformationMessage('Staged hunk at cursor');
 			} catch (e) {
-				void vscode.window.showErrorMessage(`暂存失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to stage: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -160,7 +160,7 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 			}
 			const rel = repoRelative(repo.rootUri.fsPath, editor.document.uri.fsPath);
 			if (!rel) {
-				void vscode.window.showWarningMessage('文件不在当前仓库内');
+				void vscode.window.showWarningMessage('File is not inside the current repository');
 				return;
 			}
 			const cursorLine = editor.selection.active.line + 1;
@@ -175,20 +175,20 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 					.map((h, i) => ({ h, i }))
 					.filter(({ h }) => cursorLine >= h.newStart && cursorLine < h.newStart + Math.max(h.newCount, 1));
 				if (overlapping.length === 0) {
-					void vscode.window.showInformationMessage('光标不在改动 hunk 内');
+					void vscode.window.showInformationMessage('Cursor is not within a changed hunk');
 					return;
 				}
 				const hunkIdx = overlapping[0].i;
 				const defs = registry.listDefs();
 				const active = registry.activeChangelistId;
 				const picks = defs.map((d) => ({ label: d.name, id: d.id, description: d.id === active ? 'active' : undefined }));
-				const pick = await vscode.window.showQuickPick(picks, { placeHolder: `将 Hunk ${hunkIdx + 1} 移至 Changelist` });
+				const pick = await vscode.window.showQuickPick(picks, { placeHolder: `Move Hunk ${hunkIdx + 1} to Changelist` });
 				if (pick) {
 					registry.moveHunk(rel, hunkIdx, pick.id);
-					void vscode.window.showInformationMessage(`已将 Hunk ${hunkIdx + 1}（${rel}）分配到「${pick.label}」`);
+					void vscode.window.showInformationMessage(`Assigned Hunk ${hunkIdx + 1} (${rel}) to "${pick.label}"`);
 				}
 			} catch (e) {
-				void vscode.window.showErrorMessage(`分配失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to assign: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -206,7 +206,7 @@ async function pickUnstagedFile(service: GitRepositoryService): Promise<string |
 	if (items.length === 0) {
 		return undefined;
 	}
-	const pick = await vscode.window.showQuickPick(items.map((c) => ({ label: c.relativePath })), { placeHolder: '选择文件' });
+	const pick = await vscode.window.showQuickPick(items.map((c) => ({ label: c.relativePath })), { placeHolder: 'Select a file' });
 	return pick?.label;
 }
 
@@ -215,6 +215,6 @@ async function pickStagedFile(service: GitRepositoryService): Promise<string | u
 	if (items.length === 0) {
 		return undefined;
 	}
-	const pick = await vscode.window.showQuickPick(items.map((c) => ({ label: c.relativePath })), { placeHolder: '选择已暂存文件' });
+	const pick = await vscode.window.showQuickPick(items.map((c) => ({ label: c.relativePath })), { placeHolder: 'Select a staged file' });
 	return pick?.label;
 }

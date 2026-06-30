@@ -39,18 +39,18 @@ export async function handleGitConflict(service: GitRepositoryService, opName: s
 		const op = state.ongoingOperation;
 		const canAbort = op !== 'none';
 		const choice = await vscode.window.showWarningMessage(
-			`${opName} 遇到 ${state.conflictedPaths.length} 个冲突文件。`,
-			{ modal: true, detail: canAbort ? `正在进行：${op}。可解决冲突后继续，或中止恢复工作区。` : '请手动解决冲突后提交。' },
-			...(canAbort ? ['解决冲突', '中止操作'] : ['知道了']),
+			`${opName} encountered ${state.conflictedPaths.length} conflicted file(s).`,
+			{ modal: true, detail: canAbort ? `In progress: ${op}. Resolve the conflicts to continue, or abort to restore the working tree.` : 'Please resolve the conflicts manually and commit.' },
+			...(canAbort ? ['Resolve conflicts', 'Abort'] : ['Got it']),
 		);
-		if (choice === '中止操作' && op !== 'none') {
+		if (choice === 'Abort' && op !== 'none') {
 			try {
 				await service.execGit(ABORT_ARGS[op]);
-				void vscode.window.showInformationMessage(`已中止 ${op}，工作区已恢复`);
+				void vscode.window.showInformationMessage(`${op} aborted, working tree restored`);
 			} catch {
-				void vscode.window.showErrorMessage('中止操作失败，请手动处理');
+				void vscode.window.showErrorMessage('Failed to abort, please handle manually');
 			}
-		} else if (choice === '解决冲突') {
+		} else if (choice === 'Resolve conflicts') {
 			// 打开自绘 3-way merge editor（resolveConflicts 列出冲突文件供选择）
 			void vscode.commands.executeCommand('hyperGit.resolveConflicts');
 		}

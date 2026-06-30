@@ -116,7 +116,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
 		vscode.window.registerWebviewViewProvider(LogWebviewProvider.viewType, logTree),
 		vscode.window.registerTreeDataProvider('hyperGit.stash', stashTree),
-		vscode.window.registerTreeDataProvider('hyperGit.shelf', shelfTree),
+		vscode.window.createTreeView('hyperGit.shelf', { treeDataProvider: shelfTree }),
 		vscode.window.registerTreeDataProvider('hyperGit.worktrees', worktreeTree),
 		...registerChangesCommands(service, registry, tree),
 		...registerHistoryCommands(service, logTree, branchesTree, favorites),
@@ -143,7 +143,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	// 计数为 0 时清空，对齐原生 SCM 行为。
 	const updateChangesBadge = (): void => {
 		const count = service.getChanges().length;
-		changesView.badge = count > 0 ? { value: count, tooltip: `${count} 个未提交变更` } : undefined;
+		changesView.badge = count > 0 ? { value: count, tooltip: `${count} uncommitted change(s)` } : undefined;
 	};
 
 	// git 状态变化频繁（add/checkout/diff 缓存失效均触发），防抖合并避免 log/stash 高频重拉。

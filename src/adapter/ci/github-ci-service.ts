@@ -106,7 +106,7 @@ export class GitHubCiService implements vscode.Disposable {
 			return { available: false, needsAuth: false };
 		}
 		if (typeof globalThis.fetch !== 'function') {
-			return { available: false, needsAuth: false, error: '当前运行时无全局 fetch' };
+			return { available: false, needsAuth: false, error: 'No global fetch in current runtime' };
 		}
 		try {
 			const session = await this.auth.peek(provider);
@@ -308,7 +308,7 @@ export class GitHubCiService implements vscode.Disposable {
 			return undefined;
 		}
 		const secs = Math.ceil((this.cooldownUntil - Date.now()) / 1000);
-		return `GitHub 限流，约 ${secs}s 后恢复`;
+		return `GitHub rate limited, resumes in ~${secs}s`;
 	}
 
 	// ─── 取数 ────────────────────────────────────────────────────────────────

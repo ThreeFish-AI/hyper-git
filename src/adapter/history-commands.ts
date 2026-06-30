@@ -81,7 +81,7 @@ export function registerHistoryCommands(
 		vscode.commands.registerCommand('hyperGit.copyCommitHash', (node: LogNode) => {
 			if (node?.kind === 'commit') {
 				void vscode.env.clipboard.writeText(node.commit.hash);
-				void vscode.window.showInformationMessage(`已复制 ${node.commit.hash.slice(0, 7)}`);
+				void vscode.window.showInformationMessage(`Copied ${node.commit.hash.slice(0, 7)}`);
 			}
 		}),
 	);
@@ -101,13 +101,13 @@ export function registerHistoryCommands(
 			if (!repo) {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: '新分支名称' });
+			const name = await vscode.window.showInputBox({ prompt: 'New branch name' });
 			if (name && name.trim()) {
 				try {
 					await repo.createBranch(name.trim(), true);
 					branchesTree.refresh();
 				} catch (e) {
-					void vscode.window.showErrorMessage(`创建分支失败：${errMsg(e)}`);
+					void vscode.window.showErrorMessage(`Failed to create branch: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -123,7 +123,7 @@ export function registerHistoryCommands(
 				await repo.checkout(node.ref.shortName);
 				branchesTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`检出失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to checkout: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -139,7 +139,7 @@ export function registerHistoryCommands(
 			const names = refs.map((r) => r.shortName);
 			if (names.length === 0) {
 				if (node?.kind === 'branch' && node.ref.head) {
-					void vscode.window.showWarningMessage('当前分支无法删除');
+					void vscode.window.showWarningMessage('Cannot delete the current branch');
 				}
 				return;
 			}
@@ -170,9 +170,9 @@ export function registerHistoryCommands(
 			}
 			branchesTree.refresh();
 			if (failures.length === 0) {
-				void vscode.window.showInformationMessage(deleted === 1 ? `已删除分支 ${names[0]}` : `已删除 ${deleted} 个分支`);
+				void vscode.window.showInformationMessage(deleted === 1 ? `Deleted branch ${names[0]}` : `Deleted ${deleted} branches`);
 			} else {
-				void vscode.window.showWarningMessage(`已删除 ${deleted} 个分支，${failures.length} 个失败：${truncateNames(failures)}`);
+				void vscode.window.showWarningMessage(`Deleted ${deleted} branches, ${failures.length} failed: ${truncateNames(failures)}`);
 			}
 		}),
 	);
@@ -184,16 +184,16 @@ export function registerHistoryCommands(
 				return;
 			}
 			const name = node.ref.shortName;
-			const ok = await vscode.window.showWarningMessage(`将「${name}」合并到当前分支？`, { modal: true }, '合并');
-			if (ok !== '合并') {
+			const ok = await vscode.window.showWarningMessage(`Merge "${name}" into current branch?`, { modal: true }, 'Merge');
+			if (ok !== 'Merge') {
 				return;
 			}
 			try {
 				await repo.merge(name);
 				branchesTree.refresh();
 			} catch (e) {
-				if (!(await handleGitConflict(service, '合并'))) {
-					void vscode.window.showErrorMessage(`合并失败：${errMsg(e)}`);
+				if (!(await handleGitConflict(service, 'Merge'))) {
+					void vscode.window.showErrorMessage(`Failed to merge: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -206,16 +206,16 @@ export function registerHistoryCommands(
 				return;
 			}
 			const name = node.ref.shortName;
-			const ok = await vscode.window.showWarningMessage(`将当前分支变基到「${name}」？（重写历史，可能冲突）`, { modal: true }, '变基');
-			if (ok !== '变基') {
+			const ok = await vscode.window.showWarningMessage(`Rebase current branch onto "${name}"? (this rewrites history and may conflict)`, { modal: true }, 'Rebase');
+			if (ok !== 'Rebase') {
 				return;
 			}
 			try {
 				await repo.rebase(name);
 				branchesTree.refresh();
 			} catch (e) {
-				if (!(await handleGitConflict(service, '变基'))) {
-					void vscode.window.showErrorMessage(`变基失败：${errMsg(e)}`);
+				if (!(await handleGitConflict(service, 'Rebase'))) {
+					void vscode.window.showErrorMessage(`Failed to rebase: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -229,12 +229,12 @@ export function registerHistoryCommands(
 			}
 			const editor = vscode.window.activeTextEditor;
 			if (!editor) {
-				void vscode.window.showWarningMessage('请先打开一个文件');
+				void vscode.window.showWarningMessage('Please open a file first');
 				return;
 			}
 			const rel = path.relative(repo.rootUri.fsPath, editor.document.uri.fsPath).split(path.sep).join('/');
 			if (rel.startsWith('..') || path.isAbsolute(rel)) {
-				void vscode.window.showWarningMessage('该文件不在当前仓库内，无法 Blame');
+				void vscode.window.showWarningMessage('This file is outside the current repository; cannot Blame');
 				return;
 			}
 			try {
@@ -242,7 +242,7 @@ export function registerHistoryCommands(
 				const doc = await vscode.workspace.openTextDocument({ content: blame, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Blame 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to Blame: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -258,7 +258,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Pull'))) {
-					void vscode.window.showErrorMessage(`Pull 失败：${errMsg(e)}`);
+					void vscode.window.showErrorMessage(`Failed to Pull: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -272,7 +272,7 @@ export function registerHistoryCommands(
 			}
 			const head = repo.state.HEAD;
 			if (!head?.name) {
-				void vscode.window.showWarningMessage('当前处于 detached HEAD，无法推送当前分支');
+				void vscode.window.showWarningMessage('Currently in detached HEAD; cannot push the current branch');
 				return;
 			}
 			try {
@@ -283,14 +283,14 @@ export function registerHistoryCommands(
 					// 无上游：选定 remote 并以 -u 建立追踪（修复「Failed to execute git」根因）。
 					const remotes = repo.state.remotes.map((r) => r.name);
 					if (remotes.length === 0) {
-						void vscode.window.showWarningMessage('未配置远程仓库（remote），无法推送');
+						void vscode.window.showWarningMessage('No remote configured; cannot push');
 						return;
 					}
 					const remote =
 						remotes.length === 1
 							? remotes[0]
 							: await vscode.window.showQuickPick(remotes, {
-								placeHolder: `为「${head.name}」选择推送目标 remote（将建立上游追踪 -u）`,
+								placeHolder: `Select a remote to push "${head.name}" to (will set upstream tracking -u)`,
 							});
 					if (!remote) {
 						return;
@@ -298,9 +298,9 @@ export function registerHistoryCommands(
 					await repo.push(remote, head.name, true);
 				}
 				branchesTree.refresh();
-				void vscode.window.showInformationMessage(`已推送 ${head.name}`);
+				void vscode.window.showInformationMessage(`Pushed ${head.name}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Push 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to Push: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -312,8 +312,8 @@ export function registerHistoryCommands(
 				return;
 			}
 			const pick = await vscode.window.showQuickPick(
-				['普通 Fetch', 'Fetch + Prune（清理已删除的远程分支）'],
-				{ placeHolder: 'Fetch 模式' },
+				['Fetch', 'Fetch + Prune (clean up deleted remote branches)'],
+				{ placeHolder: 'Fetch mode' },
 			);
 			if (!pick) {
 				return;
@@ -322,7 +322,7 @@ export function registerHistoryCommands(
 				await repo.fetch(pick.includes('Prune') ? { prune: true } : undefined);
 				branchesTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Fetch 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to Fetch: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -347,7 +347,7 @@ export function registerHistoryCommands(
 				return;
 			}
 			const source = node.ref.shortName;
-			const name = await vscode.window.showInputBox({ prompt: `从「${source}」新建并检出本地分支`, placeHolder: '新分支名' });
+			const name = await vscode.window.showInputBox({ prompt: `Create and checkout a new local branch from "${source}"`, placeHolder: 'New branch name' });
 			if (!name || !name.trim()) {
 				return;
 			}
@@ -355,7 +355,7 @@ export function registerHistoryCommands(
 				await repo.createBranch(name.trim(), true, source);
 				branchesTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`新建分支失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to create branch: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -372,7 +372,7 @@ export function registerHistoryCommands(
 				const doc = await vscode.workspace.openTextDocument({ content: `$ git diff --stat HEAD...${selected}\n\n${out}`, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`比较失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to compare: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -383,29 +383,29 @@ export function registerHistoryCommands(
 			if (!repo) {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: '标签名（如 v1.0.0）' });
+			const name = await vscode.window.showInputBox({ prompt: 'Tag name (e.g. v1.0.0)' });
 			if (!name || !name.trim()) {
 				return;
 			}
 			const commits = await repo.log({ maxEntries: 20 });
 			const items = [
-				{ label: 'HEAD', description: '当前提交', target: 'HEAD' },
+				{ label: 'HEAD', description: 'Current commit', target: 'HEAD' },
 				...commits.map((c) => ({
 					label: (c.message.split('\n', 1)[0] ?? c.hash).slice(0, 50),
 					description: c.hash.slice(0, 7),
 					target: c.hash,
 				})),
 			];
-			const pick = await vscode.window.showQuickPick(items, { placeHolder: '在哪个 commit 上打标签' });
+			const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Choose a commit to tag' });
 			if (!pick) {
 				return;
 			}
 			try {
 				await service.execGit(['tag', name.trim(), pick.target]);
 				branchesTree.refresh();
-				void vscode.window.showInformationMessage(`已创建标签 ${name.trim()} @ ${pick.target === 'HEAD' ? 'HEAD' : pick.target.slice(0, 7)}`);
+				void vscode.window.showInformationMessage(`Created tag ${name.trim()} @ ${pick.target === 'HEAD' ? 'HEAD' : pick.target.slice(0, 7)}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`创建标签失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to create tag: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -417,9 +417,9 @@ export function registerHistoryCommands(
 			if (names.length === 0) {
 				return;
 			}
-			const detail = names.length === 1 ? `删除标签「${names[0]}」？` : `将删除 ${names.length} 个标签：${truncateNames(names)}`;
-			const ok = await vscode.window.showWarningMessage(detail, { modal: true }, '删除');
-			if (ok !== '删除') {
+			const detail = names.length === 1 ? `Delete tag "${names[0]}"?` : `Will delete ${names.length} tags: ${truncateNames(names)}`;
+			const ok = await vscode.window.showWarningMessage(detail, { modal: true }, 'Delete');
+			if (ok !== 'Delete') {
 				return;
 			}
 			const failures: string[] = [];
@@ -434,9 +434,9 @@ export function registerHistoryCommands(
 			}
 			branchesTree.refresh();
 			if (failures.length === 0) {
-				void vscode.window.showInformationMessage(deleted === 1 ? `已删除标签 ${names[0]}` : `已删除 ${deleted} 个标签`);
+				void vscode.window.showInformationMessage(deleted === 1 ? `Deleted tag ${names[0]}` : `Deleted ${deleted} tags`);
 			} else {
-				void vscode.window.showWarningMessage(`已删除 ${deleted} 个标签，${failures.length} 个失败：${truncateNames(failures)}`);
+				void vscode.window.showWarningMessage(`Deleted ${deleted} tags, ${failures.length} failed: ${truncateNames(failures)}`);
 			}
 		}),
 	);
@@ -448,15 +448,15 @@ export function registerHistoryCommands(
 				return;
 			}
 			const name = node.ref.shortName;
-			const ok = await vscode.window.showWarningMessage(`检出标签「${name}」（进入 detached HEAD）？`, { modal: true }, '检出');
-			if (ok !== '检出') {
+			const ok = await vscode.window.showWarningMessage(`Checkout tag "${name}" (entering detached HEAD)?`, { modal: true }, 'Checkout');
+			if (ok !== 'Checkout') {
 				return;
 			}
 			try {
 				await repo.checkout(name);
 				branchesTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`检出标签失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to checkout tag: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -479,7 +479,7 @@ export function registerHistoryCommands(
 					await vscode.commands.executeCommand('vscode.open', right);
 				}
 			} catch (e) {
-				void vscode.window.showErrorMessage(`打开 diff 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to open diff: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -491,17 +491,17 @@ export function registerHistoryCommands(
 			}
 			const hash = node.commit.hash;
 			const items = [
-				{ label: 'soft', description: '仅移动 HEAD，保留暂存区与工作区改动' },
-				{ label: 'mixed', description: '移动 HEAD + 取消暂存（默认），保留工作区改动' },
-				{ label: 'hard', description: '⚠ 移动 HEAD + 丢弃暂存区与工作区所有改动（不可撤销）' },
-				{ label: 'keep', description: '移动 HEAD + 保留已修改文件（遇冲突中止）' },
+				{ label: 'soft', description: 'Move HEAD only; keep staged and working changes' },
+				{ label: 'mixed', description: 'Move HEAD + unstage (default); keep working changes' },
+				{ label: 'hard', description: '⚠ Move HEAD + discard all staged and working changes (cannot be undone)' },
+				{ label: 'keep', description: 'Move HEAD + keep modified files (aborts on conflict)' },
 			];
-			const pick = await vscode.window.showQuickPick(items, { placeHolder: `Reset 当前分支到 ${hash.slice(0, 7)} 的模式` });
+			const pick = await vscode.window.showQuickPick(items, { placeHolder: `Reset mode for current branch to ${hash.slice(0, 7)}` });
 			if (!pick) {
 				return;
 			}
 			if (pick.label === 'hard') {
-				const ok = await vscode.window.showWarningMessage(`hard reset 到 ${hash.slice(0, 7)} 将丢弃所有改动，确认？`, { modal: true }, '确认 hard reset');
+				const ok = await vscode.window.showWarningMessage(`Hard reset to ${hash.slice(0, 7)} will discard all changes. Confirm?`, { modal: true }, 'Confirm Hard Reset');
 				if (!ok) {
 					return;
 				}
@@ -510,10 +510,10 @@ export function registerHistoryCommands(
 				await service.execGit(['reset', `--${pick.label}`, hash]);
 				branchesTree.refresh();
 				logTree.refresh();
-				void vscode.window.showInformationMessage(`Reset (--${pick.label} ${hash.slice(0, 7)}) 完成`);
+				void vscode.window.showInformationMessage(`Reset (--${pick.label} ${hash.slice(0, 7)}) complete`);
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Reset'))) {
-					void vscode.window.showErrorMessage(`Reset 失败：${errMsg(e)}`);
+					void vscode.window.showErrorMessage(`Failed to Reset: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -525,16 +525,16 @@ export function registerHistoryCommands(
 			if (!repo || node?.kind !== 'commit') {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: `从 ${node.commit.hash.slice(0, 7)} 新建并检出分支`, placeHolder: '新分支名' });
+			const name = await vscode.window.showInputBox({ prompt: `Create and checkout a new branch from ${node.commit.hash.slice(0, 7)}`, placeHolder: 'New branch name' });
 			if (!name || !name.trim()) {
 				return;
 			}
 			try {
 				await repo.createBranch(name.trim(), true, node.commit.hash);
 				branchesTree.refresh();
-				void vscode.window.showInformationMessage(`已新建并检出 ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
+				void vscode.window.showInformationMessage(`Created and checked out ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`新建分支失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to create branch: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -544,16 +544,16 @@ export function registerHistoryCommands(
 			if (node?.kind !== 'commit') {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: `在 ${node.commit.hash.slice(0, 7)} 上新建标签`, placeHolder: '如 v1.0.0' });
+			const name = await vscode.window.showInputBox({ prompt: `Create a new tag at ${node.commit.hash.slice(0, 7)}`, placeHolder: 'e.g. v1.0.0' });
 			if (!name || !name.trim()) {
 				return;
 			}
 			try {
 				await service.execGit(['tag', name.trim(), node.commit.hash]);
 				branchesTree.refresh();
-				void vscode.window.showInformationMessage(`已创建标签 ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
+				void vscode.window.showInformationMessage(`Created tag ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`创建标签失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to create tag: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -571,7 +571,7 @@ export function registerHistoryCommands(
 				});
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`查询失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Failed to query: ${errMsg(e)}`);
 			}
 		}),
 	);
