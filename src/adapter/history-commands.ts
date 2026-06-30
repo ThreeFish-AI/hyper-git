@@ -38,7 +38,7 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterAuthor', async () => {
-			const author = await vscode.window.showInputBox({ prompt: '按作者过滤（Author）', placeHolder: '例如 John' });
+			const author = await vscode.window.showInputBox({ prompt: 'Filter by Author', placeHolder: 'e.g. John' });
 			const f = logTree.getFilter();
 			logTree.setFilter({ ...f, author: author && author.trim() ? author.trim() : undefined });
 		}),
@@ -57,6 +57,25 @@ export function registerHistoryCommands(
 	);
 
 	subs.push(vscode.commands.registerCommand('hyperGit.logClearFilter', () => logTree.clearFilter()));
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.logFilter', async () => {
+			// 过滤器聚合入口：QuickPick 分发到既有 6 个过滤命令（复用 handler，零重复实现）。
+			const items = [
+				{ label: 'Filter by Author…', description: 'commits by author', action: 'hyperGit.logFilterAuthor' },
+				{ label: 'Filter by Path…', description: 'commits touching a path', action: 'hyperGit.logFilterPath' },
+				{ label: 'Filter by Message (grep)…', description: 'substring match', action: 'hyperGit.logFilterGrep' },
+				{ label: 'Filter by Message (regex)…', description: 'regular expression', action: 'hyperGit.logFilterRegex' },
+				{ label: 'Filter Merge Commits…', description: 'show or hide merge commits', action: 'hyperGit.logFilterMergeMode' },
+				{ label: 'Filter by Date…', description: 'commits within recent days', action: 'hyperGit.logFilterDate' },
+				{ label: 'Clear Filter', description: 'remove all active filters', action: 'hyperGit.logClearFilter' },
+			];
+			const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Filter commit log' });
+			if (pick) {
+				await vscode.commands.executeCommand(pick.action);
+			}
+		}),
+	);
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.copyCommitHash', (node: LogNode) => {
@@ -559,7 +578,7 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterGrep', async () => {
-			const grep = await vscode.window.showInputBox({ prompt: '按 message 文本/正则过滤（--grep）', placeHolder: '例如 fix|bug' });
+			const grep = await vscode.window.showInputBox({ prompt: 'Filter by message text/regex (--grep)', placeHolder: 'e.g. fix|bug' });
 			const f = logTree.getFilter();
 			logTree.setFilter({ ...f, grep: grep && grep.trim() ? grep.trim() : undefined });
 		}),
@@ -569,11 +588,11 @@ export function registerHistoryCommands(
 		vscode.commands.registerCommand('hyperGit.logFilterMergeMode', async () => {
 			const pick = await vscode.window.showQuickPick(
 				[
-					{ label: '全部提交', mode: 'all' as MergeMode },
-					{ label: '仅合并提交（merge）', mode: 'merge-only' as MergeMode },
-					{ label: '仅非合并提交', mode: 'no-merge' as MergeMode },
+					{ label: 'All Commits', mode: 'all' as MergeMode },
+					{ label: 'Merge Commits Only', mode: 'merge-only' as MergeMode },
+					{ label: 'Non-Merge Commits Only', mode: 'no-merge' as MergeMode },
 				],
-				{ placeHolder: '合并提交过滤模式' },
+				{ placeHolder: 'Merge commit filter mode' },
 			);
 			if (!pick) {
 				return;
@@ -588,12 +607,12 @@ export function registerHistoryCommands(
 			const now = Date.now();
 			const pick = await vscode.window.showQuickPick(
 				[
-					{ label: '最近 7 天', days: 7 },
-					{ label: '最近 30 天', days: 30 },
-					{ label: '最近 90 天', days: 90 },
-					{ label: '清除日期过滤', days: 0 },
+					{ label: 'Last 7 Days', days: 7 },
+					{ label: 'Last 30 Days', days: 30 },
+					{ label: 'Last 90 Days', days: 90 },
+					{ label: 'Clear Date Filter', days: 0 },
 				],
-				{ placeHolder: '提交日期范围' },
+				{ placeHolder: 'Commit date range' },
 			);
 			if (!pick) {
 				return;
@@ -605,7 +624,7 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterRegex', async () => {
-			const re = await vscode.window.showInputBox({ prompt: '按 message 正则过滤（客户端）', placeHolder: '例如 ^feat:' });
+			const re = await vscode.window.showInputBox({ prompt: 'Filter by message regex (client-side)', placeHolder: 'e.g. ^feat:' });
 			const f = logTree.getFilter();
 			logTree.setFilter({ ...f, messageRegex: re && re.trim() ? re.trim() : undefined });
 		}),
