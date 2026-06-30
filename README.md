@@ -16,7 +16,7 @@
 
 在重度 Git 协作中，开发者高频依赖一套统一的变更管理工作流：把改动分组到命名列表、在专门的提交面板里逐项勾选并校验、用可视化提交图审阅历史、用 Shelf 临时搁置改动、按行/按 Hunk 精确提交。VS Code 原生 Source Control 视图在这些能力上**存在空缺**：没有多 Changelist、没有忠实的提交窗口、没有提交前检查流水线、没有 Shelf、没有行级提交、没有可视化提交图。Hyper Git **补齐这些能力**，并与原生 Source Control 平行共存、零冲突。
 
-## 核心能力（v0.0.5）
+## 核心能力（v0.0.6）
 
 - **多 Changelist Changes 视图**：将改动分组到命名列表，设活动列表为提交目标，新建/重命名/删除/移动，`workspaceState` 持久化（重启恢复）；状态色复用 `gitDecoration.*` 主题色。
 - **Commit 提交窗口**：自绘提交面板 + Conventional Commits 实时校验 + Amend / Sign-off / 跳过 Hook + 提交 / 提交并推送；勾选集即提交权威范围；最近消息复用。
@@ -29,7 +29,7 @@
 - **历史编辑**：Cherry-Pick、Revert、Reset、交互式 Rebase、Undo/Drop/Fixup/Reword。
 - **其他**：Blame 行内注解、Patch 导出/应用、Reflog、3-way Diff 概览、Discard、Diff（HEAD ↔ Working）。
 
-> 规模：**7 视图 / 93 命令 / 6 配置项**，覆盖 Git 变更管理主线工作流。完整发布说明见 [Release Note v0.0.5](./docs/releases/v0.0.5.md)。
+> 规模：**7 视图 / 93 命令 / 6 配置项**，覆盖 Git 变更管理主线工作流。完整发布说明见 [Release Note v0.0.6](./docs/releases/v0.0.6.md)。
 
 ## 架构（路径 B：消费 + 自绘）
 
@@ -74,9 +74,9 @@ flowchart TB
 
 ## 安装
 
-- **手动（当前推荐）**：从 [Releases](https://github.com/ThreeFish-AI/hyper-git/releases) 下载 `hyper-git-0.0.5.vsix` → 命令面板 `Extensions: Install from VSIX`。
-- **OpenVSX**（Cursor / Windsurf / Gitpod / VSCodium）：搜索 `Hyper Git`。
-- **VS Code Marketplace**：搜索 `Hyper Git`（发布上线后可用）。
+- **手动（当前推荐）**：从 [Releases](https://github.com/ThreeFish-AI/hyper-git/releases) 下载 `hyper-git-agentic-git-0.0.6.vsix` → 命令面板 `Extensions: Install from VSIX`。
+- **OpenVSX**（Cursor / Windsurf / Gitpod / VSCodium）：搜索 `Hyper Git - Agentic Git`。
+- **VS Code Marketplace**：搜索 `Hyper Git - Agentic Git`（发布上线后可用）。
 - **要求**：VS Code ≥ 1.85.0 + 启用内置 Git 扩展（`vscode.git`，默认随附）。仅支持本地 git 仓库，不支持虚拟 / Web 工作区。
 
 ## 已知限制

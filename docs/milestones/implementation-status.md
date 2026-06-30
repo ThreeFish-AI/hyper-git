@@ -104,6 +104,6 @@
 
 ## 7. 发布状态
 
-- **当前版本**：0.0.5（首个 MVP 正式版，对外首发）。
-- **首发历程**：经若干内部迭代与 `v0.0.1-rc.*` 预发布打磨后，以 `v0.0.5` 作为首个 MVP 正式版对外发布（package 版本 `0.0.5` + git tag `v0.0.5`）。Marketplace 仅支持 `major.minor.patch`，预发布语义由 `--pre-release` 标记 + tag 体现。
+- **当前版本**：0.0.6（首个 MVP 正式版，对外首发；以「Hyper Git - Agentic Git」之名上架 Marketplace / OpenVSX）。
+- **首发历程**：经若干内部迭代与 `v0.0.1-rc.*` 预发布打磨后，以 `v0.0.5` 完成内部首发；因 Marketplace 上「Hyper Git」名称被误删不可用，遂将扩展更名为 **Hyper Git - Agentic Git**（`package.json` `name=hyper-git-agentic-git`），以 `v0.0.6`（git tag `v0.0.6`）重新上架。Marketplace 仅支持 `major.minor.patch`，预发布语义由 `--pre-release` 标记 + tag 体现。
 - **发布前置**：publisher 账号（`threefish-ai`）、VSCE_PAT / OVSX_PAT secrets、PNG 图标。

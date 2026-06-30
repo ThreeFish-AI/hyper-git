@@ -4,9 +4,9 @@
 
 > 面向用户的发布说明（含完整特性叙述与安装指引）见 [`docs/releases/`](./docs/releases/README.md)。
 
-## [0.0.5] - 2026-06-30 — 首个 MVP 正式版
+## [0.0.6] - 2026-06-30 — 首个 MVP 正式版
 
-首个对外正式版本，为 VS Code 提供统一的 Git 变更管理与提交工作流（多变更分组、自绘提交面板、可视化提交图、Shelf、行级提交）。采用**路径 B**（消费 `vscode.git` 稳定 `Repository` API 为底座；稳定 API 未覆盖的能力经 `GitRepositoryService.execGit` 复用同一 git 二进制 `api.git.path` 的受控 CLI 通道实现），与原生 Source Control 平行共存、零冲突。规模：**7 视图 / 93 命令 / 6 配置项**，**280 单元测试** + 集成测试，CI 三平台矩阵全程 GREEN。完整特性见 [Release Note v0.0.5](./docs/releases/v0.0.5.md)。
+首个对外正式版本，在 VS Code Marketplace / OpenVSX 上以 **「Hyper Git - Agentic Git」** 之名发布。为 VS Code 提供统一的 Git 变更管理与提交工作流（多变更分组、自绘提交面板、可视化提交图、Shelf、行级提交）。采用**路径 B**（消费 `vscode.git` 稳定 `Repository` API 为底座；稳定 API 未覆盖的能力经 `GitRepositoryService.execGit` 复用同一 git 二进制 `api.git.path` 的受控 CLI 通道实现），与原生 Source Control 平行共存、零冲突。规模：**7 视图 / 93 命令 / 6 配置项**，**280 单元测试** + 集成测试，CI 三平台矩阵全程 GREEN。完整特性见 [Release Note v0.0.6](./docs/releases/v0.0.6.md)。
 
 ### Added
 
@@ -67,4 +67,4 @@
 - 目录 / folder diff（虚拟文档）、Submodules 管理。
 - M5 AI Agent（5 个接缝已预埋 Null 实现，本版未启动）。
 
-[0.0.5]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.5
+[0.0.6]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.6

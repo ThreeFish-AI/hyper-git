@@ -11,7 +11,7 @@
 - [Log 视图 CI 状态](./features/log-ci-status.md) — 按提交显示 GitHub CI 最终状态（绿勾/红叉 + 悬停 Tooltip 明细）：认证、限流、懒加载、边界与配置。
 
 ## 发布说明
-- [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.5 首个 MVP](./releases/v0.0.5.md)。
+- [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.6 首个 MVP](./releases/v0.0.6.md)。
 
 ## 调研报告（循证依据）
 - [02 · VS Code SCM API 与 vscode.git 集成路径](./research/02-vscode-scm-integration.md) — 路径 B 决策依据、SCM 稳定/proposed API 边界、changelist 模型映射。
