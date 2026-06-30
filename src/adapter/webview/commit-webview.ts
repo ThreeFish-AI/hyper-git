@@ -7,6 +7,7 @@ import type { ChangelistRegistry } from '../changelist-registry';
 import type { ChangeItem, GitRepositoryService } from '../git-repository-service';
 import type { CommitFileItem, CommitViewState, HostToWebviewMessage, WebviewToHostMessage } from '../../shared/protocol';
 import type { CommitService } from '../commit/commit-service';
+import { getBaseStyles } from './shared-styles';
 
 /**
  * Commit 提交窗口（WebviewView，自绘提交面板）。
@@ -117,29 +118,28 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>
-body { margin: 0; padding: 8px; font-family: var(--vscode-font-family); color: var(--vscode-foreground); font-size: var(--vscode-font-size); }
-.cl-header { font-weight: 600; margin-bottom: 6px; opacity: 0.9; }
-.files { max-height: 220px; overflow-y: auto; border: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.3)); border-radius: 3px; margin-bottom: 8px; }
+${getBaseStyles()}
+body { margin: 0; padding: var(--hg-space-2); font-family: var(--vscode-font-family); color: var(--vscode-foreground); font-size: var(--vscode-font-size); }
+.cl-header { font-weight: 600; margin-bottom: var(--hg-space-1); }
+.files { max-height: 220px; overflow-y: auto; border: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.3)); border-radius: var(--hg-radius-control); margin-bottom: var(--hg-space-2); }
 .file { display: flex; align-items: center; gap: 6px; padding: 2px 6px; cursor: pointer; }
 .file:hover { background: var(--vscode-list-hoverBackground); }
 .file .dot { font-size: 14px; line-height: 1; }
 .file .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.file .dir { margin-left: auto; opacity: 0.6; font-size: 11px; white-space: nowrap; }
-textarea { width: 100%; box-sizing: border-box; resize: vertical; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); border-radius: 2px; padding: 6px; font-family: var(--vscode-editor-font-family); font-size: var(--vscode-font-size); }
+.file .dir { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: 11px; white-space: nowrap; }
+textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .validation { font-size: 11px; min-height: 16px; margin: 4px 2px; }
 .validation.ok { color: var(--vscode-testing-iconPassed, #3fb950); }
 .validation.warning { color: var(--vscode-editorWarning-foreground, #d29922); }
 .validation.error { color: var(--vscode-errorForeground, #f85149); }
-.recent { margin: 4px 0 8px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.recent-label { opacity: 0.6; font-size: 11px; }
+.recent { margin: 4px 0 var(--hg-space-2); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.recent-label { color: var(--vscode-descriptionForeground); font-size: 11px; }
 .chip { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: none; border-radius: 9px; padding: 1px 8px; font-size: 11px; cursor: pointer; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip:hover { opacity: 0.85; }
-.opt { display: block; font-size: 12px; margin: 3px 2px; opacity: 0.95; }
-.buttons { display: flex; gap: 6px; margin-top: 10px; }
-button.primary, .buttons button { flex: 1; padding: 6px 10px; border: none; border-radius: 2px; cursor: pointer; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 13px; }
-.buttons button:last-child { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
-button:disabled { opacity: 0.5; cursor: default; }
-.toast { font-size: 12px; margin-top: 8px; min-height: 16px; }
+.opt { display: block; font-size: 12px; margin: 3px 2px; }
+.buttons { display: flex; gap: 6px; margin-top: var(--hg-space-2); }
+.buttons .hg-btn { flex: 1; }
+.toast { font-size: 12px; margin-top: var(--hg-space-2); min-height: 16px; }
 .toast.ok { color: var(--vscode-testing-iconPassed, #3fb950); }
 .toast.err { color: var(--vscode-errorForeground, #f85149); }
 </style>
@@ -147,15 +147,15 @@ button:disabled { opacity: 0.5; cursor: default; }
 <body>
 <div class="cl-header">活动 Changelist：<span id="cl-name">—</span></div>
 <div class="files" id="files"></div>
-<textarea id="message" rows="4" placeholder="提交信息（Conventional Commits：type(scope): description）" spellcheck="false"></textarea>
+<textarea id="message" class="hg-input" rows="4" placeholder="提交信息（Conventional Commits：type(scope): description）" spellcheck="false"></textarea>
 <div id="validation" class="validation"></div>
 <div class="recent" id="recent"></div>
 <label class="opt"><input type="checkbox" id="amend"> Amend 上次提交</label>
 <label class="opt"><input type="checkbox" id="signoff"> 追加 Signed-off-by</label>
 <label class="opt"><input type="checkbox" id="skipHooks"> 跳过 Git hooks（--no-verify）</label>
 <div class="buttons">
-<button id="commit-btn" class="primary">Commit</button>
-<button id="commit-push-btn">Commit and Push</button>
+<button id="commit-btn" class="hg-btn">Commit</button>
+<button id="commit-push-btn" class="hg-btn hg-btn--secondary">Commit and Push</button>
 </div>
 <div id="toast" class="toast"></div>
 

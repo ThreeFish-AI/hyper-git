@@ -5,6 +5,7 @@ import { parseNameStatus, statusLabel } from '../../engine/log/commit-files';
 import { applyClientFilters, toClientFilter, type LogFilter } from '../../engine/log/log-filter';
 import { DEFAULT_LANE_PALETTE } from '../../engine/log/graph-color';
 import { computeGraphLayout, maxLanes } from '../../engine/log/graph-layout';
+import { getBaseStyles } from './shared-styles';
 import { parseLogLines } from '../../engine/log/log-line';
 import { buildLogArgs, type LogScope } from '../../engine/log/log-query';
 import type { GitHubCiService } from '../ci/github-ci-service';
@@ -380,7 +381,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 
 	private renderHtml(): string {
 		const nonce = crypto.randomBytes(16).toString('base64');
-		const palette = JSON.stringify(DEFAULT_LANE_PALETTE);
+		const laneFallback = JSON.stringify(DEFAULT_LANE_PALETTE);
 		const csp = ['default-src \'none\'', 'style-src \'unsafe-inline\'', `script-src 'nonce-${nonce}'`].join('; ');
 		return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -388,6 +389,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>
+${getBaseStyles()}
 :root { --hg-row: 24px; --hg-lane: 14px; }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-sideBar-background); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
@@ -411,10 +413,10 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 .chips { display: inline-flex; gap: 3px; flex: 0 1 auto; min-width: 0; overflow: hidden; }
 .chip { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid transparent; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 .chip.head { background: var(--vscode-statusBarItem-prominentBackground, var(--vscode-button-background)); color: var(--vscode-statusBarItem-prominentForeground, var(--vscode-button-foreground)); font-weight: 600; }
-.chip.localBranch { color: var(--vscode-gitDecoration-stageModifiedResourceForeground, #58a6ff); border-color: var(--vscode-gitDecoration-stageModifiedResourceForeground, #58a6ff); }
+.chip.localBranch { color: var(--vscode-charts-blue, #58a6ff); border-color: var(--vscode-charts-blue, #58a6ff); }
 .chip.head-target { font-weight: 700; }
-.chip.remoteBranch { color: var(--vscode-gitDecoration-modifiedResourceForeground, #d29922); border-color: var(--vscode-gitDecoration-modifiedResourceForeground, #d29922); }
-.chip.tag { color: var(--vscode-gitDecoration-conflictingResourceForeground, #3fb950); border-color: var(--vscode-gitDecoration-conflictingResourceForeground, #3fb950); }
+.chip.remoteBranch { color: var(--vscode-descriptionForeground, #8b949e); border-color: var(--vscode-descriptionForeground, #8b949e); }
+.chip.tag { color: var(--vscode-charts-yellow, #d29922); border-color: var(--vscode-charts-yellow, #d29922); }
 .author { flex: 0 0 auto; font-size: 11px; opacity: 0.7; max-width: 110px; overflow: hidden; text-overflow: ellipsis; padding-left: 8px; }
 .date { flex: 0 0 auto; font-size: 11px; opacity: 0.55; padding-left: 8px; }
 #viewport.narrow .author, #viewport.narrow .date { display: none; }
@@ -481,7 +483,23 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 <div id="ci-tip" role="dialog" aria-label="CI 检查详情"></div>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
-const PALETTE = ${palette};
+const LANE_FALLBACK = ${laneFallback};
+// 启动期解析泳道色：优先主题 --vscode-charts-* 令牌（深/浅主题自适应），缺失或与其它 lane 撞色时
+// 回落 DEFAULT_LANE_PALETTE 原始 distinct hex，保底相邻 lane 可区分（对齐 graph-color 设计注释）。
+const PALETTE = (function () {
+	const cs = getComputedStyle(document.body);
+	const hues = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'cyan', 'orange'];
+	const resolved = hues.map(function (hue, i) {
+		const v = cs.getPropertyValue('--vscode-charts-' + hue).trim();
+		return v || LANE_FALLBACK[i];
+	});
+	const seen = Object.create(null);
+	return resolved.map(function (c, i) {
+		const key = String(c).toLowerCase();
+		if (seen[key] === undefined) { seen[key] = true; return c; }
+		return LANE_FALLBACK[i];
+	});
+})();
 const ROW_H = 24, LANE_W = 14, NODE_R = 4, GUTTER = 10, OVERSCAN = 8, LOAD_THRESHOLD = 40;
 /** scope 白名单兜底：仅接受三态，否则回退默认 'all'（兼容未来废弃的持久化值）。 */
 function normalizeScope(v) { return v === 'all' || v === 'current' || v === 'checkpointer' ? v : 'all'; }

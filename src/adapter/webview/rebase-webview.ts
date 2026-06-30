@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import type { GitRepositoryService } from '../git-repository-service';
 import { handleGitConflict } from '../conflict-ui';
 import { type RebaseTodoItem, isValidAction, serializeTodo } from '../../engine/rebase/todo';
+import { getBaseStyles } from './shared-styles';
 
 interface RebaseCommit {
 	readonly hash: string;
@@ -201,6 +202,7 @@ export class RebaseWebview {
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'">
 <style>
+${getBaseStyles()}
 body { margin: 0; padding: 12px 16px; font-family: var(--vscode-font-family); color: var(--vscode-foreground); font-size: var(--vscode-font-size); background: var(--vscode-editor-background); }
 h3 { margin: 0 0 4px; font-weight: 600; }
 .hint { margin: 0 0 10px; font-size: 12px; color: var(--vscode-descriptionForeground); }
@@ -218,9 +220,6 @@ input.subject { width: 100%; }
 input.subject:disabled { color: var(--vscode-descriptionForeground); opacity: 0.85; }
 input.subject:not(:disabled) { border-color: var(--vscode-focusBorder, #007fd4); }
 .row-actions { margin-top: 12px; }
-button { padding: 6px 16px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 2px; cursor: pointer; font-size: 13px; }
-button:hover { opacity: 0.9; }
-button.secondary { background: var(--vscode-button-secondaryBackground, transparent); color: var(--vscode-button-secondaryForeground, var(--vscode-foreground)); border: 1px solid var(--vscode-button-border, rgba(128,128,128,.4)); }
 </style>
 </head>
 <body>
@@ -229,7 +228,7 @@ button.secondary { background: var(--vscode-button-secondaryBackground, transpar
 <table><thead><tr><th></th><th>Action</th><th>Hash</th><th>Subject</th></tr></thead>
 <tbody>${rows}</tbody></table>
 <div class="row-actions">
-<button id="rebase-btn">Start Rebase</button>
+<button class="hg-btn" id="rebase-btn">Start Rebase</button>
 </div>
 <script nonce="${nonce}">
 (function () {

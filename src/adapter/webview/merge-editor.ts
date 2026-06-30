@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import type { GitRepositoryService } from '../git-repository-service';
 import { diff3, type MergeHunk } from '../../engine/merge/diff3';
 import { parseConflictState } from '../../engine/git-state/conflict-detector';
+import { getBaseStyles } from './shared-styles';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -97,15 +98,12 @@ export class MergeEditorWebview {
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'">
 <style>
+${getBaseStyles()}
 body { margin: 0; padding: 10px 14px; font-family: var(--vscode-font-family); font-size: 12px; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
 .bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .bar .path { font-weight: 600; }
 .bar .count { color: var(--vscode-editorWarning-foreground, #d29922); }
 .bar .spacer { flex: 1; }
-button { padding: 5px 14px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 2px; cursor: pointer; font-size: 12px; }
-button:hover { opacity: 0.9; }
-button.secondary { background: var(--vscode-button-secondaryBackground, transparent); color: var(--vscode-button-secondaryForeground, var(--vscode-foreground)); border: 1px solid var(--vscode-button-border, rgba(128,128,128,.4)); }
-button.sm { padding: 2px 8px; font-size: 11px; }
 .hunk { margin-bottom: 10px; }
 .stable { background: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,.12)); border-left: 3px solid transparent; padding: 2px 8px; white-space: pre-wrap; font-family: var(--vscode-editor-font-family); }
 .conflict { border: 1px solid var(--vscode-inputOption-activeBorder, #d29922); border-radius: 3px; }
@@ -123,8 +121,8 @@ button.sm { padding: 2px 8px; font-size: 11px; }
   <span class="path">${escapeHtml(filePath)}</span>
   <span class="count">${conflicts} 个冲突</span>
   <span class="spacer"></span>
-  <button class="secondary" id="cancel">取消</button>
-  <button id="save">保存并标记已解决</button>
+  <button class="hg-btn hg-btn--secondary" id="cancel">取消</button>
+  <button class="hg-btn" id="save">保存并标记已解决</button>
 </div>
 <div id="hunks"></div>
 <script nonce="${nonce}">
@@ -151,7 +149,7 @@ HUNKS.forEach(function(h, idx){
     var oc = document.createElement('div'); oc.className = 'col';
     oc.innerHTML = '<div class="col-label">Ours</div><pre>' + escapeHtml(lines(h.ours).join('\\n')) + '</pre>';
     var ob = document.createElement('div'); ob.className='col-actions';
-    var obtn = document.createElement('button'); obtn.className='sm'; obtn.textContent='← 采用 Ours';
+    var obtn = document.createElement('button'); obtn.className='hg-btn hg-btn--sm'; obtn.textContent='← 采用 Ours';
     obtn.onclick = function(){ ta.value = lines(h.ours).join('\\n'); ta.focus(); };
     ob.appendChild(obtn); oc.appendChild(ob); grid.appendChild(oc);
     // RESULT
@@ -160,14 +158,14 @@ HUNKS.forEach(function(h, idx){
     var ta = document.createElement('textarea'); ta.value = markerText(h); ta.id = 'result-' + idx;
     rc.appendChild(ta);
     var bb = document.createElement('div'); bb.className='col-actions';
-    var baseb = document.createElement('button'); baseb.className='sm secondary'; baseb.textContent='采用 Base';
+    var baseb = document.createElement('button'); baseb.className='hg-btn hg-btn--sm hg-btn--secondary'; baseb.textContent='采用 Base';
     baseb.onclick = function(){ ta.value = lines(h.base).join('\\n'); };
     bb.appendChild(baseb); rc.appendChild(bb); grid.appendChild(rc);
     // THEIRS
     var tc = document.createElement('div'); tc.className = 'col';
     tc.innerHTML = '<div class="col-label">Theirs</div><pre>' + escapeHtml(lines(h.theirs).join('\\n')) + '</pre>';
     var tb = document.createElement('div'); tb.className='col-actions';
-    var tbtn = document.createElement('button'); tbtn.className='sm'; tbtn.textContent='采用 Theirs →';
+    var tbtn = document.createElement('button'); tbtn.className='hg-btn hg-btn--sm'; tbtn.textContent='采用 Theirs →';
     tbtn.onclick = function(){ ta.value = lines(h.theirs).join('\\n'); ta.focus(); };
     tb.appendChild(tbtn); tc.appendChild(tb); grid.appendChild(tc);
     c.appendChild(grid); d.appendChild(c); container.appendChild(d);
