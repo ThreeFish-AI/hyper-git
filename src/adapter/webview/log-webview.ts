@@ -267,7 +267,8 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			if (raws.length === 0) {
 				return { rows: [], maxLanes: 0, hasMore: false };
 			}
-			// 客户端过滤（mergeMode / date / regex），message 近似取 subject。
+			// 客户端过滤（mergeMode / date / regex / checkpoint），message 近似取 subject。
+			// keepCheckpoint 由 scope 驱动：仅 Checkpointer 视图保留 checkpoint 自动提交，All/Current 剔除。
 			const filterable = raws.map((r) => ({
 				message: r.subject,
 				authorDate: r.authorDate ? new Date(r.authorDate) : undefined,
@@ -275,7 +276,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				hash: r.hash,
 				raw: r,
 			}));
-			const survived = applyClientFilters(filterable, toClientFilter(this.filter));
+			const survived = applyClientFilters(filterable, { ...toClientFilter(this.filter), keepCheckpoint: this.scope === 'checkpointer' });
 			const layout = computeGraphLayout(survived.map((s) => ({ hash: s.hash, parents: s.parents })));
 			const hashSet = new Set(survived.map((s) => s.hash));
 			const chips = await this.fetchChips(hashSet);
@@ -466,6 +467,7 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
   <span class="seg">
     <button id="scope-all" class="active">All</button>
     <button id="scope-current">Current</button>
+    <button id="scope-checkpointer">Checkpointer</button>
   </span>
   <span class="repo" id="repo"></span>
   <button id="ci-signin" class="ci-signin" title="登录 GitHub 查看 CI 状态">登录 GitHub</button>
@@ -481,9 +483,11 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 const vscode = acquireVsCodeApi();
 const PALETTE = ${palette};
 const ROW_H = 24, LANE_W = 14, NODE_R = 4, GUTTER = 10, OVERSCAN = 8, LOAD_THRESHOLD = 40;
+/** scope 白名单兜底：仅接受三态，否则回退默认 'all'（兼容未来废弃的持久化值）。 */
+function normalizeScope(v) { return v === 'all' || v === 'current' || v === 'checkpointer' ? v : 'all'; }
 const persisted = vscode.getState() || {};
 let selectedHash = persisted.selectedHash || null;
-let scope = persisted.scope || 'all';
+let scope = normalizeScope(persisted.scope);
 let model = { rows: [], maxLanes: 0, hasMore: false, repoRoot: '' };
 let renderedFirst = -1, renderedLast = -1, fetching = false;
 // ── CI 状态（懒加载、仅取可见行；ciByHash 缓存、ciRequested 去重、ciPending 防抖批量）──
@@ -593,6 +597,7 @@ function render() {
   emptyEl.style.display = total === 0 ? 'block' : 'none';
   document.getElementById('scope-all').classList.toggle('active', scope === 'all');
   document.getElementById('scope-current').classList.toggle('active', scope === 'current');
+  document.getElementById('scope-checkpointer').classList.toggle('active', scope === 'checkpointer');
   if (model.hasMore && !fetching && l >= total - LOAD_THRESHOLD) {
     fetching = true; spinnerEl.style.display = 'block';
     vscode.postMessage({ type: 'log/loadMore', payload: { cursor: total } });
@@ -759,8 +764,10 @@ rowsEl.addEventListener('contextmenu', function (e) {
   e.preventDefault();
   vscode.postMessage({ type: 'log/commitAction', payload: { op: 'menu', hash: r.getAttribute('data-hash') } });
 });
-document.getElementById('scope-all').addEventListener('click', function () { if (scope !== 'all') { scope = 'all'; vscode.setState({ selectedHash: selectedHash, scope: scope }); vscode.postMessage({ type: 'log/setScope', payload: { scope: 'all' } }); } });
-document.getElementById('scope-current').addEventListener('click', function () { if (scope !== 'current') { scope = 'current'; vscode.setState({ selectedHash: selectedHash, scope: scope }); vscode.postMessage({ type: 'log/setScope', payload: { scope: 'current' } }); } });
+function setScope(next) { if (scope !== next) { scope = next; vscode.setState({ selectedHash: selectedHash, scope: scope }); vscode.postMessage({ type: 'log/setScope', payload: { scope: next } }); } }
+document.getElementById('scope-all').addEventListener('click', function () { setScope('all'); });
+document.getElementById('scope-current').addEventListener('click', function () { setScope('current'); });
+document.getElementById('scope-checkpointer').addEventListener('click', function () { setScope('checkpointer'); });
 viewport.addEventListener('scroll', scheduleRender, { passive: true });
 viewport.addEventListener('scroll', function () { if (tipHash) hideTip(); }, { passive: true });
 viewport.addEventListener('keydown', function (e) {
