@@ -1,8 +1,16 @@
 import * as vscode from 'vscode';
-import type { GitRepositoryService } from './git-repository-service';
-import type { BranchesTreeProvider } from './tree/branches-tree';
-import type { LogFilterControl } from './webview/log-webview';
+import { selectedBranchRefs } from './branch-selection';
 import { handleGitConflict } from './conflict-ui';
+import type { BranchNode, BranchesTreeProvider } from './tree/branches-tree';
+import type { LogFilterControl } from './webview/log-webview';
+import { truncateNames } from '../engine/ref/cleanup';
+import {
+	formatRemoteDeleteConfirm,
+	partitionRemoteByProtected,
+	resolveRemoteBranch,
+	type RemoteBranchTarget,
+} from '../engine/ref/remote-ref';
+import type { GitRepositoryService } from './git-repository-service';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -144,6 +152,81 @@ export function registerRemoteCommands(
 				if (!(await handleGitConflict(service, '合并'))) {
 					void vscode.window.showErrorMessage(`合并失败：${errMsg(e)}`);
 				}
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.deleteRemoteBranch', async (node: BranchNode, nodes?: BranchNode[]) => {
+			const repo = service.repo;
+			if (!repo) {
+				return;
+			}
+			// 仅远程、非 tag（多选时自动过滤本地/标签节点）。
+			const refs = selectedBranchRefs(node, nodes, (r) => r.isRemote && !r.isTag);
+			if (refs.length === 0) {
+				return;
+			}
+			const remotes = repo.state.remotes.map((r) => r.name);
+			if (remotes.length === 0) {
+				void vscode.window.showWarningMessage('未配置远程仓库（remote）');
+				return;
+			}
+			// 用已知 remotes 做最长前缀匹配解析 {remote, branch}；丢弃无法归属的脏数据。
+			const targets = refs
+				.map((r) => resolveRemoteBranch(r.shortName, remotes))
+				.filter((t): t is RemoteBranchTarget => t !== null);
+			if (targets.length === 0) {
+				void vscode.window.showWarningMessage('无法解析所选远程分支的归属 remote');
+				return;
+			}
+			// 受保护主干（main/master）硬阻断——与本地删除硬阻断当前 HEAD 对称。
+			const { deletable, protectedTargets } = partitionRemoteByProtected(targets);
+			if (deletable.length === 0) {
+				void vscode.window.showWarningMessage(`已跳过受保护分支：${truncateNames(protectedTargets.map((t) => t.shortName))}`);
+				return;
+			}
+			// 软警示：待删集合是否含当前分支上游（删之不致命，但令当前分支失远程追踪）。
+			const headUpstream = repo.state.HEAD?.upstream?.name;
+			const hasUpstreamOfHead = !!headUpstream && deletable.some((t) => t.shortName === headUpstream);
+			const { detail, confirmLabel } = formatRemoteDeleteConfirm(deletable, { hasUpstreamOfHead });
+			// 受保护跳过项透明并入文案。
+			const fullDetail =
+				protectedTargets.length > 0
+					? `${detail}\n\n已自动跳过受保护分支：${truncateNames(protectedTargets.map((t) => t.shortName))}`
+					: detail;
+			const choice = await vscode.window.showWarningMessage(fullDetail, { modal: true }, confirmLabel);
+			if (choice !== confirmLabel) {
+				return;
+			}
+			// 逐分支推删，收集失败（不调用 handleGitConflict——删除不产生合并冲突）。
+			const failures: string[] = [];
+			const succeeded: RemoteBranchTarget[] = [];
+			for (const t of deletable) {
+				try {
+					await service.execGit(['push', t.remote, '--delete', t.branch]);
+					succeeded.push(t);
+				} catch {
+					failures.push(t.shortName);
+				}
+			}
+			// 仅对服务端删除成功项清理本地 remote-tracking ref（失败项保留，待重试或下次 fetch --prune）。
+			for (const t of succeeded) {
+				try {
+					await service.execGit(['branch', '-D', '-r', `${t.remote}/${t.branch}`]);
+				} catch {
+					/* 非关键：服务端已删为权威态，本地清理失败不影响正确性 */
+				}
+			}
+			branchesTree.refresh();
+			if (failures.length === 0) {
+				void vscode.window.showInformationMessage(
+					succeeded.length === 1 ? `已删除远程分支 ${succeeded[0].shortName}` : `已删除 ${succeeded.length} 个远程分支`,
+				);
+			} else {
+				void vscode.window.showWarningMessage(
+					`已删除 ${succeeded.length} 个远程分支，${failures.length} 个失败：${truncateNames(failures)}`,
+				);
 			}
 		}),
 	);
