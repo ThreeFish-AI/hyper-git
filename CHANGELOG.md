@@ -4,6 +4,11 @@
 
 > 面向用户的发布说明（含完整特性叙述与安装指引）见 [`docs/releases/`](./docs/releases/README.md)。
 
+## [0.0.7] - 未发布
+
+### Fixed
+- 修复 `vsce package` 打包因 ESLint `no-useless-assignment` 阻断：`engine/ci/remote-parser.ts` 中 `host`/`path` 的空串初值为 dead store（`hasScheme` 真假两分支均无条件重赋、解析失败处先 `return null`），改为带类型标注的纯声明消除，由 TS 确定赋值分析接管，运行时行为不变。
+
 ## [0.0.6] - 2026-06-30 — 首个 MVP 正式版
 
 首个对外正式版本，在 VS Code Marketplace / OpenVSX 上以 **「Hyper Git - Agentic Git」** 之名发布。为 VS Code 提供统一的 Git 变更管理与提交工作流（多变更分组、自绘提交面板、可视化提交图、Shelf、行级提交）。采用**路径 B**（消费 `vscode.git` 稳定 `Repository` API 为底座；稳定 API 未覆盖的能力经 `GitRepositoryService.execGit` 复用同一 git 二进制 `api.git.path` 的受控 CLI 通道实现），与原生 Source Control 平行共存、零冲突。规模：**7 视图 / 93 命令 / 6 配置项**，**280 单元测试** + 集成测试，CI 三平台矩阵全程 GREEN。完整特性见 [Release Note v0.0.6](./docs/releases/v0.0.6.md)。

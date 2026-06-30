@@ -32,8 +32,8 @@ export function parseGitHubRemote(input: string): GitHubRemote | null {
 	if (!url) {
 		return null;
 	}
-	let host = '';
-	let path = '';
+	let host: string;
+	let path: string;
 	const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(url);
 	if (hasScheme) {
 		let parsed: URL;
