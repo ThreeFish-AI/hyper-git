@@ -132,12 +132,14 @@ export type LogHostToWebviewMessage =
 	}
 	| { readonly type: 'log/commitFiles'; readonly payload: { readonly hash: string; readonly files: readonly LogCommitFileItem[] } }
 	| { readonly type: 'log/busy'; readonly payload: { readonly busy: boolean } }
+	| { readonly type: 'log/error'; readonly payload: { readonly message: string } }
 	| { readonly type: 'log/ciMeta'; readonly payload: CiMetaVM }
 	| { readonly type: 'log/ciData'; readonly payload: { readonly map: Readonly<Record<string, CiStatusVM>> } };
 
 /** Webview → Host（Log Graph）。 */
 export type LogWebviewToHostMessage =
 	| { readonly type: 'log/requestState' }
+	| { readonly type: 'log/retry' }
 	| { readonly type: 'log/loadMore'; readonly payload: { readonly cursor: number } }
 	| { readonly type: 'log/selectCommit'; readonly payload: { readonly hash: string } }
 	| { readonly type: 'log/commitAction'; readonly payload: { readonly op: LogCommitOp; readonly hash: string } }

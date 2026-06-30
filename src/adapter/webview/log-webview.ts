@@ -27,15 +27,15 @@ const PAGE = 1000;
 
 /** per-commit 操作 → 既有命令 id（webview 右键菜单 → host 重调用，handler 仅需 hash）。 */
 const COMMIT_MENU: ReadonlyArray<{ readonly label: string; readonly command: string }> = [
-	{ label: '复制 Hash', command: 'hyperGit.copyCommitHash' },
-	{ label: 'Cherry-Pick 此提交', command: 'hyperGit.cherryPick' },
-	{ label: 'Revert 此提交', command: 'hyperGit.revertCommit' },
-	{ label: 'Drop 此提交（删除最新提交）', command: 'hyperGit.dropCommit' },
-	{ label: 'Fixup 此提交', command: 'hyperGit.fixupCommit' },
-	{ label: '从此提交新建分支…', command: 'hyperGit.createBranchFromCommit' },
-	{ label: '从此提交新建标签…', command: 'hyperGit.createTagFromCommit' },
-	{ label: '查看包含此提交的分支', command: 'hyperGit.showContainingBranches' },
-	{ label: 'Reset 当前分支到此提交…', command: 'hyperGit.resetToHere' },
+	{ label: 'Copy Hash', command: 'hyperGit.copyCommitHash' },
+	{ label: 'Cherry-Pick Commit', command: 'hyperGit.cherryPick' },
+	{ label: 'Revert Commit', command: 'hyperGit.revertCommit' },
+	{ label: 'Drop Commit', command: 'hyperGit.dropCommit' },
+	{ label: 'Fixup Commit', command: 'hyperGit.fixupCommit' },
+	{ label: 'Create Branch from Commit…', command: 'hyperGit.createBranchFromCommit' },
+	{ label: 'Create Tag from Commit…', command: 'hyperGit.createTagFromCommit' },
+	{ label: 'Show Branches Containing Commit', command: 'hyperGit.showContainingBranches' },
+	{ label: 'Reset Current Branch to Here…', command: 'hyperGit.resetToHere' },
 ];
 
 /** 引用标签查询的 for-each-ref 格式（full objectname 供精确匹配；与 parseChips 字段顺序对应）。 */
@@ -141,6 +141,9 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 	private onMessage(msg: LogWebviewToHostMessage): void {
 		switch (msg.type) {
 			case 'log/requestState':
+				void this.pushState();
+				break;
+			case 'log/retry':
 				void this.pushState();
 				break;
 			case 'log/loadMore':
@@ -294,7 +297,8 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			}));
 			return { rows, maxLanes: maxLanes(layout), hasMore: raws.length === PAGE };
 		} catch (e) {
-			void vscode.window.showErrorMessage(`获取提交图失败：${errMsg(e)}`);
+			// 失败时以 webview 内错误态呈现（带 Retry），而非模态弹窗——用户可即时重试。
+			this.post({ type: 'log/error', payload: { message: errMsg(e) } });
 			return undefined;
 		}
 	}
@@ -370,7 +374,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 	private async handleCommitMenu(hash: string): Promise<void> {
 		const nodeLike: LogCommitNode = { kind: 'commit', commit: { hash, message: '', parents: [] } };
 		const items = COMMIT_MENU.map((m) => ({ label: m.label, command: m.command }));
-		const pick = await vscode.window.showQuickPick(items, { placeHolder: `提交 ${hash.slice(0, 7)}` });
+		const pick = await vscode.window.showQuickPick(items, { placeHolder: `Commit ${hash.slice(0, 7)}` });
 		if (!pick) {
 			return;
 		}
@@ -384,7 +388,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 		const laneFallback = JSON.stringify(DEFAULT_LANE_PALETTE);
 		const csp = ['default-src \'none\'', 'style-src \'unsafe-inline\'', `script-src 'nonce-${nonce}'`].join('; ');
 		return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
@@ -422,12 +426,19 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #viewport.narrow .author, #viewport.narrow .date { display: none; }
 #details { flex: 0 0 auto; max-height: 38%; overflow-y: auto; border-top: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.25)); display: none; }
 #details.show { display: block; }
-#details .dh { position: sticky; top: 0; background: var(--vscode-sideBar-background); padding: 4px 8px; font-size: 11px; opacity: 0.8; border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.15)); }
+#details .dh { position: sticky; top: 0; display: flex; align-items: center; gap: 6px; background: var(--vscode-sideBar-background); padding: 4px 8px; font-size: 11px; color: var(--vscode-descriptionForeground); border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.15)); }
+#details .dh #details-title { flex: 1 1 auto; }
+.dh-close { flex: 0 0 auto; background: transparent; border: none; color: var(--vscode-descriptionForeground); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; border-radius: var(--hg-radius-control); }
+.dh-close:hover { color: var(--vscode-foreground); background: var(--vscode-list-hoverBackground); }
+.dh-close:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
 #details .file { display: flex; align-items: center; gap: 6px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
 #details .file:hover { background: var(--vscode-list-hoverBackground); }
 #details .file .dot { font-size: 13px; line-height: 1; }
 #details .file .nm { overflow: hidden; text-overflow: ellipsis; }
-#empty { padding: 16px; text-align: center; opacity: 0.6; font-size: 12px; }
+#empty, #error { padding: 28px 16px; text-align: center; color: var(--vscode-descriptionForeground); font-size: 12px; }
+#empty .empty-icon { font-size: 30px; opacity: 0.4; margin-bottom: 8px; }
+.empty-title { font-size: 13px; color: var(--vscode-foreground); margin-bottom: 3px; }
+.empty-hint { font-size: 11px; }
 #spinner { position: absolute; bottom: 6px; right: 8px; font-size: 11px; opacity: 0.6; display: none; }
 /* ── CI 状态图标（提交行最右侧，固定 16px 槽位，保证 author/date 列对齐）── */
 .ci { flex: 0 0 16px; width: 16px; display: inline-flex; align-items: center; justify-content: center; }
@@ -466,21 +477,22 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 </head>
 <body>
 <div class="toolbar">
-  <span class="seg">
-    <button id="scope-all" class="active">All</button>
-    <button id="scope-current">Current</button>
-    <button id="scope-checkpointer">Checkpointer</button>
+  <span class="seg" role="group" aria-label="Commit scope">
+    <button id="scope-all" class="active" aria-pressed="true">All</button>
+    <button id="scope-current" aria-pressed="false">Current</button>
+    <button id="scope-checkpointer" aria-pressed="false" title="Show internal checkpoint (auto-snapshot) commits">Checkpoints</button>
   </span>
   <span class="repo" id="repo"></span>
-  <button id="ci-signin" class="ci-signin" title="登录 GitHub 查看 CI 状态">登录 GitHub</button>
+  <button id="ci-signin" class="ci-signin" title="Sign in to GitHub to view CI status">Sign In to GitHub</button>
 </div>
-<div id="viewport" tabindex="0">
+<div id="viewport" tabindex="0" role="tree" aria-label="Commit history">
   <div id="spacer"><div id="rows"></div></div>
-  <div id="empty">暂无提交</div>
-  <div id="spinner">加载中…</div>
+  <div id="empty"><div class="empty-icon" aria-hidden="true">⌥</div><div class="empty-title">No Commits</div><div class="empty-hint">No commits match the current scope or filter.</div></div>
+  <div id="error" style="display:none"><div class="empty-title">Failed to Load Commits</div><div class="empty-hint" id="error-msg"></div><button class="hg-btn hg-btn--sm" id="retry-btn" style="margin-top:8px">Retry</button></div>
+  <div id="spinner">Loading…</div>
 </div>
-<div id="details"><div class="dh" id="details-head"></div><div id="details-list"></div></div>
-<div id="ci-tip" role="dialog" aria-label="CI 检查详情"></div>
+<div id="details"><div class="dh" id="details-head"><span id="details-title"></span><button class="dh-close" id="details-close" title="Close" aria-label="Close details">×</button></div><div id="details-list"></div></div>
+<div id="ci-tip" role="dialog" aria-label="CI check details"></div>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 const LANE_FALLBACK = ${laneFallback};
@@ -528,8 +540,12 @@ const repoEl = document.getElementById('repo');
 const emptyEl = document.getElementById('empty');
 const spinnerEl = document.getElementById('spinner');
 const detailsEl = document.getElementById('details');
-const detailsHead = document.getElementById('details-head');
 const detailsList = document.getElementById('details-list');
+const detailsTitleEl = document.getElementById('details-title');
+const detailsCloseEl = document.getElementById('details-close');
+const errorEl = document.getElementById('error');
+const errorMsgEl = document.getElementById('error-msg');
+const retryBtnEl = document.getElementById('retry-btn');
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function laneColor(i) { return PALETTE[((i % PALETTE.length) + PALETTE.length) % PALETTE.length]; }
@@ -582,15 +598,15 @@ function ciSlotHtml(row) {
     return '<span class="ci ci-empty" aria-hidden="true"></span>';
   }
   const failed = ci.total - ci.passed;
-  const a11y = ci.state === 'success' ? 'CI 通过 ' + ci.passed + '/' + ci.total
-    : ci.state === 'failure' ? 'CI 失败 ' + failed + '/' + ci.total + ' 项未通过'
-    : 'CI 运行中 ' + ci.passed + '/' + ci.total;
+  const a11y = ci.state === 'success' ? 'CI passed ' + ci.passed + '/' + ci.total
+    : ci.state === 'failure' ? 'CI failed, ' + failed + '/' + ci.total + ' checks failing'
+    : 'CI running ' + ci.passed + '/' + ci.total;
   return '<span class="ci ci-' + ci.state + '" data-ci="' + esc(row.hash) + '" tabindex="0" role="button" aria-label="' + esc(a11y) + '">' + ciGlyph(ci.state) + '</span>';
 }
 
 function rowHtml(row, idx) {
   const sel = row.hash === selectedHash ? ' selected' : '';
-  const merge = row.isMerge ? '<span class="merge" title="合并提交">⇠</span>' : '';
+  const merge = row.isMerge ? '<span class="merge" title="Merge commit">⇠</span>' : '';
   return '<div class="row' + sel + '" data-i="' + idx + '" data-hash="' + esc(row.hash) + '" role="treeitem" aria-selected="' + (sel !== '') + '">'
     + rowSvg(row)
     + '<span class="subject">' + chipsHtml(row) + '<span class="msg">' + esc(row.subject) + '</span>' + merge + '</span>'
@@ -617,9 +633,13 @@ function render() {
   collectCiRequests(f, l);
   spacer.style.height = (total * ROW_H) + 'px';
   emptyEl.style.display = total === 0 ? 'block' : 'none';
+  errorEl.style.display = 'none';
   document.getElementById('scope-all').classList.toggle('active', scope === 'all');
   document.getElementById('scope-current').classList.toggle('active', scope === 'current');
   document.getElementById('scope-checkpointer').classList.toggle('active', scope === 'checkpointer');
+  document.getElementById('scope-all').setAttribute('aria-pressed', String(scope === 'all'));
+  document.getElementById('scope-current').setAttribute('aria-pressed', String(scope === 'current'));
+  document.getElementById('scope-checkpointer').setAttribute('aria-pressed', String(scope === 'checkpointer'));
   if (model.hasMore && !fetching && l >= total - LOAD_THRESHOLD) {
     fetching = true; spinnerEl.style.display = 'block';
     vscode.postMessage({ type: 'log/loadMore', payload: { cursor: total } });
@@ -718,21 +738,21 @@ function tipGlyph(state) {
 }
 function buildTip(ci) {
   const headState = ci.state === 'success' ? 'success' : ci.state === 'failure' ? 'failure' : 'pending';
-  const headTxt = ci.state === 'success' ? ('全部 ' + ci.total + ' 项检查通过')
-    : ci.state === 'failure' ? ((ci.total - ci.passed) + ' / ' + ci.total + ' 项检查未通过')
-    : ci.state === 'pending' ? ('检查运行中 ' + ci.passed + ' / ' + ci.total) : 'CI 状态未知';
+  const headTxt = ci.state === 'success' ? ('All ' + ci.total + ' checks passed')
+    : ci.state === 'failure' ? ((ci.total - ci.passed) + ' / ' + ci.total + ' checks failed')
+    : ci.state === 'pending' ? ('Checks running ' + ci.passed + ' / ' + ci.total) : 'CI status unknown';
   // 失败项前置，悬停即可见未通过原因。
   const ordered = ci.checks.slice().sort(function (a, b) {
     return (a.state === 'failure' ? 0 : 1) - (b.state === 'failure' ? 0 : 1);
   });
   const parts = ['<div class="tip-h"><span class="g g-', headState, '">', ciGlyph(headState), '</span>', esc(headTxt), '</div><div class="tip-list">'];
-  if (ordered.length === 0) parts.push('<div class="tip-row" style="opacity:.6;cursor:default">暂无检查明细</div>');
+  if (ordered.length === 0) parts.push('<div class="tip-row" style="opacity:.6;cursor:default">No check details</div>');
   for (const c of ordered) {
     const desc = (c.state === 'failure' && c.description) ? '<span class="desc">' + esc(c.description) + '</span>' : '';
     parts.push('<div class="tip-row" data-url="', esc(c.url || ''), '" role="link" tabindex="0">', tipGlyph(c.state), '<span class="nm">', esc(c.name), desc, '</span></div>');
   }
   parts.push('</div>');
-  if (ci.url) parts.push('<div class="tip-foot"><a data-url="', esc(ci.url), '" role="link" tabindex="0">在 GitHub 上查看</a></div>');
+  if (ci.url) parts.push('<div class="tip-foot"><a data-url="', esc(ci.url), '" role="link" tabindex="0">View on GitHub</a></div>');
   ciTipEl.innerHTML = parts.join('');
 }
 function positionTip(rect) {
@@ -839,8 +859,9 @@ ciTipEl.addEventListener('keydown', function (e) {
 });
 ciSignInEl.addEventListener('click', function () { vscode.postMessage({ type: 'log/ciSignIn' }); });
 rowsEl.addEventListener('dblclick', function (e) {
+  // 双击 = 打开提交（选中 + 展开详情），与 VS Code「双击即打开」一致；提交操作菜单保留在右键与 Enter。
   const r = e.target.closest('.row'); if (!r) return;
-  vscode.postMessage({ type: 'log/commitAction', payload: { op: 'menu', hash: r.getAttribute('data-hash') } });
+  selectRow(r.getAttribute('data-hash'));
 });
 rowsEl.addEventListener('contextmenu', function (e) {
   const r = e.target.closest('.row'); if (!r) return;
@@ -851,6 +872,8 @@ function setScope(next) { if (scope !== next) { scope = next; vscode.setState({ 
 document.getElementById('scope-all').addEventListener('click', function () { setScope('all'); });
 document.getElementById('scope-current').addEventListener('click', function () { setScope('current'); });
 document.getElementById('scope-checkpointer').addEventListener('click', function () { setScope('checkpointer'); });
+detailsCloseEl.addEventListener('click', function () { detailsEl.classList.remove('show'); });
+retryBtnEl.addEventListener('click', function () { errorEl.style.display = 'none'; spinnerEl.style.display = 'block'; vscode.postMessage({ type: 'log/retry' }); });
 viewport.addEventListener('scroll', scheduleRender, { passive: true });
 viewport.addEventListener('scroll', function () { if (tipHash) hideTip(); }, { passive: true });
 viewport.addEventListener('keydown', function (e) {
@@ -869,8 +892,8 @@ function renderDetails(hash, files) {
   if (!hash) { detailsEl.classList.remove('show'); return; }
   const row = model.rows.find(function (r) { return r.hash === hash; });
   const hasParent = row && row.parents && row.parents.length > 0 ? '1' : '0';
-  detailsHead.textContent = '变更文件 (' + files.length + ') · ' + hash.slice(0, 7);
-  if (files.length === 0) { detailsList.innerHTML = '<div class="file" style="opacity:.6">无变更文件（可能为根提交或合并提交）</div>'; detailsEl.classList.add('show'); return; }
+  detailsTitleEl.textContent = 'Changed Files (' + files.length + ') · ' + hash.slice(0, 7);
+  if (files.length === 0) { detailsList.innerHTML = '<div class="file" style="opacity:.6">No changed files (may be a root or merge commit)</div>'; detailsEl.classList.add('show'); return; }
   const html = [];
   for (const f of files) {
     html.push('<div class="file" data-hash="', esc(hash), '" data-path="', esc(f.path), '" data-hasparent="', hasParent, '"><span class="dot" style="color:var(--vscode-', f.themeColor.replace(/\\./g, '-'), ')">', esc(f.statusLabel), '</span><span class="nm">', esc(f.path), '</span></div>');
@@ -901,6 +924,10 @@ window.addEventListener('message', function (e) {
     renderDetails(m.payload.hash, m.payload.files);
   } else if (m.type === 'log/busy') {
     spinnerEl.style.display = m.payload.busy ? 'block' : 'none';
+  } else if (m.type === 'log/error') {
+    spinnerEl.style.display = 'none'; emptyEl.style.display = 'none';
+    errorMsgEl.textContent = m.payload.message || 'Unexpected error';
+    errorEl.style.display = 'block';
   } else if (m.type === 'log/ciMeta') {
     ciMeta = { available: !!m.payload.available, needsSignIn: !!m.payload.needsSignIn, error: m.payload.error || '' };
     renderCiMeta();

@@ -113,7 +113,7 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 		].join('; ');
 
 		return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
@@ -139,25 +139,37 @@ textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .opt { display: block; font-size: 12px; margin: 3px 2px; }
 .buttons { display: flex; gap: 6px; margin-top: var(--hg-space-2); }
 .buttons .hg-btn { flex: 1; }
+.files-header { display: flex; align-items: center; justify-content: flex-end; min-height: 18px; padding: 0 6px; color: var(--vscode-descriptionForeground); }
+.files-empty { padding: 14px 8px; text-align: center; color: var(--vscode-descriptionForeground); font-size: 12px; }
+.spinner { display: inline-block; width: 12px; height: 12px; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: hg-spin 0.8s linear infinite; vertical-align: -2px; margin-right: 5px; }
+@keyframes hg-spin { to { transform: rotate(360deg); } }
+details.advanced { margin: 6px 0 var(--hg-space-2); }
+details.advanced summary { cursor: pointer; font-size: 12px; color: var(--vscode-descriptionForeground); }
+details.advanced summary:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; border-radius: 2px; }
+details.advanced[open] summary { margin-bottom: 4px; }
 .toast { font-size: 12px; margin-top: var(--hg-space-2); min-height: 16px; }
 .toast.ok { color: var(--vscode-testing-iconPassed, #3fb950); }
 .toast.err { color: var(--vscode-errorForeground, #f85149); }
 </style>
 </head>
 <body>
-<div class="cl-header">活动 Changelist：<span id="cl-name">—</span></div>
+<div class="cl-header">Active Changelist: <span id="cl-name">—</span></div>
+<div class="files-header" id="files-header" style="display:none"><label class="opt" style="margin:0"><input type="checkbox" id="select-all"> Select All</label></div>
 <div class="files" id="files"></div>
-<textarea id="message" class="hg-input" rows="4" placeholder="提交信息（Conventional Commits：type(scope): description）" spellcheck="false"></textarea>
-<div id="validation" class="validation"></div>
+<textarea id="message" class="hg-input" rows="4" placeholder="Commit message (Conventional Commits: type(scope): description)" spellcheck="false"></textarea>
+<div id="validation" class="validation" role="status" aria-live="polite"></div>
 <div class="recent" id="recent"></div>
-<label class="opt"><input type="checkbox" id="amend"> Amend 上次提交</label>
-<label class="opt"><input type="checkbox" id="signoff"> 追加 Signed-off-by</label>
-<label class="opt"><input type="checkbox" id="skipHooks"> 跳过 Git hooks（--no-verify）</label>
+<details class="advanced">
+  <summary>Advanced Options</summary>
+  <label class="opt"><input type="checkbox" id="amend"> Amend Last Commit</label>
+  <label class="opt"><input type="checkbox" id="signoff"> Append Signed-off-by</label>
+  <label class="opt"><input type="checkbox" id="skipHooks"> Skip Git Hooks (--no-verify)</label>
+</details>
 <div class="buttons">
 <button id="commit-btn" class="hg-btn">Commit</button>
-<button id="commit-push-btn" class="hg-btn hg-btn--secondary">Commit and Push</button>
+<button id="commit-push-btn" class="hg-btn hg-btn--secondary">Commit &amp; Push</button>
 </div>
-<div id="toast" class="toast"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
@@ -177,6 +189,8 @@ const amendEl = document.getElementById('amend');
 const signoffEl = document.getElementById('signoff');
 const skipHooksEl = document.getElementById('skipHooks');
 const toastEl = document.getElementById('toast');
+const selectAllEl = document.getElementById('select-all');
+const filesHeaderEl = document.getElementById('files-header');
 
 let msgTimer = null;
 msgEl.addEventListener('input', function () {
@@ -186,7 +200,18 @@ msgEl.addEventListener('input', function () {
   }, 200);
 });
 
-function setBusy(b) { commitBtn.disabled = b; commitPushBtn.disabled = b; }
+// Ctrl/Cmd+Enter 提交（业界通用快捷键：VS Code/GitHub/JetBrains 一致）。
+msgEl.addEventListener('keydown', function (e) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    doCommit(false);
+  }
+});
+
+function setBusy(b) {
+  commitBtn.disabled = b; commitPushBtn.disabled = b;
+  commitBtn.innerHTML = b ? '<span class="spinner" aria-hidden="true"></span>Committing…' : 'Commit';
+}
 
 function doCommit(push) {
   setBusy(true);
@@ -205,8 +230,20 @@ function doCommit(push) {
 commitBtn.addEventListener('click', function () { doCommit(false); });
 commitPushBtn.addEventListener('click', function () { doCommit(true); });
 
+function syncSelectAll() {
+  const boxes = document.querySelectorAll('#files input[type=checkbox]');
+  if (boxes.length === 0) { selectAllEl.checked = false; return; }
+  selectAllEl.checked = Array.from(boxes).every(function (cb) { return cb.checked; });
+}
+
 function renderFiles(files) {
   filesEl.innerHTML = '';
+  if (!files || files.length === 0) {
+    filesHeaderEl.style.display = 'none';
+    filesEl.innerHTML = '<div class="files-empty">No changes in this changelist.<br>Stage files from the Changes view to commit them.</div>';
+    return;
+  }
+  filesHeaderEl.style.display = '';
   const present = new Set();
   files.forEach(function (f) {
     present.add(f.path);
@@ -215,8 +252,9 @@ function renderFiles(files) {
     row.className = 'file';
     const cb = document.createElement('input');
     cb.type = 'checkbox';
+    cb.dataset.path = f.path;
     cb.checked = checked.has(f.path);
-    cb.addEventListener('change', function () { if (cb.checked) checked.add(f.path); else checked.delete(f.path); saveChecked(); });
+    cb.addEventListener('change', function () { if (cb.checked) checked.add(f.path); else checked.delete(f.path); saveChecked(); syncSelectAll(); });
     const dot = document.createElement('span');
     dot.className = 'dot';
     dot.style.color = 'var(--vscode-' + f.themeColor.replace(/\\./g, '-') + ')';
@@ -233,14 +271,25 @@ function renderFiles(files) {
   });
   Array.from(checked).forEach(function (p) { if (!present.has(p)) checked.delete(p); });
   saveChecked();
+  syncSelectAll();
 }
+
+selectAllEl.addEventListener('change', function () {
+  const want = selectAllEl.checked;
+  document.querySelectorAll('#files input[type=checkbox]').forEach(function (cb) {
+    cb.checked = want;
+    const p = cb.dataset.path;
+    if (p) { if (want) { checked.add(p); } else { checked.delete(p); } }
+  });
+  saveChecked();
+});
 
 function renderRecent(messages) {
   recentEl.innerHTML = '';
   if (!messages || !messages.length) return;
   const label = document.createElement('span');
   label.className = 'recent-label';
-  label.textContent = '最近：';
+  label.textContent = 'Recent: ';
   recentEl.appendChild(label);
   messages.slice(0, 5).forEach(function (m) {
     const chip = document.createElement('button');
@@ -258,7 +307,7 @@ function renderRecent(messages) {
 function showValidation(v) {
   valEl.className = 'validation ' + v.severity;
   if (v.severity === 'ok') {
-    valEl.textContent = conventionalEnabled ? '\\u2713 符合 Conventional Commits' : '';
+    valEl.textContent = conventionalEnabled ? '\\u2713 Valid Conventional Commits' : '';
   } else {
     valEl.textContent = (v.severity === 'error' ? '\\u26A0 ' : '\\u2139 ') + (v.reason || '');
   }
@@ -288,12 +337,12 @@ window.addEventListener('message', function (e) {
   } else if (m.type === 'commitResult') {
     setBusy(false);
     if (m.payload.ok) {
-      toast(m.payload.warning || '提交成功', Boolean(m.payload.warning));
+      toast(m.payload.warning || 'Commit succeeded', Boolean(m.payload.warning));
       msgEl.value = '';
       amendEl.checked = false; signoffEl.checked = false; skipHooksEl.checked = false;
       vscode.postMessage({ type: 'messageChanged', payload: { message: '' } });
     } else {
-      toast(m.payload.error || '提交失败', true);
+      toast(m.payload.error || 'Commit failed', true);
     }
   }
 });
