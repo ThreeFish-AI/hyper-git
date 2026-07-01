@@ -8,7 +8,7 @@ import type { LogFilterControl, LogNode } from './webview/log-webview';
 import { handleGitConflict } from './conflict-ui';
 import type { MergeMode } from '../engine/log/log-filter';
 import { selectedBranchRefs } from './branch-selection';
-import { formatBranchDeleteConfirm, partitionByMerged, truncateNames } from '../engine/ref/cleanup';
+import { diffPrunedRefs, formatBranchDeleteConfirm, partitionByMerged, truncateNames } from '../engine/ref/cleanup';
 
 /** 注册 Log/Branches/Blame/History/Tags 相关命令。 */
 export function registerHistoryCommands(
@@ -321,8 +321,48 @@ export function registerHistoryCommands(
 			try {
 				await repo.fetch(pick.includes('Prune') ? { prune: true } : undefined);
 				branchesTree.refresh();
+				logTree.refresh();
 			} catch (e) {
 				void vscode.window.showErrorMessage(`Failed to Fetch: ${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.pruneRemotes', async () => {
+			const repo = service.repo;
+			if (!repo) {
+				return;
+			}
+			const remotes = repo.state.remotes.map((r) => r.name);
+			if (remotes.length === 0) {
+				void vscode.window.showWarningMessage('No remote repository configured');
+				return;
+			}
+			// prune 前后对 refs/remotes 各快照一次，差集即为被清理的陈旧跟踪引用。
+			// `--prune` 的 [deleted] 明细走 stderr，execGit 仅回传 stdout，故用快照差集做循证反馈。
+			const before = await listRemoteTrackingRefs(service);
+			const failed: string[] = [];
+			// 逐 remote 执行 fetch --prune：API 的 FetchOptions 仅接受单 remote，遍历以覆盖多远程场景。
+			for (const remote of remotes) {
+				try {
+					await repo.fetch({ remote, prune: true });
+				} catch {
+					failed.push(remote);
+				}
+			}
+			const after = await listRemoteTrackingRefs(service);
+			const pruned = diffPrunedRefs(before, after);
+			branchesTree.refresh();
+			logTree.refresh();
+			if (pruned.length === 0) {
+				void vscode.window.showInformationMessage(
+					failed.length > 0 ? `Prune failed for: ${truncateNames(failed)}` : 'No stale remote branches to prune',
+				);
+			} else {
+				void vscode.window.showInformationMessage(
+					`Pruned ${pruned.length} stale remote branch(es): ${truncateNames(pruned)}`,
+				);
 			}
 		}),
 	);
@@ -631,4 +671,21 @@ export function registerHistoryCommands(
 	);
 
 	return subs;
+}
+
+/**
+ * 列出当前 `refs/remotes/*` 短名（如 `origin/master`），供 prune 前后做差集。
+ * 解析 `git for-each-ref --format=%(refname:short) refs/remotes`：逐行去空白、去空行。
+ * 失败返回空数组（非关键路径，调用方据此跳过差集）。
+ */
+async function listRemoteTrackingRefs(service: GitRepositoryService): Promise<string[]> {
+	try {
+		const out = await service.execGit(['for-each-ref', '--format=%(refname:short)', 'refs/remotes']);
+		return out
+			.split('\n')
+			.map((line) => line.trim())
+			.filter((line) => line.length > 0);
+	} catch {
+		return [];
+	}
 }

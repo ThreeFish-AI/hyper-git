@@ -61,6 +61,20 @@ export function partitionByMerged(
 	return { merged, unmerged };
 }
 
+/**
+ * 计算被 `git fetch --prune` 清理掉的远程跟踪引用：before 有、after 无的差集（保 before 顺序）。
+ *
+ * 用途：`--prune` 的 `[deleted]` 逐行输出走 stderr，{@link GitRepositoryService.execGit} 仅回传 stdout，
+ * 故无法直接解析清理明细；改为 prune 前后对 `refs/remotes` 各快照一次（`for-each-ref`），以此差集
+ * 给出循证反馈。纯逻辑、零 vscode 依赖，便于单测。
+ * @param before prune 前 `refs/remotes/*` 短名列表（如 `['origin/feat-a', 'origin/master']`）
+ * @param after  prune 后 `refs/remotes/*` 短名列表
+ */
+export function diffPrunedRefs(before: readonly string[], after: readonly string[]): string[] {
+	const remaining = new Set(after);
+	return before.filter((name) => !remaining.has(name));
+}
+
 /** 名称列表内联展示：超过 max 个则截断并标注剩余数量，避免确认弹窗过长。 */
 export function truncateNames(names: readonly string[], max = 8): string {
 	if (names.length <= max) {

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	diffPrunedRefs,
 	filterMergeable,
 	formatBranchDeleteConfirm,
 	isProtectedBranch,
@@ -72,6 +73,34 @@ describe('truncateNames', () => {
 	it('超过上限时截断并标注剩余数量', () => {
 		const names = Array.from({ length: 10 }, (_, i) => `b${i}`);
 		expect(truncateNames(names)).toBe('b0, b1, b2, b3, b4, b5, b6, b7 …还有 2 个');
+	});
+});
+
+describe('diffPrunedRefs', () => {
+	it('返回 before 有、after 无的引用（保 before 顺序）', () => {
+		const before = ['origin/feat-a', 'origin/master', 'origin/feat-b'];
+		const after = ['origin/master'];
+		// feat-a / feat-b 被清理，master 保留；顺序跟随 before
+		expect(diffPrunedRefs(before, after)).toEqual(['origin/feat-a', 'origin/feat-b']);
+	});
+
+	it('无可清理时返回空数组', () => {
+		const refs = ['origin/main', 'origin/dev'];
+		expect(diffPrunedRefs(refs, refs)).toEqual([]);
+	});
+
+	it('after 新增引用不影响差集（仅关心被移除项）', () => {
+		const before = ['origin/a'];
+		const after = ['origin/a', 'origin/b'];
+		expect(diffPrunedRefs(before, after)).toEqual([]);
+	});
+
+	it('全部被清理', () => {
+		expect(diffPrunedRefs(['origin/x', 'origin/y'], [])).toEqual(['origin/x', 'origin/y']);
+	});
+
+	it('空 before 永远为空', () => {
+		expect(diffPrunedRefs([], ['origin/a'])).toEqual([]);
 	});
 });
 
