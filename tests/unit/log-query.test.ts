@@ -9,13 +9,20 @@ describe('buildLogArgs — 顺序与必选项', () => {
 		expect(buildLogArgs(noFilter, 'all', { maxCount: 300 })[0]).toBe('--topo-order');
 	});
 
-	it('scope=all 含 --all；scope=current 不含', () => {
-		expect(buildLogArgs(noFilter, 'all', { maxCount: 300 })).toContain('--all');
+	it('scope=all 用 --branches --tags --remotes（排除工具注入的内部引用）；不含 --all', () => {
+		const allArgs = buildLogArgs(noFilter, 'all', { maxCount: 300 });
+		expect(allArgs).toContain('--branches');
+		expect(allArgs).toContain('--tags');
+		expect(allArgs).toContain('--remotes');
+		// 关键回归护栏：不得回退到 --all（否则 refs/conductor-* 等内部引用会污染视图）
+		expect(allArgs).not.toContain('--all');
 		expect(buildLogArgs(noFilter, 'current', { maxCount: 300 })).not.toContain('--all');
 	});
 
-	it('scope=checkpointer 与 all 同为全分支（含 --all）', () => {
-		expect(buildLogArgs(noFilter, 'checkpointer', { maxCount: 300 })).toContain('--all');
+	it('scope=checkpointer 用 --all（原始完整视图，含内部 checkpoint 引用）且不叠三件套', () => {
+		const cpArgs = buildLogArgs(noFilter, 'checkpointer', { maxCount: 300 });
+		expect(cpArgs).toContain('--all');
+		expect(cpArgs).not.toContain('--branches');
 	});
 
 	it('max-count 与 skip', () => {
