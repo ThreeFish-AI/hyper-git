@@ -16,8 +16,8 @@ jobs:
     name: Lint & Build
     runs-on: ubuntu-latest
     steps:
-      - uses: pnpm/action-setup@v6
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -37,8 +37,8 @@ jobs:
         os: ${{ (github.event_name == 'pull_request') && fromJson('["ubuntu-latest"]') || fromJson('["ubuntu-latest", "macos-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: pnpm/action-setup@v6
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -60,8 +60,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: pnpm/action-setup@v6
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -105,8 +105,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: pnpm/action-setup@v6
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 22

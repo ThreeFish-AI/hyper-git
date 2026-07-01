@@ -315,6 +315,12 @@
 				"icon": "$(repo-fetch)"
 			},
 			{
+				"command": "hyperGit.pruneRemotes",
+				"title": "Prune Deleted Remote Branches",
+				"category": "Hyper Git",
+				"icon": "$(clear-all)"
+			},
+			{
 				"command": "hyperGit.cherryPick",
 				"title": "Cherry-Pick",
 				"category": "Hyper Git",
@@ -766,6 +772,11 @@
 					"command": "hyperGit.fetch",
 					"when": "view == hyperGit.branches",
 					"group": "1_sync@1"
+				},
+				{
+					"command": "hyperGit.pruneRemotes",
+					"when": "view == hyperGit.branches",
+					"group": "1_sync@1.5"
 				},
 				{
 					"command": "hyperGit.updateProject",

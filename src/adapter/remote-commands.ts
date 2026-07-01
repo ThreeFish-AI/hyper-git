@@ -219,6 +219,7 @@ export function registerRemoteCommands(
 				}
 			}
 			branchesTree.refresh();
+			logTree.refresh();
 			if (failures.length === 0) {
 				void vscode.window.showInformationMessage(
 					succeeded.length === 1 ? `Deleted remote branch ${succeeded[0].shortName}` : `Deleted ${succeeded.length} remote branches`,
