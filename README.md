@@ -38,7 +38,7 @@
 
 ## 安装
 
-- **手动（当前推荐）**：从 [Releases](https://github.com/ThreeFish-AI/hyper-git/releases) 下载 `hyper-git-agentic-git-0.0.6.vsix` → 命令面板 `Extensions: Install from VSIX`。
+- **手动（当前推荐）**：从 [Releases](https://github.com/ThreeFish-AI/hyper-git/releases) 下载 `hyper-git-agentic-git-x.x.x.vsix` → 命令面板 `Extensions: Install from VSIX`。
 - **OpenVSX**（Cursor / Windsurf / Gitpod / VSCodium）：搜索 `Hyper Git - Agentic Git`。
 - **VS Code Marketplace**：搜索 `Hyper Git - Agentic Git`（发布上线后可用）。
 - **要求**：VS Code ≥ 1.85.0 + 启用内置 Git 扩展（`vscode.git`，默认随附）。仅支持本地 git 仓库，不支持虚拟 / Web 工作区。
