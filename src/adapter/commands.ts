@@ -22,7 +22,7 @@ export function registerChangesCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.newChangelist', async () => {
-			const name = await vscode.window.showInputBox({ prompt: '新建 Changelist 名称', placeHolder: '例如 feature-x' });
+			const name = await vscode.window.showInputBox({ prompt: 'New Changelist name', placeHolder: 'e.g. feature-x' });
 			if (name && name.trim()) {
 				registry.create(name.trim());
 			}
@@ -43,7 +43,7 @@ export function registerChangesCommands(
 				return;
 			}
 			const def = registry.getDef(node.id);
-			const name = await vscode.window.showInputBox({ prompt: '重命名 Changelist', value: def?.name });
+			const name = await vscode.window.showInputBox({ prompt: 'Rename Changelist', value: def?.name });
 			if (name && name.trim()) {
 				registry.rename(node.id, name.trim());
 			}
@@ -56,11 +56,11 @@ export function registerChangesCommands(
 				return;
 			}
 			const choice = await vscode.window.showWarningMessage(
-				`删除 Changelist「${node.name}」？其下文件将归入默认列表。`,
+				`Delete Changelist "${node.name}"? Files under it will be moved to the default list.`,
 				{ modal: true },
-				'删除',
+				'Delete',
 			);
-			if (choice === '删除') {
+			if (choice === 'Delete') {
 				registry.remove(node.id);
 			}
 		}),
@@ -75,7 +75,7 @@ export function registerChangesCommands(
 			const picks = registry
 				.listDefs()
 				.map((d) => ({ label: d.name, id: d.id, description: d.id === active ? 'active' : undefined, picked: d.id === node.changelistId }));
-			const pick = await vscode.window.showQuickPick(picks, { placeHolder: '将文件移至 Changelist' });
+			const pick = await vscode.window.showQuickPick(picks, { placeHolder: 'Move file to Changelist' });
 			if (pick) {
 				registry.move(node.item.relativePath, pick.id);
 			}
@@ -103,11 +103,11 @@ export function registerChangesCommands(
 				return;
 			}
 			const choice = await vscode.window.showWarningMessage(
-				`丢弃「${change.relativePath}」的改动？此操作不可撤销。`,
+				`Discard changes to "${change.relativePath}"? This action cannot be undone.`,
 				{ modal: true },
-				'丢弃',
+				'Discard',
 			);
-			if (choice !== '丢弃') {
+			if (choice !== 'Discard') {
 				return;
 			}
 			try {
@@ -119,7 +119,7 @@ export function registerChangesCommands(
 				}
 				tree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`丢弃失败：${e instanceof Error ? e.message : String(e)}`);
+				void vscode.window.showErrorMessage(`Failed to discard: ${e instanceof Error ? e.message : String(e)}`);
 			}
 		}),
 	);

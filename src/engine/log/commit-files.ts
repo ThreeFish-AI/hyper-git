@@ -2,7 +2,7 @@
  * 单个 commit 变更文件解析（纯逻辑，零 vscode 依赖）。
  *
  * 解析 `git diff-tree --no-commit-id --name-status -r [--root] <hash>` 输出为结构化变更列表，
- * 供 Log 提交详情面板展开显示该 commit 改动的文件（IDEA Log → commit → changed files 等价）。
+ * 供 Log 提交详情面板展开显示该 commit 改动的文件（提交 → 变更文件列表）。
  * status 列含相似度时形如 R100/C90（rename/copy），路径列对 rename/copy 为 "old -> new"。
  */
 

@@ -3,6 +3,7 @@ import type { Ref } from '../../types/git';
 import type { GitRepositoryService } from '../git-repository-service';
 import type { BranchFavorites } from '../branch-favorites';
 import { FOR_EACH_REF_FORMAT, type RawRef, parseForEachRef } from '../../engine/ref/for-each-ref';
+import { mdTooltip } from './tree-tooltip';
 
 export type BranchGroupId = 'favorites' | 'local' | 'remote' | 'tags';
 
@@ -10,6 +11,8 @@ export interface BranchGroupNode {
 	readonly kind: 'group';
 	readonly id: BranchGroupId;
 	readonly label: string;
+	/** 分组内条目数（标题栏描述显示计数徽标）。 */
+	readonly count: number;
 }
 
 export interface BranchRefNode {
@@ -25,7 +28,7 @@ export type BranchNode = BranchGroupNode | BranchRefNode;
  *
  * 数据源策略（解除「视图空白」根因）：主路径读 `Repository.state.refs`（API，零成本）；
  * 为空（首帧未填充 / 仓库初始化竞态）时经 CLI 通道 `git for-each-ref` 兜底（含 ahead/behind track）。
- * 四段分组：Favorites（收藏置顶，仿 IDEA）/ Local / Remote / Tags。
+ * 四段分组：Favorites（收藏置顶，参考 JetBrains 分组设计）/ Local / Remote / Tags。
  * 构造函数自订阅 service.onDidChange + favorites.onDidChange 做即时刷新。
  */
 export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>, vscode.Disposable {
@@ -55,16 +58,21 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		}
 		if (!element) {
 			const refs = await this.loadRefs();
+			const byName = new Map(refs.map((r) => [r.shortName, r] as const));
+			const favCount = this.favorites.list().filter((n) => byName.has(n)).length;
+			const localCount = refs.filter((r) => !r.isRemote && !r.isTag).length;
+			const remoteCount = refs.filter((r) => r.isRemote).length;
+			const tagCount = refs.filter((r) => r.isTag).length;
 			const groups: BranchGroupNode[] = [];
-			if (this.favorites.list().length > 0) {
-				groups.push({ kind: 'group', id: 'favorites', label: 'Favorites' });
+			if (favCount > 0) {
+				groups.push({ kind: 'group', id: 'favorites', label: 'Favorites', count: favCount });
 			}
 			groups.push(
-				{ kind: 'group', id: 'local', label: 'Local Branches' },
-				{ kind: 'group', id: 'remote', label: 'Remote Branches' },
+				{ kind: 'group', id: 'local', label: 'Local Branches', count: localCount },
+				{ kind: 'group', id: 'remote', label: 'Remote Branches', count: remoteCount },
 			);
-			if (refs.some((r) => r.isTag)) {
-				groups.push({ kind: 'group', id: 'tags', label: 'Tags' });
+			if (tagCount > 0) {
+				groups.push({ kind: 'group', id: 'tags', label: 'Tags', count: tagCount });
 			}
 			return groups;
 		}
@@ -165,6 +173,7 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		if (element.kind === 'group') {
 			const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Expanded);
 			item.contextValue = 'hyperGit.branchGroup';
+			item.description = String(element.count);
 			const icon =
 				element.id === 'remote' ? 'repo' : element.id === 'tags' ? 'tag' : element.id === 'favorites' ? 'star-full' : 'git-branch';
 			item.iconPath = new vscode.ThemeIcon(icon);
@@ -175,18 +184,21 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		const fav = this.favorites.isFavorite(ref.shortName);
 		const isTag = ref.isTag;
 		const item = new vscode.TreeItem(ref.shortName, vscode.TreeItemCollapsibleState.None);
-		item.description = this.describe(ref, active, fav);
+		item.description = this.describe(ref, active);
 		item.contextValue = isTag ? 'hyperGit.tag' : element.remote ? 'hyperGit.remoteBranch' : 'hyperGit.branch';
 		item.tooltip = this.tooltip(ref, active, fav);
 		const icon = isTag ? 'tag' : element.remote ? 'cloud' : 'git-branch';
-		item.iconPath = new vscode.ThemeIcon(
-			icon,
-			active ? new vscode.ThemeColor('gitDecoration.modifiedResourceForeground') : undefined,
-		);
+		// 活动分支 = charts.blue（与 Log 本地分支 chip 同语义，全局一致）；收藏（非活动）= charts.yellow。
+		const color = active
+			? new vscode.ThemeColor('charts.blue')
+			: fav
+				? new vscode.ThemeColor('charts.yellow')
+				: undefined;
+		item.iconPath = new vscode.ThemeIcon(icon, color);
 		return item;
 	}
 
-	private describe(ref: RawRef, active: boolean, fav: boolean): string {
+	private describe(ref: RawRef, active: boolean): string {
 		const parts: string[] = [];
 		if (active) {
 			parts.push('active');
@@ -197,17 +209,20 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 			if (ref.behind) {
 				parts.push(`↓${ref.behind}`);
 			}
-		} else if (ref.objectname) {
-			parts.push(ref.objectname);
-		}
-		if (fav) {
-			parts.push('★');
 		}
 		return parts.join(' ');
 	}
 
-	private tooltip(ref: RawRef, active: boolean, fav: boolean): string {
-		const lines = [ref.shortName + (active ? ' (active)' : '') + (fav ? ' ★' : '')];
+	private tooltip(ref: RawRef, active: boolean, fav: boolean): vscode.MarkdownString {
+		const rows: Array<[string, string]> = [];
+		if (active) {
+			rows.push(['State', 'Current branch (HEAD)']);
+		} else if (fav) {
+			rows.push(['State', 'Favorite']);
+		}
+		if (ref.objectname) {
+			rows.push([ref.isTag ? 'Tag' : 'Commit', ref.objectname]);
+		}
 		if (ref.upstream) {
 			const track: string[] = [];
 			if (ref.ahead) {
@@ -216,12 +231,9 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 			if (ref.behind) {
 				track.push(`behind ${ref.behind}`);
 			}
-			lines.push(`← ${ref.upstream}${track.length ? ` (${track.join(', ')})` : ''}`);
+			rows.push(['Upstream', `${ref.upstream}${track.length ? ` (${track.join(', ')})` : ''}`]);
 		}
-		if (ref.isTag) {
-			lines.push(`tag @ ${ref.objectname}`);
-		}
-		return lines.join('\n');
+		return mdTooltip(rows, { title: ref.shortName });
 	}
 
 	/** 判定分支是否当前 HEAD：CLI 解析的 head 标记优先，API 路径回退与 state.HEAD.name 比较。 */

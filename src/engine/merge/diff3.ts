@@ -1,7 +1,7 @@
 /**
  * 三方合并（diff3）纯逻辑，零 vscode 依赖。
  *
- * 对齐 IDEA 3-way merge editor：给定 base / ours / theirs 三份文本（按行），产出 MergeHunk[]
+ * 3-way 合并算法：给定 base / ours / theirs 三份文本（按行），产出 MergeHunk[]
  * （stable 一致段 / conflict 冲突段）。算法基于 LCS（最长公共子序列）求 base↔ours 与 base↔theirs
  * 的匹配锚点，锚点间的区域按 diff3 规则判定为一致或冲突。
  */

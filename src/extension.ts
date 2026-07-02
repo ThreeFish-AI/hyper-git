@@ -10,7 +10,7 @@ import { BranchFavorites } from './adapter/branch-favorites';
 import { CommitService } from './adapter/commit/commit-service';
 import { BranchesTreeProvider } from './adapter/tree/branches-tree';
 import { ChangesTreeProvider, EmptyChangesProvider } from './adapter/tree/changes-tree';
-import { LogTreeProvider } from './adapter/tree/log-tree';
+import { LogWebviewProvider } from './adapter/webview/log-webview';
 import { registerHistoryCommands } from './adapter/history-commands';
 import { registerStashCommands } from './adapter/stash-commands';
 import { registerGitCliCommands } from './adapter/git-cli-commands';
@@ -21,7 +21,6 @@ import { StashTreeProvider } from './adapter/tree/stash-tree';
 import { WorktreeTreeProvider } from './adapter/tree/worktree-tree';
 import { registerWorktreeCommands } from './adapter/worktree-commands';
 import { CommitWebviewProvider } from './adapter/webview/commit-webview';
-import { GraphWebview } from './adapter/webview/graph-webview';
 import { showGitConsole } from './infra/git-console';
 import { InlineCommitCodeLensProvider, registerInlineCommitCommand } from './adapter/editor/inline-commit-codelens';
 import { BlameAnnotationController } from './adapter/editor/blame-annotation';
@@ -31,6 +30,8 @@ import { registerMergeCommands } from './adapter/webview/merge-editor';
 import { registerMiscCommands } from './adapter/misc-commands';
 import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
+import { GitHubAuth } from './adapter/ci/github-auth';
+import { GitHubCiService } from './adapter/ci/github-ci-service';
 import { createLogger } from './infra/logger';
 
 /**
@@ -64,6 +65,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const service = new GitRepositoryService(api);
 	const registry = new ChangelistRegistry(context.workspaceState, service.repoRoot ?? workspaceRoot);
 	const favorites = new BranchFavorites(context.workspaceState, service.repoRoot ?? workspaceRoot);
+	const githubAuth = new GitHubAuth(context.subscriptions);
+	const ciService = new GitHubCiService(service, githubAuth, logger);
 	const tree = new ChangesTreeProvider(service, registry);
 	// createTreeView（registerTreeDataProvider 的超集）以获取 TreeView 句柄承载 .badge；
 	// 活动栏容器图标的数字角标 = 容器内各视图 badge.value 之和，故此处点亮即映射到 Hyper Git 图标。
@@ -78,8 +81,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		conflict: new NullConflictResolver(),
 	});
 	const commitView = new CommitWebviewProvider(service, registry, commit);
-	const logTree = new LogTreeProvider(service);
+	const logTree = new LogWebviewProvider(service, ciService);
 	const branchesTree = new BranchesTreeProvider(service, favorites);
+	// Branches 视图启用多选（canSelectMany 仅 createTreeView 支持，registerTreeDataProvider 不支持）；
+	// 多选后批量操作（删除分支/标签、复制引用、收藏）作用于整个选区。
+	const branchesView = vscode.window.createTreeView('hyperGit.branches', {
+		treeDataProvider: branchesTree,
+		canSelectMany: true,
+	});
 	const stashTree = new StashTreeProvider(service);
 	const worktreeTree = new WorktreeTreeProvider(service);
 	const inlineLens = new InlineCommitCodeLensProvider(service);
@@ -95,6 +104,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		registry,
 		favorites,
 		commit,
+		ciService,
 		logTree,
 		branchesTree,
 		stashTree,
@@ -102,11 +112,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		shelfTree,
 		blame,
 		changesView,
+		branchesView,
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
-		vscode.window.registerTreeDataProvider('hyperGit.log', logTree),
-		vscode.window.registerTreeDataProvider('hyperGit.branches', branchesTree),
+		vscode.window.registerWebviewViewProvider(LogWebviewProvider.viewType, logTree),
 		vscode.window.registerTreeDataProvider('hyperGit.stash', stashTree),
-		vscode.window.registerTreeDataProvider('hyperGit.shelf', shelfTree),
+		vscode.window.createTreeView('hyperGit.shelf', { treeDataProvider: shelfTree }),
 		vscode.window.registerTreeDataProvider('hyperGit.worktrees', worktreeTree),
 		...registerChangesCommands(service, registry, tree),
 		...registerHistoryCommands(service, logTree, branchesTree, favorites),
@@ -122,7 +132,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		...registerWorktreeCommands(service, worktreeTree),
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
-		vscode.commands.registerCommand('hyperGit.showGraph', () => GraphWebview.open(service)),
+		vscode.commands.registerCommand('hyperGit.ci.signIn', () => ciService.signIn()),
 		vscode.commands.registerCommand('hyperGit.showConsole', () => showGitConsole()),
 		vscode.commands.registerCommand('hyperGit.startRebase', () => RebaseWebview.open(service)),
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, inlineLens),
@@ -133,7 +143,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	// 计数为 0 时清空，对齐原生 SCM 行为。
 	const updateChangesBadge = (): void => {
 		const count = service.getChanges().length;
-		changesView.badge = count > 0 ? { value: count, tooltip: `${count} 个未提交变更` } : undefined;
+		changesView.badge = count > 0 ? { value: count, tooltip: `${count} uncommitted change(s)` } : undefined;
 	};
 
 	// git 状态变化频繁（add/checkout/diff 缓存失效均触发），防抖合并避免 log/stash 高频重拉。

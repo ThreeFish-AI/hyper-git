@@ -62,4 +62,20 @@
 - **后续防范**：该 job 与市场 `publish` **解耦**（不 `needs: publish`、不挂 `environment: production`），保证「Release 带 `.vsix`」不被市场审批门/密钥缺失阻塞；「仅出 Release、暂不发市场」时不审批 production 即可，无需改 publish job；最小权限仅本 job 提权 `contents: write`。
 - **同类问题影响**：所有「CI 只上传 artifact + 发市场、却在 README 承诺 Release 手动下载」的 VS Code 扩展；artifact ≠ Release 资产，二者可见性/留存期差异易被忽视。
 
+## #8 Branches 视图无法多选（批量删除等批量操作缺失）
+
+- **表因**：用户截图反馈 Branches 视图中一组功能/工作分支无法框选多个、无法批量删除。
+- **根因**：`hyperGit.branches` 经 `vscode.window.registerTreeDataProvider` 注册——该 API **不支持** `canSelectMany`，故视图天然单选；所有分支命令处理器亦只接收单个 `BranchNode`。多选能力（`canSelectMany: true`）仅 `createTreeView` 的 `TreeViewOptions` 支持。
+- **处理方式**：改用 `createTreeView('hyperGit.branches', { treeDataProvider, canSelectMany: true })`（句柄入 subscriptions）。批量命令处理器签名扩展为 `(clickedNode, selectedNodes[])`——VS Code 多选树的 `view/item/context` 命令第 2 实参即完整选区数组。新增纯逻辑 `engine/ref/selection.collectBranchRefs`（谓词过滤 + shortName 去重 + 「点击在选区之外则以点击项为准」）与 `engine/ref/cleanup.partitionByMerged`/`formatBranchDeleteConfirm`，使 `branchDelete`/`tagDelete`/`copyBranchRef`/`toggleFavorite` 批量化（删除仅一次 `git branch --merged` 分类、汇总成功/失败、末尾单次刷新）。`package.json` 对仅单目标命令（检出/合并/变基/重命名/比较等）追加 `&& !listMultiSelection` 在多选时隐藏。
+- **后续防范**：① 需要承载 `.badge` 或 `canSelectMany` 等 `TreeViewOptions` 能力的视图，一律用 `createTreeView` 而非 `registerTreeDataProvider`（本仓 `hyperGit.changes` 已有先例）。② 多选命令正确性**只依赖处理器读取实参**（`clickedNode` + `selectedNodes[]`），不得依赖 `listMultiSelection` 上下文键——其对**自定义贡献视图**的可靠性无法确证，仅作菜单整洁的视觉优化；单目标命令因只读 `clickedNode` 即便该键失效仍安全。③ 「右键点击选区之外」须以点击项为准（手势目标优先），由归一化助手统一兜底。
+- **同类问题影响**：所有以 `registerTreeDataProvider` 注册却后续需要多选/角标的自定义 TreeView；以及误把单目标命令在多选下直接作用于「点击项」造成的隐性误操作。
+
+## #9 LOG 视图残留「已删分支」提交（实为工具注入的内部引用污染 `git log --all`）
+
+- **表因**：用户截图反馈 LOG 的 All 范围下，一批本应随分支删除而消失的提交仍以游离泳道残留；运行「清理已删远程分支」（#44，`git fetch --prune`）后**依旧存在**。
+- **根因**：`engine/log/log-query.ts` 的 `buildLogArgs` 对 `all`/`checkpointer` 范围下 `git log --all`。`--all` 遍历 `refs/` 下**全部**引用，不止 heads/remotes/tags——还包括宿主工具（如 Conductor）注入的 `refs/conductor-checkpoints/*`（会话快照）、`refs/conductor-archive-heads/*`（已删/被取代分支头的归档）。这些归档头让**真实的游离提交**（被 amend/rebase 取代、或分支删除后仅靠归档存活者）仍可达，画成游离泳道。而既有的客户端 `CHECKPOINT_SUBJECT_RE=/^checkpoint:/i` 过滤**只能拦住 checkpoint 元数据提交本身**，拦不住作为其祖先的游离业务提交——故泄漏。`git fetch --prune` 仅清理 `refs/remotes/*`，对上述非远端跟踪引用**完全无效**，这正是「prune 后依旧存在」的根因。实证：本仓 `--all` 取 241 提交、`--branches --tags --remotes` 仅 70；refs 命名空间 135 conductor-checkpoints + 17 conductor-archive-heads，远多于 3 heads/3 remotes/2 tags。
+- **处理方式**：`all` 范围由 `--all` 改为 `--branches --tags --remotes`（仅三大标准命名空间，排除一切工具注入的内部引用），根治游离泳道；`checkpointer` 范围**保留 `--all`**——该 Tab 的职责即「原始完整视图，含内部 checkpoint 快照」，需触达 `refs/conductor-checkpoints/*`。客户端 `keepCheckpoint` 过滤作为双保险保留。更新 `tests/unit/log-query.test.ts` 断言（`all` 含三件套、不含 `--all`；`checkpointer` 含 `--all`、不叠三件套）作回归护栏。
+- **后续防范**：① 「全分支视图」语义应映射到 `--branches --tags --remotes` 而非 `--all`——`--all` 是「全部引用」而非「全部分支」，二者差异恰是工具注入引用的污染面。② 客户端按提交 message 正则过滤是**漏的抽象**（拦不住作为祖先被带入的游离提交）；根治应在 ref 选取层（服务端参数）而非 subject 过滤层。③ **诊断 git 引用类问题时务必先 `git for-each-ref` 列出全部命名空间**——本案最初误判为「远端已删、本地未 prune」（#44 与一度推进的 prune-on-fetch 方案均为此误判），直到列出 refs 才发现真凶是 conductor-* 引用；「prune 无效」本身就是关键反证，应据其反向收敛而非强行加 prune。④ 修正「错漏逻辑」前先用 `git log --all` vs `--branches --tags --remotes` 的差集实证根因，避免再次基于关键字匹配机械式修改。
+- **同类问题影响**：所有在带「工具注入内部引用」环境（IDE/Agent checkpoint、`refs/stash`、`refs/replace/*`、`refs/notes/*` 等）下展示 `git log --all` 图的 Git GUI；凡把「范围 = 引用集合」与「范围 = message 过滤」混为一谈的实现均可能漏过游离提交。
+
 

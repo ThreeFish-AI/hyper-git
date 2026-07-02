@@ -14,7 +14,7 @@ function repoRelative(root: string, fsPath: string): string | null {
 }
 
 /**
- * 行内提交 CodeLensProvider（IDEA editor inline commit 的 VS Code 等价）。
+ * 行内提交 CodeLensProvider（编辑器内逐 Hunk 提交）。
  *
  * 对当前文件每个未暂存 hunk，在其起始行上方渲染可点击 CodeLens「✓ 提交此 Hunk (+N -M)」。
  * 点击 → 仅暂存该 hunk（patch 重建 + `git apply --cached`）→ 输入 message → `git commit`。
@@ -53,7 +53,7 @@ export class InlineCommitCodeLensProvider implements vscode.CodeLensProvider {
 				const line = Math.max(0, r.startLine - 1);
 				return new vscode.CodeLens(new vscode.Range(line, 0, line, 0), {
 					command: 'hyperGit.inlineCommitHunk',
-					title: `✓ 提交此 Hunk (+${r.addedCount} -${r.removedCount})`,
+					title: `✓ Commit this Hunk (+${r.addedCount} -${r.removedCount})`,
 					arguments: [rel, r.hunkIndex],
 				});
 			});
@@ -70,20 +70,20 @@ export function registerInlineCommitCommand(service: GitRepositoryService, provi
 		if (!repo || !rel || hunkIndex === undefined) {
 			return;
 		}
-		// 其他已暂存内容会一并提交——给出提示（IDEA changelist 隔离在本工具由 stage 语义承载）
+		// 其他已暂存内容会一并提交——给出提示（changelist 隔离在本工具由 stage 语义承载）
 		const otherStaged = service.getChanges().filter((c) => c.staged && c.relativePath !== rel);
 		if (otherStaged.length > 0) {
 			const ok = await vscode.window.showWarningMessage(
-				`当前已有其他 ${otherStaged.length} 个已暂存文件，将一并提交。继续？`,
+				`${otherStaged.length} other staged file(s) will be committed together. Continue?`,
 				{ modal: true },
-				'继续提交',
+				'Continue Commit',
 			);
-			if (ok !== '继续提交') {
+			if (ok !== 'Continue Commit') {
 				return;
 			}
 		}
 		const message = await vscode.window.showInputBox({
-			prompt: `提交 Hunk（${rel} #${hunkIndex + 1}）的 commit message`,
+			prompt: `Commit message for Hunk (${rel} #${hunkIndex + 1})`,
 			placeHolder: 'feat(scope): description',
 		});
 		if (!message || !message.trim()) {
@@ -109,9 +109,9 @@ export function registerInlineCommitCommand(service: GitRepositoryService, provi
 			}
 			await service.execGit(['commit', '-m', message.trim()]);
 			provider.refresh();
-			void vscode.window.showInformationMessage('已提交该 Hunk');
+			void vscode.window.showInformationMessage('Hunk committed');
 		} catch (e) {
-			void vscode.window.showErrorMessage(`Inline commit 失败：${errMsg(e)}`);
+			void vscode.window.showErrorMessage(`Inline commit failed: ${errMsg(e)}`);
 		}
 	});
 }

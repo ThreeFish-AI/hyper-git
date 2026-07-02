@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import type { GitRepositoryService } from '../git-repository-service';
 import { handleGitConflict } from '../conflict-ui';
 import { type RebaseTodoItem, isValidAction, serializeTodo } from '../../engine/rebase/todo';
+import { getBaseStyles } from './shared-styles';
 
 interface RebaseCommit {
 	readonly hash: string;
@@ -37,7 +38,7 @@ if (idx < subjects.length) {
 `;
 
 /**
- * 交互式 Rebase Webview（1:1 复刻 IDEA Git Log → Edit Rebase 编辑器）。
+ * 交互式 Rebase Webview（交互式 Rebase 编辑器）。
  *
  * 展示 base..HEAD 的提交列表，每条可设 pick/reword/edit/squash/fixup/drop 动作；
  * reword 支持行内编辑新 message；行可拖拽重排序。
@@ -49,7 +50,7 @@ export class RebaseWebview {
 	static async open(service: GitRepositoryService): Promise<void> {
 		const repo = service.repo;
 		if (!repo) {
-			void vscode.window.showWarningMessage('未找到 Git 仓库');
+			void vscode.window.showWarningMessage('No Git repository found');
 			return;
 		}
 		// 选择 base
@@ -57,10 +58,10 @@ export class RebaseWebview {
 		const commits = await repo.log({ maxEntries: 30 });
 		const basePick = await vscode.window.showQuickPick(
 			[
-				...baseOptions.map((b) => ({ label: b, description: `从 ${b} 开始 rebase` })),
+				...baseOptions.map((b) => ({ label: b, description: `Rebase from ${b}` })),
 				...commits.slice(1).map((c) => ({ label: c.hash.slice(0, 7), description: (c.message.split('\n', 1)[0] ?? '').slice(0, 60) })),
 			],
-			{ placeHolder: '选择 rebase 起点（base）' },
+			{ placeHolder: 'Select rebase base' },
 		);
 		if (!basePick) {
 			return;
@@ -80,11 +81,11 @@ export class RebaseWebview {
 					return { hash, subject: subj.join('|') };
 				});
 		} catch (e) {
-			void vscode.window.showErrorMessage(`获取提交列表失败：${errMsg(e)}`);
+			void vscode.window.showErrorMessage(`Failed to load commits: ${errMsg(e)}`);
 			return;
 		}
 		if (rebaseCommits.length === 0) {
-			void vscode.window.showInformationMessage(`${base}..HEAD 无提交`);
+			void vscode.window.showInformationMessage(`No commits in ${base}..HEAD`);
 			return;
 		}
 
@@ -102,6 +103,8 @@ export class RebaseWebview {
 					msg.actions as Array<{ hash: string; action: string; subject: string }>,
 					panel,
 				);
+			} else if (msg.type === 'cancel') {
+				panel.dispose();
 			}
 		});
 	}
@@ -117,7 +120,7 @@ export class RebaseWebview {
 		const rewordSubjects: string[] = [];
 		for (const a of actions) {
 			if (!isValidAction(a.action)) {
-				void vscode.window.showErrorMessage(`非法动作：${a.action}`);
+				void vscode.window.showErrorMessage(`Invalid action: ${a.action}`);
 				return;
 			}
 			todoItems.push({ action: a.action, hash: a.hash, subject: a.subject });
@@ -152,15 +155,15 @@ export class RebaseWebview {
 			const gitDir = (await service.execGit(['rev-parse', '--absolute-git-dir'])).trim();
 			if (fs.existsSync(path.join(gitDir, 'rebase-merge'))) {
 				void vscode.window.showWarningMessage(
-					'Rebase 已暂停（遇到 edit 或需处理）。请在终端运行：git rebase --continue / --skip / --abort。',
+					'Rebase paused (an edit or a conflict needs handling). Run in the terminal: git rebase --continue / --skip / --abort.',
 				);
 			} else {
-				void vscode.window.showInformationMessage('Rebase 完成');
+				void vscode.window.showInformationMessage('Rebase complete');
 				panel.dispose();
 			}
 		} catch (e) {
 			if (!(await handleGitConflict(service, 'Rebase'))) {
-				void vscode.window.showErrorMessage(`Rebase 失败：${errMsg(e)}`);
+				void vscode.window.showErrorMessage(`Rebase failed: ${errMsg(e)}`);
 			}
 		} finally {
 			for (const f of [tmpTodo, tmpEditor, tmpState]) {
@@ -181,7 +184,7 @@ export class RebaseWebview {
 		const rows = commits
 			.map(
 				(c) => `<tr draggable="true" data-hash="${escapeHtml(c.hash)}">
-<td class="drag" title="拖拽以重排序">⠿</td>
+<td class="drag" title="Drag to reorder"><svg class="grip" width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="2" cy="13" r="1.3"/><circle cx="7" cy="3" r="1.3"/><circle cx="7" cy="8" r="1.3"/><circle cx="7" cy="13" r="1.3"/></svg></td>
 <td><select class="action">
 <option value="pick">pick</option>
 <option value="reword">reword</option>
@@ -196,55 +199,96 @@ export class RebaseWebview {
 			)
 			.join('\n');
 		return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'">
 <style>
+${getBaseStyles()}
 body { margin: 0; padding: 12px 16px; font-family: var(--vscode-font-family); color: var(--vscode-foreground); font-size: var(--vscode-font-size); background: var(--vscode-editor-background); }
 h3 { margin: 0 0 4px; font-weight: 600; }
-.hint { margin: 0 0 10px; font-size: 12px; color: var(--vscode-descriptionForeground); }
+.legend { margin: 0 0 8px; font-size: 11px; color: var(--vscode-descriptionForeground); line-height: 1.6; }
+.legend code { font-family: var(--vscode-editor-font-family); color: var(--vscode-textPreformat-foreground, var(--vscode-foreground)); }
+.summary { margin: 0 0 10px; font-size: 11px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); }
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: 4px 6px; border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.2)); text-align: left; }
+th, td { padding: 4px 6px; border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.2)); text-align: left; vertical-align: middle; }
 th { font-weight: 600; font-size: 12px; color: var(--vscode-descriptionForeground); }
 td.drag { color: var(--vscode-descriptionForeground); cursor: grab; user-select: none; width: 18px; }
-td.hash { color: var(--vscode-editorWarning-foreground, #d29922); font-family: var(--vscode-editor-font-family); font-size: 12px; width: 70px; }
+td.drag .grip { display: inline-block; pointer-events: none; }
+td.hash { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 12px; width: 70px; }
 tr { background: transparent; }
+tr.action-drop { opacity: 0.5; }
+tr.action-drop input.subject { text-decoration: line-through; }
+tr.action-squash, tr.action-fixup { background: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,.12)); }
 tr.dragging { opacity: 0.4; }
 tr.drop-target { border-top: 2px solid var(--vscode-focusBorder, #007fd4); }
 select, input.subject { background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); padding: 2px 4px; font-size: 12px; font-family: var(--vscode-font-family); }
-select { width: 80px; }
+select { width: 92px; }
 input.subject { width: 100%; }
 input.subject:disabled { color: var(--vscode-descriptionForeground); opacity: 0.85; }
 input.subject:not(:disabled) { border-color: var(--vscode-focusBorder, #007fd4); }
-.row-actions { margin-top: 12px; }
-button { padding: 6px 16px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 2px; cursor: pointer; font-size: 13px; }
-button:hover { opacity: 0.9; }
-button.secondary { background: var(--vscode-button-secondaryBackground, transparent); color: var(--vscode-button-secondaryForeground, var(--vscode-foreground)); border: 1px solid var(--vscode-button-border, rgba(128,128,128,.4)); }
+.row-actions { margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end; }
+.confirm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); align-items: center; justify-content: center; z-index: 100; }
+.confirm-box { background: var(--vscode-editorWidget-background, var(--vscode-editor-background)); color: var(--vscode-editorWidget-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.4)); border-radius: 6px; padding: 16px 20px; max-width: 440px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+.confirm-box .confirm-count { font-size: 13px; margin-bottom: 6px; }
+.confirm-box .confirm-summary { font-family: var(--vscode-editor-font-family); font-size: 11px; color: var(--vscode-descriptionForeground); margin-bottom: 14px; }
+.confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
 </style>
 </head>
 <body>
 <h3>Interactive Rebase</h3>
-<p class="hint">拖拽 ⠿ 重排序 · 选 reword 可行内编辑 message · edit/squash 会暂停（终端 continue） · drop 删除提交</p>
+<p class="legend"><code>reword</code> — edit the message inline &nbsp;·&nbsp; <code>edit</code>/<code>squash</code> — pauses rebase (continue in terminal) &nbsp;·&nbsp; <code>drop</code> — remove the commit &nbsp;·&nbsp; drag the handle to reorder.</p>
+<div class="summary" id="summary"></div>
 <table><thead><tr><th></th><th>Action</th><th>Hash</th><th>Subject</th></tr></thead>
 <tbody>${rows}</tbody></table>
 <div class="row-actions">
-<button id="rebase-btn">Start Rebase</button>
+<button class="hg-btn hg-btn--secondary" id="cancel-btn">Cancel</button>
+<button class="hg-btn" id="rebase-btn">Start Rebase</button>
+</div>
+<div class="confirm-overlay" id="confirm" role="dialog" aria-modal="true" aria-label="Confirm rebase">
+  <div class="confirm-box">
+    <div class="confirm-count" id="confirm-count"></div>
+    <div class="confirm-summary" id="confirm-summary"></div>
+    <div class="confirm-actions">
+      <button class="hg-btn hg-btn--secondary" id="confirm-cancel">Cancel</button>
+      <button class="hg-btn" id="confirm-go">Start Rebase</button>
+    </div>
+  </div>
 </div>
 <script nonce="${nonce}">
 (function () {
   var tbody = document.querySelector('tbody');
   var rows = function () { return Array.from(tbody.querySelectorAll('tr')); };
+  var confirmEl = document.getElementById('confirm');
 
-  // action 变化：仅 reword 允许编辑 subject
+  function updateRowStates() {
+    rows().forEach(function (row) {
+      var action = row.querySelector('select.action').value;
+      row.classList.remove('action-pick','action-reword','action-edit','action-squash','action-fixup','action-drop');
+      row.classList.add('action-' + action);
+    });
+  }
+  function updateSummary() {
+    var counts = { pick: 0, reword: 0, edit: 0, squash: 0, fixup: 0, drop: 0 };
+    rows().forEach(function (row) { var a = row.querySelector('select.action').value; if (counts[a] !== undefined) counts[a] += 1; });
+    var parts = [];
+    Object.keys(counts).forEach(function (k) { if (counts[k]) parts.push(counts[k] + ' ' + k); });
+    document.getElementById('summary').textContent = parts.length ? parts.join('  ·  ') : '';
+  }
+
+  // action 变化：仅 reword 允许编辑 subject；同步行视觉态与摘要。
   tbody.addEventListener('change', function (e) {
     if (e.target.classList.contains('action')) {
       var input = e.target.closest('tr').querySelector('input.subject');
       var isReword = e.target.value === 'reword';
       input.disabled = !isReword;
       if (isReword) { input.focus(); }
+      updateRowStates();
+      updateSummary();
     }
   });
+  updateRowStates();
+  updateSummary();
 
   // 拖拽重排序
   var dragged = null;
@@ -271,17 +315,26 @@ button.secondary { background: var(--vscode-button-secondaryBackground, transpar
     else { tbody.insertBefore(dragged, target); }
   });
 
-  // 提交：按 DOM 顺序收集
-  document.getElementById('rebase-btn').addEventListener('click', function () {
-    var actions = rows().map(function (row) {
-      return {
-        hash: row.dataset.hash,
-        action: row.querySelector('select.action').value,
-        subject: row.querySelector('input.subject').value,
-      };
+  function collectActions() {
+    return rows().map(function (row) {
+      return { hash: row.dataset.hash, action: row.querySelector('select.action').value, subject: row.querySelector('input.subject').value };
     });
-    acquireVsCodeApi().postMessage({ type: 'rebase', actions: actions });
+  }
+
+  // 执行前确认：rebase 改写历史，前置确认防误操作（非阻塞 HTML 覆盖层）。
+  document.getElementById('rebase-btn').addEventListener('click', function () {
+    var n = rows().length;
+    document.getElementById('confirm-count').textContent = 'Rebase ' + n + ' commit' + (n === 1 ? '' : 's') + ' — this rewrites history.';
+    document.getElementById('confirm-summary').textContent = document.getElementById('summary').textContent || (n + ' commits');
+    confirmEl.style.display = 'flex';
+    document.getElementById('confirm-go').focus();
   });
+  document.getElementById('confirm-go').addEventListener('click', function () {
+    confirmEl.style.display = 'none';
+    acquireVsCodeApi().postMessage({ type: 'rebase', actions: collectActions() });
+  });
+  document.getElementById('confirm-cancel').addEventListener('click', function () { confirmEl.style.display = 'none'; });
+  document.getElementById('cancel-btn').addEventListener('click', function () { acquireVsCodeApi().postMessage({ type: 'cancel' }); });
 })();
 </script>
 </body>

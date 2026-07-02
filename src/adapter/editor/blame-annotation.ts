@@ -6,7 +6,7 @@ import { formatAnnotation, parseBlamePorcelain } from '../../engine/blame/blame-
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /**
- * 编辑器内 Blame 注解（IDEA Annotate 等价）。
+ * 编辑器内 Blame 注解（逐行作者 / 日期 / 提交注解）。
  *
  * Toggle：对当前文件执行 `git blame --line-porcelain`，解析每行作者/日期，用行内
  * before 装饰渲染在每行行首（gutter 风格）。再次 toggle 关闭。切换编辑器/文档变更时清理。
@@ -37,7 +37,7 @@ export class BlameAnnotationController implements vscode.Disposable {
 		const editor = vscode.window.activeTextEditor;
 		const repo = this.service.repo;
 		if (!editor || !repo) {
-			void vscode.window.showWarningMessage('请先打开一个文件');
+			void vscode.window.showWarningMessage('Please open a file first');
 			return;
 		}
 		const key = editor.document.uri.toString();
@@ -47,7 +47,7 @@ export class BlameAnnotationController implements vscode.Disposable {
 		}
 		const rel = path.relative(repo.rootUri.fsPath, editor.document.uri.fsPath).split(path.sep).join('/');
 		if (rel.startsWith('..') || path.isAbsolute(rel)) {
-			void vscode.window.showWarningMessage('该文件不在当前仓库内');
+			void vscode.window.showWarningMessage('This file is outside the current repository');
 			return;
 		}
 		let blame: BlameLineMap;
@@ -55,7 +55,7 @@ export class BlameAnnotationController implements vscode.Disposable {
 			const out = await this.service.execGit(['blame', '--line-porcelain', '--', rel]);
 			blame = new Map(parseBlamePorcelain(out).map((b) => [b.line, b]));
 		} catch (e) {
-			void vscode.window.showErrorMessage(`Blame 失败：${errMsg(e)}`);
+			void vscode.window.showErrorMessage(`Blame failed: ${errMsg(e)}`);
 			return;
 		}
 		const options: vscode.DecorationOptions[] = [];

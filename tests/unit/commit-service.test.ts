@@ -73,7 +73,7 @@ describe('CommitService.executeCommit', () => {
 		const cs = makeCommitService(makeRepo(), [change('a.ts')]);
 		const r = await cs.executeCommit(REQ({ message: '   ' }));
 		expect(r.ok).toBe(false);
-		expect(r.error).toContain('不能为空');
+		expect(r.error).toContain('cannot be empty');
 	});
 
 	it('CC 不合规（默认 conventional=true）→ error', async () => {
@@ -87,7 +87,7 @@ describe('CommitService.executeCommit', () => {
 		const cs = makeCommitService(makeRepo(), [change('a.ts')]);
 		const r = await cs.executeCommit(REQ({ selectedPaths: [] }));
 		expect(r.ok).toBe(false);
-		expect(r.error).toContain('未选择');
+		expect(r.error).toContain('No files selected');
 	});
 
 	it('合规 + 勾选 → commit 透传 amend/signoff/noVerify，返回 ok', async () => {
@@ -119,7 +119,7 @@ describe('CommitService.executeCommit', () => {
 		const cs = makeCommitService(repo, [change('a.ts')]);
 		const r = await cs.executeCommit(REQ({ push: true }));
 		expect(r.ok).toBe(true);
-		expect(r.warning).toContain('推送失败');
+		expect(r.warning).toContain('push failed');
 		expect(repo.commit).toHaveBeenCalled();
 	});
 });

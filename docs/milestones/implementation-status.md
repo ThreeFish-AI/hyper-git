@@ -2,16 +2,16 @@
 
 > Hyper Git VS Code 扩展的里程碑实施记录、API 限制发现、功能达成矩阵与 M5 AI 设计（留存）。
 > 本文档随里程碑推进即时更新；调研与原始方案见 [工程实施方案](../architecture/engineering-plan.md) 与 [调研报告](../research/README.md)。
-> 最后更新：2026-06-29（Parity Recovery Batch 5-12 全量对齐 IDEA 完成）。
+> 最后更新：2026-06-29（Parity Recovery Batch 5-12 全量功能对齐完成）。
 >
-> **⚠️ 重大更新（2026-06-29，Batch 5-12）**：经 IDEA Git 功能复刻评审，发现「功能多数已实现，但被 Branches 视图渲染 bug + 工具栏未浮现 + 命令 bug 掩盖」。本批 Recovery **先解除可见痛感，再全量补齐**：新增 13 个 engine 纯逻辑模块 + 21 个命令，单测 64 → 166、命令 56 → 77。**§3 所列 vscode.git 稳定 API 限制（cherry-pick/revert/reset/branch rename/hunk 暂存/stash list/graph topology/shelf/author 等）现均已通过 `GitRepositoryService.execGit`（复用 `api.git.path` 同一 git 二进制）受控 CLI 通道解决**。详见 [CHANGELOG](../../CHANGELOG.md) [Unreleased]。
-> AI M5 暂不启动（5 个接缝保留 Null 实现，本轮专注 IDE 对齐）。
+> **⚠️ 重大更新（2026-06-29，Batch 5-12）**：经 Git 功能完备性评审，发现「功能多数已实现，但被 Branches 视图渲染 bug + 工具栏未浮现 + 命令 bug 掩盖」。本批 Recovery **先解除可见痛感，再全量补齐**：新增 13 个 engine 纯逻辑模块 + 21 个命令，单测 64 → 166、命令 56 → 77。**§3 所列 vscode.git 稳定 API 限制（cherry-pick/revert/reset/branch rename/hunk 暂存/stash list/graph topology/shelf/author 等）现均已通过 `GitRepositoryService.execGit`（复用 `api.git.path` 同一 git 二进制）受控 CLI 通道解决**。详见 [CHANGELOG](../../CHANGELOG.md) [Unreleased]。
+> AI M5 暂不启动（5 个接缝保留 Null 实现，本轮专注功能完备性）。
 
 ---
 
 ## 0. 概览
 
-- **架构**：路径 B —— 消费内置 `vscode.git` 稳定 `Repository` API + 自建 changelist registry + 独立视图容器自绘 IDEA 风格 UI，不接管原生 Source Control 视图。
+- **架构**：路径 B —— 消费内置 `vscode.git` 稳定 `Repository` API + 自建 changelist registry + 独立视图容器自绘 UI，不接管原生 Source Control 视图。
 - **分层**：`engine/`（纯逻辑，零 vscode 依赖）/ `adapter/`（唯一接触 vscode API）/ `agent/`（AI 接缝）/ `shared/`（契约）/ `infra/`。
 - **质量基线**：TypeScript strict + ESLint9 + Vitest（engine 单测）+ @vscode/test-electron（adapter 集成）+ esbuild + 三平台 CI（Linux xvfb）。
 - **验证**：单测 45/45、集成 3/3（含真实 git 提交闭环 + amend）、`vsce package` 产 vsix。
@@ -27,7 +27,7 @@
 | M0-M2 审查修复 | 0.3.1 | [#5](https://github.com/ThreeFish-AI/hyper-git/pull/5) | 11 类正确性修复（订阅泄漏/仓库选取/indexChanges/commit 语义/push 警告/linter 等）+ 16 项测试补齐 | 单测 45/45 + 集成 3/3 |
 | M3 Log/Branches/Blame | 0.4.0 | [#6](https://github.com/ThreeFish-AI/hyper-git/pull/6) | Log TreeView（过滤+copy hash+Show History）、Branches TreeView（create/checkout/delete/merge/rebase）、Blame | 命令注册集成 |
 | M4 Stash/Shelf | 0.5.0 | [#7](https://github.com/ThreeFish-AI/hyper-git/pull/7) | Stash 视图（log refnames 枚举）+ create/apply/pop/drop；Shelf MVP（stash 近似） | 命令注册集成 |
-| **Parity Recovery Batch 5-7** | — | commit `00b5ba7`/`2105445`/`9699ee9` | Branches 渲染修复 + 工具栏 Action 组 + 冲突兜底；Branches 对齐 IDEA（Favorites/Tags/ahead-behind）；Rebase webview reword/edit/拖拽 1:1 复刻 | 单测 166/166 + 集成 3/3 |
+| **Parity Recovery Batch 5-7** | — | commit `00b5ba7`/`2105445`/`9699ee9` | Branches 渲染修复 + 工具栏 Action 组 + 冲突兜底；Branches 视图增强（Favorites/Tags/ahead-behind）；Rebase webview 支持 reword/edit/拖拽交互式编排 | 单测 166/166 + 集成 3/3 |
 | **Parity Recovery Batch 8-9** | — | commit `efd888c`/`ed01883` | Log 提交详情面板 + 高级过滤 + per-commit 操作；真实 SVG 提交拓扑图（解析 git --graph 字符粒度渲染 + 可点击 + 实时刷新） | 同上 |
 | **Parity Recovery Batch 10-12** | — | commit `2274d8a`/`fcb6ffa`/`acdf53c` | Push/Update/Merge 对话框 + fetch prune + Co-authored-by trailer；自绘 3-way Merge Editor（自实现 diff3）；Stash 高级 + Patch + Reflog + Blame 行内注解 | 同上 |
 
@@ -79,7 +79,7 @@
 **5 个 AI 接缝**（agent/，依赖 engine 不依赖 adapter）：
 - `ILlmProvider`：模型来源抽象（vscodeLM / byok-Ollama / openaiCompatible）。**最关键**——未来切换模型来源的命脉。
 - `ICommitMessageProvider`：AI 提交信息生成（staged diff + 团队规范 → 流式 CC 合规 message）。
-- `IPreCommitInspector`：提交前 AI 代码审查（对齐 IDEA `CheckinHandler.beforeCheckin`，可阻断）。
+- `IPreCommitInspector`：提交前 AI 代码审查（参考 JetBrains `CheckinHandler.beforeCheckin` 责任链设计，可阻断）。
 - `IChangelistGrouper`：变更语义分组（回写 changelist）。
 - `IConflictResolver`：冲突解决（用户逐块确认）。
 
@@ -104,6 +104,6 @@
 
 ## 7. 发布状态
 
-- **当前版本**：0.5.0（preview，内部里程碑）。
-- **首发候选**：v0.0.1-rc.1（package 版本 `0.0.1` + `--pre-release` + git tag `v0.0.1-rc.1`）。Marketplace 仅支持 `major.minor.patch`，预发布语义由 `--pre-release` 标记 + tag 体现。
+- **当前版本**：0.0.6（首个 MVP 正式版，对外首发；以「Hyper Git - Agentic Git」之名上架 Marketplace / OpenVSX）。
+- **首发历程**：经若干内部迭代与 `v0.0.1-rc.*` 预发布打磨后，以 `v0.0.5` 完成内部首发；因 Marketplace 上「Hyper Git」名称被误删不可用，遂将扩展更名为 **Hyper Git - Agentic Git**（`package.json` `name=hyper-git-agentic-git`），以 `v0.0.6`（git tag `v0.0.6`）重新上架。Marketplace 仅支持 `major.minor.patch`，预发布语义由 `--pre-release` 标记 + tag 体现。
 - **发布前置**：publisher 账号（`threefish-ai`）、VSCE_PAT / OVSX_PAT secrets、PNG 图标。

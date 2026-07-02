@@ -1,7 +1,7 @@
 # Track5:AI Agent 架构预留设计报告(Hyper Git)
 
 > 调研截至 2026/06/27。所有事实论断附来源(GitHub 路径/官方文档 URL)。不确定处标注"待核实"。
-> 核心立场:本扩展定位为 **IDEA Git 工具窗口的完整复刻**。VS Code 内置 Copilot **已有**提交信息生成能力([VS Code 官方介绍](https://code.visualstudio.com/docs/sourcecontrol/overview)),因此我们的 AI 层必须做"差异化与可组合性",而非重复造轮子——这契合 AGENTS.md 的"复用驱动"与"正交分解"。
+> 核心立场:本扩展提供 **完整的 Git 变更管理与提交工作流**。VS Code 内置 Copilot **已有**提交信息生成能力([VS Code 官方介绍](https://code.visualstudio.com/docs/sourcecontrol/overview)),因此我们的 AI 层必须做"差异化与可组合性",而非重复造轮子——这契合 AGENTS.md 的"复用驱动"与"正交分解"。
 
 ---
 
@@ -11,8 +11,8 @@
 
 | # | 场景 | 输入 | 输出 | 价值 | 难度 | 推荐落地机制 |
 |---|------|------|------|------|------|------|
-| 1 | **AI 提交信息生成** | staged diff(可含历史 commit 风格、团队 Conventional Commits 规范、本次 changelist 分组意图) | 符合规范的单行 subject + 多行 body,流式输出 | 高 | 低 | Language Model API(`vscode.lm`)+ prompt-tsx;触发位为 SCM `inputBox` 旁按钮(复刻 IDEA 的 ✨ 图标) |
-| 2 | **提交前 AI 代码审查(本地 PR review)** | staged 文件 + diff + 仓库上下文(相关符号/调用方) | 问题列表(严重度、文件:行、建议修复),可阻断或放行 commit | 极高 | 中 | Language Model API + Chat Tools(供 Agent 调用 `read_file`/`grep_symbols`);**对接 IDEA 的 `beforeCheckin` hook 语义** |
+| 1 | **AI 提交信息生成** | staged diff(可含历史 commit 风格、团队 Conventional Commits 规范、本次 changelist 分组意图) | 符合规范的单行 subject + 多行 body,流式输出 | 高 | 低 | Language Model API(`vscode.lm`)+ prompt-tsx;触发位为 SCM `inputBox` 旁的 ✨ 生成按钮 |
+| 2 | **提交前 AI 代码审查(本地 PR review)** | staged 文件 + diff + 仓库上下文(相关符号/调用方) | 问题列表(严重度、文件:行、建议修复),可阻断或放行 commit | 极高 | 中 | Language Model API + Chat Tools(供 Agent 调用 `read_file`/`grep_symbols`);**借鉴 JetBrains `CheckinHandler.beforeCheckin` 提交前检查语义** |
 | 3 | **AI 变更语义分组(自动 changelist 归类)** | Local Changes 全部变更文件 + diff 摘要 | 建议的 changelist 分组(如 "feature-A 相关"、"重构"、"配置"),支持一键应用 | 高 | 中 | Language Model API(聚类式 prompt);结果写回 changelist 模型(本扩展自管的分组数据结构) |
 | 4 | **AI 冲突解决助手** | merge conflict 文件(ours/theirs/base 三方) | 建议的合并结果 + 解释,可逐块采纳 | 高 | 高 | Language Model API(三方 diff prompt)+ inline diff 预览;**注意:需用户确认,不可自动写入**(参考 VS Code 工具确认机制 [`prepareInvocation`](https://code.visualstudio.com/api/extension-guides/ai/tools)) |
 | 5 | **AI Release Notes / Changelog** | 区间内的 commit 列表 + tag 范围 | 面向用户的 release notes(markdown) | 中 | 低 | Language Model API + prompt-tsx;接入 Log 视图的"生成 changelog"动作 |
@@ -44,7 +44,7 @@
 ### 2.3 Language Model Tools API(Chat Tools)——**让 AI 调用我们的 git 能力**
 - 在 `package.json` 的 `contributes.languageModelTools` 声明工具,代码中 `vscode.lm.registerTool(name, instance)`,实现 `prepareInvocation`(确认)+ `invoke`(执行)([Tools 官方文档](https://code.visualstudio.com/api/extension-guides/ai/tools))。
 - **适用场景**:场景 2(审查需读文件/查符号)、6(blame 需调 git)。例如注册 `sofia_git_blame`、`sofia_get_staged_diff`、`sofia_read_file` 工具,让 Agent 自主调用。
-- **关键价值**:把本扩展的 git 能力(Engine 层)**暴露给任意 Agent**(内置 Copilot Agent、MCP Agent、第三方),实现"可组合性"——这是复刻 IDEA 之外的核心增值点。
+- **关键价值**:把本扩展的 git 能力(Engine 层)**暴露给任意 Agent**(内置 Copilot Agent、MCP Agent、第三方),实现"可组合性"——这是 Git 变更管理主线工作流之外的核心增值点。
 - 工具名规范 `{verb}_{noun}`,参数名 `{noun}`;`canBeReferencedInPrompt: true` 让用户用 `#` 引用([同上](https://code.visualstudio.com/api/extension-guides/ai/tools))。
 - 官方建议:工具会执行有副作用操作时,`prepareInvocation` 必须给用户**确认消息**([同上](https://code.visualstudio.com/api/extension-guides/ai/tools))——**这是 AI 冲突解决不可自动写入的安全依据**。
 
@@ -102,14 +102,14 @@
 - 默认实现:`NullCommitMessageProvider`(返回空,UI 显示"AI 未启用")+ `LmCommitMessageProvider`(走 ILlmProvider + prompt-tsx)。
 - **为何现在抽**:提交信息是 commit 流水线的核心产物,留接缝让未来可"无 AI → 内置 LM → 自带 key"平滑切换。
 
-**接缝 3:IPreCommitInspector(Agent 层)——对齐 IDEA CheckinHandler 的 beforeCheckin 语义**
+**接缝 3:IPreCommitInspector(Agent 层)——借鉴 JetBrains CheckinHandler 的 beforeCheckin 责任链设计**
 ```
-接口 IPreCommitInspector:   // 直接对齐 IDEA CheckinHandler.beforeCheckin / CommitCheck
+接口 IPreCommitInspector:   // 借鉴 JetBrains CheckinHandler.beforeCheckin / CommitCheck 责任链设计
   方法 inspect(输入: { staged文件, diff, 仓库上下文 }): Promise<检查结果>
     // 检查结果 = { 通过: bool, 问题列表: [{文件, 行, 严重度, 说明, 建议修复}], 阻断提交: bool }
-  方法 getBeforeCheckinPanel(): 配置面板描述   // 对齐 IDEA getBeforeCheckinConfigurationPanel
+  方法 getBeforeCheckinPanel(): 配置面板描述   // 参考 JetBrains getBeforeCheckinConfigurationPanel
 ```
-- **对齐证据**:IDEA 的 `CheckinHandler` 提供 `beforeCheckin()`(提交前处理,返回 COMMIT/CANCEL)、`checkinSuccessful()`、`checkinFailed()`、`includedChangesChanged()`、`getBeforeCheckinConfigurationPanel()`(返回插入"Before Commit"面板的配置组件)([CheckinHandler.java 源码](https://github.com/JetBrains/intellij-community/blob/master/platform/vcs-api/src/com/intellij/openapi/vcs/checkin/CheckinHandler.java))。我们的 `IPreCommitInspector` 是其在 VS Code 侧的等价物。
+- **设计佐证**:JetBrains 的 `CheckinHandler` 提供 `beforeCheckin()`(提交前处理,返回 COMMIT/CANCEL)、`checkinSuccessful()`、`checkinFailed()`、`includedChangesChanged()`、`getBeforeCheckinConfigurationPanel()`(返回插入"Before Commit"面板的配置组件)([CheckinHandler.java 源码](https://github.com/JetBrains/intellij-community/blob/master/platform/vcs-api/src/com/intellij/openapi/vcs/checkin/CheckinHandler.java))。我们的 `IPreCommitInspector` 是其在 VS Code 侧的等价物。
 - 默认实现:`BuiltInInspector`(TODO 检查、reformat、optimize imports 等非 AI 检查)+ `AiCodeReviewInspector`(可选)。
 
 **接缝 4:IChangelistGrouper(Agent 层)**
@@ -140,7 +140,7 @@
 
 > YAGNI 反对的是"为不存在的需求写实现"。这里我们**不写 AI 实现**,只写**接口契约 + Null 实现**,这是"开闭原则的接缝预留",成本极低(几个接口 + 空实现),收益是未来 AI 层**零重构**接入。具体:
 1. **接缝只定义契约,不引入 AI 依赖**——当前 `package.json` 不依赖 Copilot,未启用 AI 的用户无负担([LM API 官方发布建议](https://code.visualstudio.com/api/extension-guides/ai/language-model):非 AI 功能不应强依赖 Copilot)。
-2. **IDEA 的 CheckinHandler 模式已被验证为成熟的 hook 机制**(20+ 年生产验证),复刻其语义是"复用驱动",不是臆测设计。
+2. **JetBrains 的 CheckinHandler 模式已被验证为成熟的 hook 机制**(20+ 年生产验证),借鉴其责任链语义是"复用驱动",不是臆测设计。
 3. **关键:ILlmProvider 必须现在抽**——因为它是"未来支持本地/自带 key/不强依赖云端"的唯一命脉,若晚抽,所有 AI 调用散落各处,迁移成本爆炸。
 
 ---
@@ -188,14 +188,14 @@ flowchart TD
 | F 冲突解决 | IConflictResolver | (IDEA 无内置) | 手动解决 | AI 三方合并建议 |
 
 **实现要点**:
-- Hook 链采用**有序责任链**,每个 Hook 返回 `COMMIT | CANCEL | DEFER`(直接对齐 IDEA `CheckinHandler.ReturnResult` 枚举,见 [CheckinHandler.java](https://github.com/JetBrains/intellij-community/blob/master/platform/vcs-api/src/com/intellij/openapi/vcs/checkin/CheckinHandler.java))。
-- `includedChangesChanged()` 等价物:当用户在 commit 对话框勾选/取消文件时,通知 Hook 链刷新(对齐 IDEA 同名方法)——这对 AI 分组/审查的增量更新至关重要。
+- Hook 链采用**有序责任链**,每个 Hook 返回 `COMMIT | CANCEL | DEFER`(借鉴 JetBrains `CheckinHandler.ReturnResult` 枚举设计,见 [CheckinHandler.java](https://github.com/JetBrains/intellij-community/blob/master/platform/vcs-api/src/com/intellij/openapi/vcs/checkin/CheckinHandler.java))。
+- `includedChangesChanged()` 等价物:当用户在 commit 对话框勾选/取消文件时,通知 Hook 链刷新(参考 JetBrains 同名方法)——这对 AI 分组/审查的增量更新至关重要。
 
 ---
 
 ## 5. 渐进式 AI 引入路线(从"无 AI"到"可选 AI")
 
-### 阶段 0:纯复刻期(当前)——**接缝已埋,AI 未启用**
+### 阶段 0:基础功能期(当前)——**接缝已埋,AI 未启用**
 - 所有 AI 接缝提供 **Null 实现**(Null Object 模式)。
 - `ILlmProvider.selectModel` 恒返回"无可用模型",UI 不显示 AI 按钮。
 - **`package.json` 不声明 Copilot 依赖**(遵循[官方发布建议](https://code.visualstudio.com/api/extension-guides/ai/language-model)),未启用 AI 的用户零负担。

@@ -5,14 +5,20 @@
 ## 工程方案与需求基线（高频引用）
 - [实施状态总览（M0-M5）](./milestones/implementation-status.md) — 里程碑交付记录、P0/P1 达成矩阵、API 限制、M5 AI 设计、验证与发布状态（**实施看板**）。
 - [工程实施方案](./architecture/engineering-plan.md) — 全链路调研结论 + 路径 B 架构 + M0-M5 里程碑路线图 + 风险与验证（**开发蓝图**）。
-- [IDEA 功能复刻矩阵](./requirements/idea-feature-matrix.md) — 56 个原子功能点 / 8 组 + CheckinHandler 生命周期（**验收基线**）。
+- [Git 功能完备性矩阵](./requirements/idea-feature-matrix.md) — 56 个原子功能点 / 8 组 + CheckinHandler 生命周期（**验收基线**）。
+
+## 功能文档
+- [Log 视图 CI 状态](./features/log-ci-status.md) — 按提交显示 GitHub CI 最终状态（绿勾/红叉 + 悬停 Tooltip 明细）：认证、限流、懒加载、边界与配置。
+
+## 发布说明
+- [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.6 首个 MVP](./releases/v0.0.6.md)。
 
 ## 调研报告（循证依据）
 - [02 · VS Code SCM API 与 vscode.git 集成路径](./research/02-vscode-scm-integration.md) — 路径 B 决策依据、SCM 稳定/proposed API 边界、changelist 模型映射。
 - [03 · VS Code 扩展工程蓝图](./research/03-extension-blueprint.md) — 技术栈决策、工程骨架、IDEA→VS Code UI 表面映射表。
 - [04 · 发布策略 + CI/CD](./research/04-publishing-cicd.md) — 双市场（Marketplace + OpenVSX）、CI 矩阵、版本治理、安全。
-- [05 · AI Agent 架构预留](./research/05-ai-agent-seams.md) — AI 接缝（ILlmProvider 等）+ IDEA CheckinHandler 对齐 + 渐进式引入路线。
+- [05 · AI Agent 架构预留](./research/05-ai-agent-seams.md) — AI 接缝（ILlmProvider 等）+ 借鉴 JetBrains CheckinHandler 责任链设计 + 渐进式引入路线。
 
 ## 协作与规范
 - [AGENTS.md](../AGENTS.md) — 协作协议与工程行为准则。
-- [知识索引](../.agents/knowledge-map.md) · [Issue 记录](../.agents/issue.md) · [引用规范 IEEE](../.agents/reference-specifications.md)。
+- [知识索引](./.agents/knowledge-map.md) · [Issue 记录](./.agents/issue.md) · [引用规范 IEEE](./.agents/reference-specifications.md)。

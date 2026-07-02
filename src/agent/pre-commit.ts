@@ -4,7 +4,7 @@ import type { CheckinHook } from '../engine/commit/pipeline';
 /**
  * AI 接缝（M5 实现）：提交前审查。
  *
- * 对齐 IntelliJ IDEA `CheckinHandler.beforeCheckin()` / `CommitCheck.runCheck()`——
+ * 参考 JetBrains `CheckinHandler.beforeCheckin()` / `CommitCheck.runCheck()` 责任链设计——
  * 挂载到 CommitPipeline 责任链，可返回 COMMIT 放行或 CANCEL 阻断不良提交。
  * 现仅定义契约；M2 起接入内置非 AI 检查（TODO/reformat），M5 起接入 AI 代码审查。
  */

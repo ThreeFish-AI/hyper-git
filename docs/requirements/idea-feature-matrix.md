@@ -1,6 +1,6 @@
 # IntelliJ IDEA 社区版 Git/Commit 模块 调研报告
 
-> 调研目标：产出 IDEA「Git 工具窗口 + Commit 提交窗口」的【完整功能清单 + 关键源码锚点】，作为 VS Code 插件复刻的需求规约（Spec）基线。
+> 调研目标：产出 IDEA「Git 工具窗口 + Commit 提交窗口」的【完整功能清单 + 关键源码锚点】，作为本扩展 Git 变更管理与提交工作流的功能需求规约（Spec）基线（参考 IDEA 等成熟实现）。
 > 仓库：[JetBrains/intellij-community](https://github.com/JetBrains/intellij-community)（master 分支，2025–2026 年版本）
 > 官方文档：[IntelliJ IDEA Help 2026.1](https://www.jetbrains.com/help/idea/)
 > 调研时间：2026-06-27
@@ -44,7 +44,7 @@
 
 ### 组 1：Commit 窗口（Commit / Shelf / Stash 标签页 + 提交流水线）
 
-| # | 功能名 | 用户可见行为 | 触发入口 | 底层 git/IDEA 机制 | 源码锚点（类路径） | 复刻难度 | VS Code 原生 |
+| # | 功能名 | 用户可见行为 | 触发入口 | 底层 git/IDEA 机制 | 源码锚点（类路径） | 实现难度 | VS Code 原生 |
 |---|---|---|---|---|---|---|---|
 | 1 | Commit 工具窗口（竖向，Alt+0） | 左侧竖向变更列表 + 提交信息区 + Diff 预览；非模态 | `Alt+0` / `Ctrl+K` | 平台 `CommitDialog/CommitToolWindow`，git4idea `GitCheckinEnvironment` | `vcs-impl/.../changes/ui/CommitChangeListDialog.java`、`DefaultCommitChangeListDialog.kt`；git4idea `checkin/GitCheckinEnvironment.kt` | 高 | 部分（SCM 面板，无竖向 commit 工具窗口形态） |
 | 2 | Commit Message 模板 | 默认填充 commit message（来自 `.git/COMMIT_TEMPLATE` / `commit.template` / merge message） | 打开 commit 窗口自动填充 | `git config commit.template`；EP `com.intellij.vcs.commitMessageProvider` | `commit/GitTemplateCommitMessageProvider.kt`；`vcs-api/.../changes/ui/CommitMessageProvider.java`；`checkin/GitCheckinEnvironment.getDefaultMessageFor`（merge message） | 低 | 无原生（需插件/git config） |
@@ -63,7 +63,7 @@
 
 ### 组 2：Local Changes 变更列表（多 changelist 模型）
 
-| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 复刻难度 | VS Code 原生 |
+| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 实现难度 | VS Code 原生 |
 |---|---|---|---|---|---|---|---|
 | 15 | 多 changelist | 同时维护多个命名变更列表 | Commit 窗口左侧树 | `ChangeListManager` + `LocalChangeList` 模型 | `vcs-api/.../changes/ChangeListManager.java`、`LocalChangeList`（接口）；`vcs-impl/.../changes/ChangeListManagerImpl.java`、`ChangeListWorker.java` | 高 | **无**（VS Code SCM 仅多 group，非命名 changelist） |
 | 16 | Active changelist | 设置默认活动列表；新改动落入此列表 | `Ctrl+Space` / 右键 Set Active | `getDefaultChangeList/setDefaultChangeList`；命令 `SetDefault` | `ChangeListManager`；`changes/local/SetDefault.java` | 中 | **无**（无 active 概念） |
@@ -75,7 +75,7 @@
 
 ### 组 3：Partial / Selective / 按行（line-level）提交
 
-| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 复刻难度 | VS Code 原生 |
+| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 实现难度 | VS Code 原生 |
 |---|---|---|---|---|---|---|---|
 | 22 | 选择性勾选文件提交 | 勾选/取消文件，未勾选保留 | 复选框 | changelist 内子集提交 | `vcs-impl/.../changes/ui/CommitDialogChangesBrowser.java`；`GitCheckinEnvironment.commit(changes)` 接受子集 | 低 | 是（SCM 文件勾选） |
 | 23 | 按代码块（chunk）提交 | Diff 中勾选 chunk 提交，其余保留 | Diff 区勾选 | `PartialLocalLineStatusTracker` + `PartialCommitHelper` | `vcs-impl/.../impl/PartialChangesUtil.kt`（`getPartialTracker`/`processPartialChanges`）；`vcs-api/.../vcs/ex/PartialCommitHelper`；`GitCheckinEnvironment.addPartialChangesToIndex` | **高** | 部分（git staging + chunk staging，VS Code 1.70+ 支持 staging selected lines） |
@@ -85,7 +85,7 @@
 
 ### 组 4：Shelf 与 Stash
 
-| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 复刻难度 | VS Code 原生 |
+| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 实现难度 | VS Code 原生 |
 |---|---|---|---|---|---|---|---|
 | 27 | Shelve changes（IDEA patch） | 暂存选定改动为 IDEA patch；可选择部分文件 | 右键 Shelve Changes / Shelve Silently（`Ctrl+Shift+H`） | `ShelveChangesManager`（patch 文件存储） | `vcs-impl/.../changes/shelf/ShelveChangesManager.java`、`ShelveChangesAction.kt`、`ShelveChangesCommitExecutor.java` | 中 | **无**（需 git stash 替代） |
 | 28 | Unshelve silently / with conflict | 还原 shelf；静默或弹冲突解决 | `Ctrl+Shift+U` / Unshelve Silently（`Ctrl+Alt+U`）/ 拖拽 | `ShelvedChangesViewManager` + 3-way merge（冲突） | `shelf/UnshelveWithDialogAction.java`、`ShelvedChangesViewManager.java`、`RestoreShelvedChange.java` | 中 | 无 |
@@ -98,7 +98,7 @@
 
 ### 组 5：Diff（对比）
 
-| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 复刻难度 | VS Code 原生 |
+| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 实现难度 | VS Code 原生 |
 |---|---|---|---|---|---|---|---|
 | 35 | 与 HEAD/分支/本地对比 | Diff Viewer 对比本地 vs HEAD / 任意分支 / 本地版本 | Diff 按钮（`Ctrl+D`）/ Compare HEAD, Staged and Local | `DiffProvider`/`GitDiffProvider` | `git4idea/diff/`；`ui/GitShowDiffWithBranchPanel.kt`；`branch/GitCompareBranchesUi.kt` | 中 | 是（editor diff） |
 | 36 | Compare HEAD/Staged/Local 三方 | 三窗 Diff（repo / 中央可编辑 staging / local） | 右键 Compare HEAD, Staged and Local Versions | staging area interactive staging | 官方文档「Stage changes interactively」；`checkin/GitIndexUtil`（`listStaged`/`listTree`） | 中 | 部分 |
@@ -107,7 +107,7 @@
 
 ### 组 6：Log 提交图
 
-| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 复刻难度 | VS Code 原生 |
+| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 实现难度 | VS Code 原生 |
 |---|---|---|---|---|---|---|---|
 | 39 | 提交图（graph） | 分支拓扑图、彩色节点 | Git 工具窗口 Log tab（`Alt+9`） | `platform/vcs-log`（VcsLog data + UI） | `platform/vcs-log/`（`VcsLogUi`、graph 渲染）；git4idea `log/` | **高** | 无原生（需 GitGraph 等插件） |
 | 40 | Search / filter（author/path/date/branch/regex） | 按 author、path、date、branch、正则过滤 | Log toolbar 过滤 | VcsLog filter 体系 | `platform/vcs-log/`（filter providers）；官方文档 [Log Tab](https://www.jetbrains.com/help/idea/log-tab.html) | 中 | 部分（无原生图形 log 过滤） |
@@ -118,7 +118,7 @@
 
 ### 组 7：Branches
 
-| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 复刻难度 | VS Code 原生 |
+| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 实现难度 | VS Code 原生 |
 |---|---|---|---|---|---|---|---|
 | 45 | Create / Checkout branch | 新建并检出 / 检出现有 / checkout-as-new | VCS widget / Branches pane | `git checkout -b/-` | `branch/GitCreateBranchOperation.kt`、`GitCheckoutOperation.java`、`GitCheckoutNewBranchOperation.java`；`actions/branch/GitCheckoutAsNewBranch.kt` | 低 | 是（命令面板） |
 | 46 | Delete / Rename branch | 删除本地/远程分支/标签、重命名 | 右键 Delete/Rename | `git branch -d/-D`/`-m`；`git push origin --delete` | `branch/GitDeleteBranchOperation.java`、`GitDeleteRemoteBranchOperation.java`、`GitRenameBranchOperation.java`、`GitDeleteTagOperation.java` | 低 | 部分 |
@@ -129,7 +129,7 @@
 
 ### 组 8：右键 / 内联操作
 
-| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 复刻难度 | VS Code 原生 |
+| # | 功能名 | 用户可见行为 | 触发入口 | 底层机制 | 源码锚点 | 实现难度 | VS Code 原生 |
 |---|---|---|---|---|---|---|---|
 | 51 | Revert / Rollback | 回滚未提交改动（`RollbackEnvironment`） | 右键 Rollback / `RollbackChangesDialog` | `git checkout --` / reset | `rollback/GitRollbackEnvironment.java`；`vcs-impl/.../changes/ui/RollbackChangesDialog.kt`、`RollbackWorker.java` | 中 | 是（Discard Changes） |
 | 52 | Reset HEAD（mixed/soft/hard/keep） | Git Reset 对话框选择模式 | 右键 / `GitResetHead` action | `git reset --soft/--mixed/--hard/--keep` | `actions/GitResetHead.java`；`ui/GitResetDialog.java` | 低 | 无原生（命令式） |
@@ -153,7 +153,7 @@
 | 提交范围 | 提交所选 changelist（或其中勾选子集） | 提交整个 Staged group |
 | 自动绑定分支 | **无原生 changelist↔branch 自动绑定**；需 Tasks 上下文（`ActiveChangeListTracker`） | 无 |
 
-> **复刻映射建议**：VS Code SCM 的 `ResourceGroup` 难以 1:1 表达「active + 跨文件行级归属」，建议在插件层自建「changelist registry」（仿 `ChangeListManager` + `ChangeListChange`），将 SCM group 作为渲染层，并通过 `LineStatusTracker`-like 行级 tracker 支撑 partial commit。这是 IDEA 模型对 VS Code 最大的差异与复刻难点。
+> **实现映射建议**：VS Code SCM 的 `ResourceGroup` 难以直接表达「active + 跨文件行级归属」，建议在插件层自建「changelist registry」（参考 `ChangeListManager` + `ChangeListChange` 设计），将 SCM group 作为渲染层，并通过 `LineStatusTracker`-like 行级 tracker 支撑 partial commit。这是 IDEA 模型与 VS Code 原生 SCM 模型最大的差异点与实现难点。
 
 ---
 
@@ -169,7 +169,7 @@
 | Before-Commit 设置项（Settings 页） | `UnnamedConfigurable getBeforeCheckinSettings()` | `Settings \| VCS \| Commit` 配置页 | 持久化设置 | 中：AI 规则配置 |
 | After-Commit 配置面板 | `RefreshableOnComponent getAfterCheckinConfigurationPanel(Disposable)` | 构建 After Commit 选项面板 | 注入部署等选项 | 低 |
 | **Before check-in（核心闸门）** | `ReturnResult beforeCheckin(CommitExecutor, PairConsumer)` / `beforeCheckin()` | 提交按钮按下后、真正 commit 前 | `COMMIT`/`CANCEL`/`CLOSE_WINDOW` 可阻断提交 | **高**：AI 代码审查/质量闸门，可阻断不良提交 |
-| **CommitCheck（现代协程闸门）** | `suspend CommitProblem? runCheck(CommitInfo)` / `runGitCheck(commitInfo, changes)` | beforeCheckin 的协程演进版；`commitInfo.isVcsCommit` 时执行 | 返回 `CommitProblem`（含 `showModalSolution`） | **高**：AI 异步审查最佳挂载点（仿 `GitCheckinHandler`） |
+| **CommitCheck（现代协程闸门）** | `suspend CommitProblem? runCheck(CommitInfo)` / `runGitCheck(commitInfo, changes)` | beforeCheckin 的协程演进版；`commitInfo.isVcsCommit` 时执行 | 返回 `CommitProblem`（含 `showModalSolution`） | **高**：AI 异步审查最佳挂载点（参考 JetBrains `GitCheckinHandler` 设计） |
 | CommitCheck 执行顺序 | `CommitCheck.ExecutionOrder getExecutionOrder()` | 排序多个 CommitCheck | `EARLY`/`DEFAULT`/`LATE` | 中：控制 AI 检查与其他检查顺序 |
 | CommitCheck 启用开关 | `boolean isEnabled()` | 决定是否运行 | 布尔 | 中 |
 | **Successful 回调** | `void checkinSuccessful()`（`@RequiresEdt`） | 提交成功后 | 通知/后续动作 | 高：AI 提交摘要、自动生成 PR 描述 |
@@ -180,7 +180,7 @@
 
 > **CommitContext 关键字段**（贯穿整个流水线，承载 commit 选项）：`commitToAmend`、`isSkipHooks`、`commitAuthor`、`commitAuthorDate`、`isSignOffCommit`、`isPushAfterCommit`、`isCommitRenamesSeparately`、`commitWithoutChangesRoots`。源码：`GitCheckinEnvironment.updateState()` / `doCommit()`。
 >
-> **AI 接入建议**：实现一个 `CommitCheck`（EARLY 顺序）挂载 AI 审查 + 实现 `includedChangesChanged()` 动态生成 commit message + 实现 `checkinSuccessful()` 触发 AI 后处理，可完整复用 IDEA 提交流水线的「设计-实现-验证」闭环，无需重写 commit 引擎。
+> **AI 接入建议**：实现一个 `CommitCheck`（EARLY 顺序）挂载 AI 审查 + 实现 `includedChangesChanged()` 动态生成 commit message + 实现 `checkinSuccessful()` 触发 AI 后处理，可借鉴 JetBrains CheckinHandler 责任链的「设计-实现-验证」闭环，无需重写 commit 引擎。
 
 ---
 
@@ -209,7 +209,7 @@
 ---
 
 ## F. 待核实 / 不确定项
-1. **LocalChangeList 接口/实现类的精确文件路径**：zread 多次返回「文件不存在」（API 类可能位于非直觉路径或为生成/移动类），但其方法语义已通过 `ChangeListManager.java`（大量引用）+ `PartialChangesUtil.kt`（`LocalChangeList` import）+ `ChangeListWorker.java`（实现侧）交叉证实存在。**建议**复刻阶段直接以 `ChangeListManager` API 为契约蓝本。
-2. **Conventional Commits 内置校验**：WebSearch 与文档检索均未发现 IDEA 内置 CC 强校验类；结论为「IDEA 无原生 CC 校验，依赖 commit message 规则/第三方插件」，需在复刻时自行实现 CC linter。
+1. **LocalChangeList 接口/实现类的精确文件路径**：zread 多次返回「文件不存在」（API 类可能位于非直觉路径或为生成/移动类），但其方法语义已通过 `ChangeListManager.java`（大量引用）+ `PartialChangesUtil.kt`（`LocalChangeList` import）+ `ChangeListWorker.java`（实现侧）交叉证实存在。**建议**实现阶段直接以 `ChangeListManager` API 为契约蓝本。
+2. **Conventional Commits 内置校验**：WebSearch 与文档检索均未发现 IDEA 内置 CC 强校验类；结论为「IDEA 无原生 CC 校验，依赖 commit message 规则/第三方插件」，需在实现时自行构建 CC linter。
 3. **Changelist 自动绑定分支的具体类**：`ActiveChangeListTracker.kt` 存在，但「changelist↔branch」自动绑定疑似走 Tasks 上下文模块（非 git4idea），未定位到确切绑定类。
 4. **分支级 Pull/Push/Fetch 的精确 action 类**：`actions/branch/GitPullBranchAction.kt` 等结构已确认存在，但内部委托链（→ `GitBranchWorker`/`GitFetch`）未逐行核实。

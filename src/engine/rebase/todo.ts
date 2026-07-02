@@ -1,7 +1,7 @@
 /**
  * 交互式 rebase todo 序列构造（纯逻辑，零 vscode 依赖）。
  *
- * 对齐 IDEA 交互式 rebase 编辑器：将 {action, hash, subject} 序列化为 git rebase -i 的 todo 文件内容，
+ * 参考 JetBrains 交互式 rebase 编辑器设计：将 {action, hash, subject} 序列化为 git rebase -i 的 todo 文件内容，
  * 供 GIT_SEQUENCE_EDITOR 注入；并支持解析（回填编辑器）与重排序（拖拽）。
  * action 限定 pick / reword / edit / squash / fixup / drop。
  */
