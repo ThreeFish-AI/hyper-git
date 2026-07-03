@@ -4,6 +4,11 @@
 
 > 面向用户的发布说明（含完整特性叙述与安装指引）见 [`docs/releases/`](./docs/releases/README.md)。
 
+## [0.0.9-rc.2] - 2026-07-04 — 浮层定位修复
+
+### Fixed
+- **Log 提交/CI 浮层定位重做**：原 `positionTip`/`positionCommitTip` 把浮层锚定在所悬元素左沿并按 webview 宽度夹紧，420px 宽的浮层在 ~240px 窄侧边栏中从左沿一路铺到编辑器，既「撑满 LOG 视图」又方位怪异。改为横向固定到 `window.innerWidth + 8`（侧边栏右沿外、编辑器区内），纵向与所悬行/图标顶部对齐并按视口高度夹紧；复用 webview `position:fixed` 可越界渲染到编辑器区的特性，浮层不再压住 LOG 列表，自然悬浮于所悬行的右侧。
+
 ## [0.0.9-rc.1] - 2026-07-04 — 0.0.9 候选版
 
 ### Added
@@ -85,5 +90,6 @@
 - 目录 / folder diff（虚拟文档）、Submodules 管理。
 - M5 AI Agent（5 个接缝已预埋 Null 实现，本版未启动）。
 
+[0.0.9-rc.2]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.9-rc.2
 [0.0.9-rc.1]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.9-rc.1
 [0.0.6]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.6
