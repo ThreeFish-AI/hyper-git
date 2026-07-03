@@ -55,11 +55,6 @@
 		"views": {
 			"hyper-git": [
 				{
-					"id": "hyperGit.changes",
-					"name": "Changes",
-					"visibility": "visible"
-				},
-				{
 					"id": "hyperGit.commit",
 					"name": "Commit",
 					"type": "webview",
@@ -94,10 +89,6 @@
 			]
 		},
 		"viewsWelcome": [
-			{
-				"view": "hyperGit.changes",
-				"contents": "No Git changes or repository detected.\nOpen a workspace inside a Git repository and changes will be grouped by changelist.\n[New Changelist…](command:hyperGit.newChangelist)"
-			},
 			{
 				"view": "hyperGit.branches",
 				"contents": "No Git repository or branches detected.\n[New Branch…](command:hyperGit.branchCreate)"
@@ -665,57 +656,47 @@
 			"view/title": [
 				{
 					"command": "hyperGit.refresh",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "navigation@1"
 				},
 				{
 					"command": "hyperGit.newChangelist",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "navigation@2"
 				},
 				{
-					"command": "hyperGit.commit",
-					"when": "view == hyperGit.changes",
-					"group": "navigation@3"
-				},
-				{
-					"command": "hyperGit.commitAndPush",
-					"when": "view == hyperGit.changes",
-					"group": "navigation@4"
-				},
-				{
 					"command": "hyperGit.push",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "navigation@5"
 				},
 				{
 					"command": "hyperGit.pull",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@1"
 				},
 				{
 					"command": "hyperGit.fetch",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@2"
 				},
 				{
 					"command": "hyperGit.pushDialog",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@3"
 				},
 				{
 					"command": "hyperGit.updateProject",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@4"
 				},
 				{
 					"command": "hyperGit.createPatch",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@5"
 				},
 				{
 					"command": "hyperGit.applyPatch",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@6"
 				},
 				{
@@ -826,41 +807,6 @@
 			],
 			"view/item/context": [
 				{
-					"command": "hyperGit.setActiveChangelist",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.changelist",
-					"group": "1_changelist@1"
-				},
-				{
-					"command": "hyperGit.renameChangelist",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.changelist",
-					"group": "1_changelist@2"
-				},
-				{
-					"command": "hyperGit.deleteChangelist",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.changelist",
-					"group": "1_changelist@3"
-				},
-				{
-					"command": "hyperGit.moveChangelist",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "inline"
-				},
-				{
-					"command": "hyperGit.moveChangelist",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "1_file@1"
-				},
-				{
-					"command": "hyperGit.showHistory",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "1_file@2"
-				},
-				{
-					"command": "hyperGit.discardChanges",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "9_dangerous@1"
-				},
-				{
 					"command": "hyperGit.branchCheckout",
 					"when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/ && !listMultiSelection",
 					"group": "1_branch@1"
@@ -929,21 +875,6 @@
 					"command": "hyperGit.tagDelete",
 					"when": "view == hyperGit.branches && viewItem == hyperGit.tag",
 					"group": "9_dangerous@1"
-				},
-				{
-					"command": "hyperGit.ignorePath",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "1_file@4"
-				},
-				{
-					"command": "hyperGit.partialStage",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "1_file@5"
-				},
-				{
-					"command": "hyperGit.partialUnstage",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "1_file@6"
 				},
 				{
 					"command": "hyperGit.stashApply",

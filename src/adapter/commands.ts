@@ -3,20 +3,45 @@ import * as vscode from 'vscode';
 import { FileStatus } from '../engine/model';
 import type { ChangelistRegistry } from './changelist-registry';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
-import type { ChangesNode, ChangesTreeProvider } from './tree/changes-tree';
 
-/** 注册 Changes 视图相关命令（M1）。 */
+/** 命令实参可能来自 webview（路径字符串）或旧式节点对象（含 id/item）。 */
+function asId(arg: unknown): string | undefined {
+	if (typeof arg === 'string') {
+		return arg;
+	}
+	if (arg && typeof arg === 'object' && typeof (arg as { id?: unknown }).id === 'string') {
+		return (arg as { id: string }).id;
+	}
+	return undefined;
+}
+
+/**
+ * 注册 Changes / Commit 相关命令（M1；原 Changes 树移除后由 Commit webview 复用）。
+ *
+ * 文件级命令统一接受 `ChangeItem | 路径字符串`：webview 传路径，host 经 {@link resolveChange}
+ * 回落到 `service.getChanges()` 解析为 ChangeItem（单一事实源）。视图刷新由 registry/service
+ * 的 onDidChange → extension.refreshAll → commitView.refresh() 驱动，命令内不再直接刷新视图。
+ */
 export function registerChangesCommands(
 	service: GitRepositoryService,
 	registry: ChangelistRegistry,
-	tree: ChangesTreeProvider,
 ): vscode.Disposable[] {
 	const subs: vscode.Disposable[] = [];
 
+	const resolveChange = (arg?: ChangeItem | string): ChangeItem | undefined => {
+		if (arg && typeof arg !== 'string') {
+			return arg;
+		}
+		if (typeof arg === 'string') {
+			return service.getChanges().find((c) => c.relativePath === arg);
+		}
+		return undefined;
+	};
+
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.refresh', async () => {
+			// 重扫 git 状态；state 变化经 onDidChange → refreshAll 刷新 Commit/Log/Branches 等视图。
 			await service.repo?.status();
-			tree.refresh();
 		}),
 	);
 
@@ -30,62 +55,70 @@ export function registerChangesCommands(
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.setActiveChangelist', (node: ChangesNode) => {
-			if (node?.kind === 'changelist') {
-				registry.setActive(node.id);
+		vscode.commands.registerCommand('hyperGit.setActiveChangelist', (arg: unknown) => {
+			const id = asId(arg);
+			if (id) {
+				registry.setActive(id);
 			}
 		}),
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.renameChangelist', async (node: ChangesNode) => {
-			if (node?.kind !== 'changelist') {
+		vscode.commands.registerCommand('hyperGit.renameChangelist', async (arg: unknown) => {
+			const id = asId(arg);
+			if (!id) {
 				return;
 			}
-			const def = registry.getDef(node.id);
+			const def = registry.getDef(id);
 			const name = await vscode.window.showInputBox({ prompt: 'Rename Changelist', value: def?.name });
 			if (name && name.trim()) {
-				registry.rename(node.id, name.trim());
+				registry.rename(id, name.trim());
 			}
 		}),
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.deleteChangelist', async (node: ChangesNode) => {
-			if (node?.kind !== 'changelist') {
+		vscode.commands.registerCommand('hyperGit.deleteChangelist', async (arg: unknown) => {
+			const id = asId(arg);
+			if (!id) {
 				return;
 			}
+			const name = registry.getDef(id)?.name ?? id;
 			const choice = await vscode.window.showWarningMessage(
-				`Delete Changelist "${node.name}"? Files under it will be moved to the default list.`,
+				`Delete Changelist "${name}"? Files under it will be moved to the default list.`,
 				{ modal: true },
 				'Delete',
 			);
 			if (choice === 'Delete') {
-				registry.remove(node.id);
+				registry.remove(id);
 			}
 		}),
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.moveChangelist', async (node: ChangesNode) => {
-			if (node?.kind !== 'file') {
+		vscode.commands.registerCommand('hyperGit.moveChangelist', async (arg: ChangeItem | string) => {
+			const change = resolveChange(arg);
+			if (!change) {
 				return;
 			}
 			const active = registry.activeChangelistId;
+			const groups = registry.getGroups(service.getChanges(), (c) => c.relativePath);
+			const currentId = groups.find((g) => g.items.some((i) => i.relativePath === change.relativePath))?.id;
 			const picks = registry
 				.listDefs()
-				.map((d) => ({ label: d.name, id: d.id, description: d.id === active ? 'active' : undefined, picked: d.id === node.changelistId }));
+				.map((d) => ({ label: d.name, id: d.id, description: d.id === active ? 'active' : undefined, picked: d.id === currentId }));
 			const pick = await vscode.window.showQuickPick(picks, { placeHolder: 'Move file to Changelist' });
 			if (pick) {
-				registry.move(node.item.relativePath, pick.id);
+				registry.move(change.relativePath, pick.id);
 			}
 		}),
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.openDiff', async (change: ChangeItem) => {
+		vscode.commands.registerCommand('hyperGit.openDiff', async (arg: ChangeItem | string) => {
 			const repo = service.repo;
-			if (!repo) {
+			const change = resolveChange(arg);
+			if (!repo || !change) {
 				return;
 			}
 			// 空仓库（无 HEAD）时用 originalUri 兜底，避免 git scheme 解析失败
@@ -97,8 +130,9 @@ export function registerChangesCommands(
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.discardChanges', async (change: ChangeItem) => {
+		vscode.commands.registerCommand('hyperGit.discardChanges', async (arg: ChangeItem | string) => {
 			const repo = service.repo;
+			const change = resolveChange(arg);
 			if (!repo || !change) {
 				return;
 			}
@@ -111,13 +145,13 @@ export function registerChangesCommands(
 				return;
 			}
 			try {
-				// 未跟踪文件用 clean（删除）；已跟踪的改动用 restore（丢弃工作区改动）
+				// 未跟踪文件用 clean（删除）；已跟踪的改动用 restore（丢弃工作区改动）。
+				// 视图刷新由 service.onDidChange → refreshAll 驱动。
 				if (change.status === FileStatus.Untracked) {
 					await repo.clean([change.uri.fsPath]);
 				} else {
 					await repo.restore([change.uri.fsPath]);
 				}
-				tree.refresh();
 			} catch (e) {
 				void vscode.window.showErrorMessage(`Failed to discard: ${e instanceof Error ? e.message : String(e)}`);
 			}
