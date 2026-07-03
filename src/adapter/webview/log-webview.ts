@@ -810,15 +810,13 @@ function buildTip(ci) {
 }
 function positionTip(rect) {
   ciTipEl.style.display = 'flex';
-  const tw = ciTipEl.offsetWidth, th = ciTipEl.offsetHeight;
-  const vw = window.innerWidth, vh = window.innerHeight, pad = 6;
-  let left = rect.left;
-  if (left + tw > vw - pad) left = vw - pad - tw;
-  if (left < pad) left = pad;
-  let top = rect.bottom + 4;
-  if (top + th > vh - pad) top = rect.top - th - 4;
-  if (top < pad) top = pad;
-  ciTipEl.style.left = left + 'px';
+  const th = ciTipEl.offsetHeight;
+  const vh = window.innerHeight, pad = 6;
+  // 横向：浮到侧边栏右侧（编辑器区内），不再压住 LOG 列表本身；webview 的 position:fixed 可越界渲染到编辑器。
+  ciTipEl.style.left = (window.innerWidth + 8) + 'px';
+  // 纵向：与所悬图标顶部对齐，超出视口下沿则上移。
+  let top = rect.top;
+  if (top + th > vh - pad) top = Math.max(pad, vh - pad - th);
   ciTipEl.style.top = top + 'px';
 }
 function scheduleShow(hash, iconEl) {
@@ -1032,15 +1030,13 @@ function buildCommitTip(row) {
 }
 function positionCommitTip(rect) {
   commitTipEl.style.display = 'flex';
-  const tw = commitTipEl.offsetWidth, th = commitTipEl.offsetHeight;
-  const vw = window.innerWidth, vh = window.innerHeight, pad = 6;
-  let left = rect.left;
-  if (left + tw > vw - pad) left = vw - pad - tw;
-  if (left < pad) left = pad;
-  let top = rect.bottom + 4;
-  if (top + th > vh - pad) top = rect.top - th - 4;
-  if (top < pad) top = pad;
-  commitTipEl.style.left = left + 'px';
+  const th = commitTipEl.offsetHeight;
+  const vh = window.innerHeight, pad = 6;
+  // 横向：浮到侧边栏右侧（编辑器区内），不再压住 LOG 列表本身；webview 的 position:fixed 可越界渲染到编辑器。
+  commitTipEl.style.left = (window.innerWidth + 8) + 'px';
+  // 纵向：与所悬行顶部对齐，超出视口下沿则上移。
+  let top = rect.top;
+  if (top + th > vh - pad) top = Math.max(pad, vh - pad - th);
   commitTipEl.style.top = top + 'px';
 }
 function scheduleShowCommit(hash, rowEl) {
