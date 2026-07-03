@@ -11,8 +11,12 @@
  * `--topo-order` 为硬性要求：lane 增量算法依赖「子在父之上」严格成立。
  */
 
-/** for-each commit 的 --format 值（与 {@link parseLogLines} 字段顺序严格对应，勿单独修改）。 */
-export const LOG_GRAPH_FORMAT = '%H%x00%P%x00%an%x00%ae%x00%aI%x00%s%x1e';
+/**
+ * for-each commit 的 --format 值（与 {@link parseLogLines} 字段顺序严格对应，勿单独修改）。
+ * `%b`（正文，多行）置于末字段：记录以 RS `%x1e` 终止、字段以 NUL `%x00` 分隔，二者均不出现于 git
+ * 文本输出，故正文内的换行/管道/反斜杠不会被误判为字段或记录边界；末字段解析用 `slice` 兜底重组更稳健。
+ */
+export const LOG_GRAPH_FORMAT = '%H%x00%P%x00%an%x00%ae%x00%aI%x00%cn%x00%cI%x00%s%x00%b%x1e';
 
 /** 一条 commit 的解析结果（字段顺序对应 {@link LOG_GRAPH_FORMAT}）。 */
 export interface RawCommit {
@@ -23,8 +27,14 @@ export interface RawCommit {
 	readonly authorEmail: string;
 	/** 作者日期 ISO 严格（`%aI`，`new Date()` 可解析）。 */
 	readonly authorDate: string;
+	/** 提交者名（`%cn`）。 */
+	readonly committerName: string;
+	/** 提交者日期 ISO 严格（`%cI`）。 */
+	readonly committerDate: string;
 	/** subject（`%s`，首行）。 */
 	readonly subject: string;
+	/** 完整正文（`%b`，不含 subject，可能多行；末字段，可为空）。 */
+	readonly body: string;
 }
 
 const NUL = '\x00';
@@ -42,7 +52,7 @@ export function parseLogLines(output: string): RawCommit[] {
 			continue;
 		}
 		const f = record.split(NUL);
-		if (f.length < 6) {
+		if (f.length < 9) {
 			continue;
 		}
 		const hash = f[0];
@@ -55,7 +65,11 @@ export function parseLogLines(output: string): RawCommit[] {
 			authorName: f[2] ?? '',
 			authorEmail: f[3] ?? '',
 			authorDate: f[4] ?? '',
-			subject: f[5] ?? '',
+			committerName: f[5] ?? '',
+			committerDate: f[6] ?? '',
+			subject: f[7] ?? '',
+			// body 为末字段：slice 兜底重组，即使出现意外 NUL 也能完整还原；空正文 → ''。
+			body: f.slice(8).join(NUL),
 		});
 	}
 	return commits;

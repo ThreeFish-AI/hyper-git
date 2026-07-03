@@ -6,6 +6,17 @@
 
 ## [0.0.7] - 未发布
 
+### Added
+- **变更文件目录树切换**：Commit 视图活动 Changelist 文件列表、Log 视图选中提交的变更文件列表均支持「平铺 / 按目录分组（Group by Directory）」两态切换（工具栏 List/Tree 段控），偏好按视图 `webview.setState` 记忆。目录树由纯逻辑 [`engine/tree/file-tree.buildFileTree`](./src/engine/tree/file-tree.ts) host 侧构建随 payload 下发（复用 graph-layout「host 算、webview 渲」范式，规避内联脚本无法 import engine 的 Split-Brain），叶子以 `fileIndex` 回指扁平列表；支持单目录子链折叠（对齐 VS Code `explorer.compactFolders`）；Commit 树形附目录级三态复选框。详见 [变更文件目录树](./docs/features/file-list-group-by-directory.md)。
+- **Log 提交悬浮详情**：鼠标悬停 Log 提交行以浮层展示完整信息——所在本地/远程分支、标签、HEAD、完整提交消息（subject + body）、作者 `name <email>`、（与作者不同时）提交者、作者/提交时间（绝对 + 相对）、完整 SHA；复用 CI 状态浮层范式（置于虚拟滚动容器外、与 CI 浮层互斥），`i` 键开、`Esc` 关，滚动/刷新自动消隐。`git log` 取数扩展 `%cn/%cI/%b`（body 置末，NUL/RS 分隔容多行），正文上限截断以控 payload。详见 [Log 提交悬浮详情](./docs/features/log-commit-tooltip.md)。
+
+### Changed
+- **Commit 视图承接全部变更管理能力**（原 Changes 视图平移）：活动 Changelist 文件单击看 Diff、右键（原生 QuickPick）执行 移动到 Changelist / 查看历史 / 暂存·撤销 Hunks / 加入 `.gitignore` / 丢弃改动；头部提供 Changelist 切换下拉 + ⋯ 管理菜单（新建 / 重命名 / 删除）。
+- **Git 操作工具栏与未提交数角标迁至 Commit 视图**：原挂在 Changes 视图标题栏的 refresh / push / pull / fetch / patch 等动作迁到 Commit 视图标题栏（去掉与 webview 内按钮重复的 commit / commitAndPush）；活动栏未提交数角标改由 Commit `WebviewView.badge` 承载，首帧未 resolve 以 `pendingBadge` 兜底。详见 [Commit 视图整合](./docs/features/commit-view-consolidation.md)。
+
+### Removed
+- **移除 CHANGES 树视图**：其展示的活动 Changelist 与 Commit 视图的 Active Changelist 完全重复（同源 `getChanges()` + `getGroups()`）；全部独有能力已零回归平移入 Commit 视图（见 Changed），视图数由 7 降为 6。
+
 ### Fixed
 - 修复 `vsce package` 打包因 ESLint `no-useless-assignment` 阻断：`engine/ci/remote-parser.ts` 中 `host`/`path` 的空串初值为 dead store（`hasScheme` 真假两分支均无条件重赋、解析失败处先 `return null`），改为带类型标注的纯声明消除，由 TS 确定赋值分析接管，运行时行为不变。
 

@@ -22,11 +22,40 @@ export interface CommitFileItem {
 	readonly themeColor: string; // gitDecoration.* 主题色 id → webview 用 var(--vscode-...)
 }
 
+/**
+ * 视图无关的目录树节点（「Group By Directory」形态）。
+ *
+ * 【复用 graph-layout 先例】树结构由 host 侧 {@link ../engine/tree/file-tree}.buildFileTree 纯逻辑
+ * 计算后随 payload 下发，webview 仅按 mode 渲染平铺或树形，切换不触发 host 往返。叶子以 `fileIndex`
+ * 回指同批扁平 `files[]`（COMMIT 为 {@link CommitFileItem}，LOG 为 {@link LogCommitFileItem}），
+ * 故同一套渲染器可服务两个视图，且不复制条目数据（单一事实源）。
+ */
+export interface FileTreeNode {
+	readonly name: string; // 展示段：目录名 / compact 折叠的 "a/b" / 文件 basename
+	readonly dir: boolean; // true=目录，false=叶子文件
+	readonly path: string; // 目录=完整目录路径（展开/折叠稳定 key）；叶子=对应扁平条目的 path
+	readonly fileIndex?: number; // 仅叶子：回指扁平 files[] 的下标
+	readonly children?: readonly FileTreeNode[]; // 仅目录
+}
+
+/** Commit 头部切换下拉的 changelist 条目（含文件计数，空列表也在内以便切换）。 */
+export interface CommitChangelistItem {
+	readonly id: string;
+	readonly name: string;
+	readonly count: number;
+}
+
 export interface CommitViewState {
 	readonly template: string;
 	readonly recentMessages: readonly string[];
 	readonly activeChangelistName: string;
+	readonly activeChangelistId: string;
+	/** 全部 changelist（含空列表，供头部切换下拉 / 展示计数）。 */
+	readonly changelists: readonly CommitChangelistItem[];
+	/** 活动 changelist 的文件（提交目标；平铺形态直接渲染）。 */
 	readonly files: readonly CommitFileItem[];
+	/** 活动 changelist 文件的目录树（host 侧构建，供 Group By Directory 形态渲染）。 */
+	readonly tree: readonly FileTreeNode[];
 	readonly conventionalEnabled: boolean;
 	readonly busy: boolean;
 }
@@ -35,7 +64,7 @@ export interface CommitViewState {
 export type HostToWebviewMessage =
 	| { readonly type: 'state'; readonly payload: CommitViewState }
 	| { readonly type: 'conventionalValidation'; readonly payload: ConventionalValidation }
-	| { readonly type: 'commitResult'; readonly payload: { readonly ok: boolean; readonly error?: string } };
+	| { readonly type: 'commitResult'; readonly payload: { readonly ok: boolean; readonly error?: string; readonly warning?: string } };
 
 /** Webview → Host */
 export type WebviewToHostMessage =
@@ -51,7 +80,12 @@ export type WebviewToHostMessage =
 			readonly skipHooks: boolean;
 			readonly push: boolean;
 		};
-	};
+	}
+	// ── 由旧 Changes 树平移而来的文件 / changelist 操作（webview 右键/点击 → host 复用既有命令）── //
+	| { readonly type: 'commit/openFile'; readonly payload: { readonly path: string } }
+	| { readonly type: 'commit/fileMenu'; readonly payload: { readonly path: string } }
+	| { readonly type: 'commit/setActive'; readonly payload: { readonly id: string } }
+	| { readonly type: 'commit/changelistMenu'; readonly payload: { readonly id: string } };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Log Graph 视图（hyperGit.log，Webview）↔ Extension Host 消息契约。
@@ -77,7 +111,15 @@ export interface GraphRowVM {
 	readonly isMerge: boolean;
 	readonly subject: string;
 	readonly authorName: string;
+	/** 作者邮箱（%ae）：供悬浮详情显示 name <email>。 */
+	readonly authorEmail: string;
 	readonly authorDate: string;
+	/** 提交者名（%cn）：仅当与作者不同才在悬浮详情单列。 */
+	readonly committerName: string;
+	/** 提交者日期（%cI，ISO 严格）。 */
+	readonly committerDate: string;
+	/** 完整提交消息正文（%b，不含 subject；host 侧已截断至上限以控 payload）。 */
+	readonly body: string;
 	readonly chips: readonly RefChip[];
 	readonly layout: GraphLayoutRow;
 }
@@ -130,7 +172,15 @@ export type LogHostToWebviewMessage =
 		readonly type: 'log/appendData';
 		readonly payload: { readonly rows: readonly GraphRowVM[]; readonly maxLanes: number; readonly hasMore: boolean };
 	}
-	| { readonly type: 'log/commitFiles'; readonly payload: { readonly hash: string; readonly files: readonly LogCommitFileItem[] } }
+	| {
+		readonly type: 'log/commitFiles';
+		readonly payload: {
+			readonly hash: string;
+			readonly files: readonly LogCommitFileItem[];
+			/** 变更文件的目录树（host 侧构建，供 Group By Directory 形态渲染）。 */
+			readonly tree: readonly FileTreeNode[];
+		};
+	}
 	| { readonly type: 'log/busy'; readonly payload: { readonly busy: boolean } }
 	| { readonly type: 'log/error'; readonly payload: { readonly message: string } }
 	| { readonly type: 'log/ciMeta'; readonly payload: CiMetaVM }

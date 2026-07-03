@@ -9,7 +9,6 @@ import { ChangelistRegistry } from './adapter/changelist-registry';
 import { BranchFavorites } from './adapter/branch-favorites';
 import { CommitService } from './adapter/commit/commit-service';
 import { BranchesTreeProvider } from './adapter/tree/branches-tree';
-import { ChangesTreeProvider, EmptyChangesProvider } from './adapter/tree/changes-tree';
 import { LogWebviewProvider } from './adapter/webview/log-webview';
 import { registerHistoryCommands } from './adapter/history-commands';
 import { registerStashCommands } from './adapter/stash-commands';
@@ -34,6 +33,16 @@ import { GitHubAuth } from './adapter/ci/github-auth';
 import { GitHubCiService } from './adapter/ci/github-ci-service';
 import { createLogger } from './infra/logger';
 
+/** 无 git 时的占位树 provider（空树，触发 viewsWelcome）。原 EmptyChangesProvider 随 Changes 视图移除后内联于此。 */
+class EmptyTreeProvider implements vscode.TreeDataProvider<never> {
+	getTreeItem(): vscode.TreeItem {
+		return new vscode.TreeItem('');
+	}
+	getChildren(): never[] {
+		return [];
+	}
+}
+
 /**
  * 扩展入口。仅做装配（DI 注册），业务逻辑下沉到 engine/adapter 层。
  */
@@ -53,9 +62,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const api = await getGitApi();
 	if (!api) {
 		logger.warn('vscode.git API 不可用，视图保持空状态');
-		const empty = new EmptyChangesProvider();
+		const empty = new EmptyTreeProvider();
 		context.subscriptions.push(
-			vscode.window.registerTreeDataProvider('hyperGit.changes', empty),
 			vscode.window.registerTreeDataProvider('hyperGit.worktrees', empty),
 		);
 		return;
@@ -67,10 +75,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const favorites = new BranchFavorites(context.workspaceState, service.repoRoot ?? workspaceRoot);
 	const githubAuth = new GitHubAuth(context.subscriptions);
 	const ciService = new GitHubCiService(service, githubAuth, logger);
-	const tree = new ChangesTreeProvider(service, registry);
-	// createTreeView（registerTreeDataProvider 的超集）以获取 TreeView 句柄承载 .badge；
-	// 活动栏容器图标的数字角标 = 容器内各视图 badge.value 之和，故此处点亮即映射到 Hyper Git 图标。
-	const changesView = vscode.window.createTreeView('hyperGit.changes', { treeDataProvider: tree });
 
 	// AI 接缝注入（Null 实现，M5 替换为真实 provider）
 	const commit = new CommitService(context, service, context.workspaceState, {
@@ -111,14 +115,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		worktreeTree,
 		shelfTree,
 		blame,
-		changesView,
 		branchesView,
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
 		vscode.window.registerWebviewViewProvider(LogWebviewProvider.viewType, logTree),
 		vscode.window.registerTreeDataProvider('hyperGit.stash', stashTree),
 		vscode.window.createTreeView('hyperGit.shelf', { treeDataProvider: shelfTree }),
 		vscode.window.registerTreeDataProvider('hyperGit.worktrees', worktreeTree),
-		...registerChangesCommands(service, registry, tree),
+		...registerChangesCommands(service, registry),
 		...registerHistoryCommands(service, logTree, branchesTree, favorites),
 		...registerGitCliCommands(service, branchesTree, logTree),
 		...registerPartialCommands(service, registry),
@@ -139,11 +142,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		registerInlineCommitCommand(service, inlineLens),
 	);
 
-	// 活动栏角标：复用 service.getChanges() 计数（index+工作区+未跟踪去重），与 Changes 视图内容一致；
+	// 活动栏角标：复用 service.getChanges() 计数（index+工作区+未跟踪去重），承载于 Commit webview；
+	// 活动栏容器图标角标 = 容器内各视图 badge 之和，故点亮 Commit 视图角标即映射到 Hyper Git 图标。
 	// 计数为 0 时清空，对齐原生 SCM 行为。
-	const updateChangesBadge = (): void => {
-		const count = service.getChanges().length;
-		changesView.badge = count > 0 ? { value: count, tooltip: `${count} uncommitted change(s)` } : undefined;
+	const updateCommitBadge = (): void => {
+		commitView.updateBadge(service.getChanges().length);
 	};
 
 	// git 状态变化频繁（add/checkout/diff 缓存失效均触发），防抖合并避免 log/stash 高频重拉。
@@ -151,8 +154,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const refreshAll = (): void => {
 		clearTimeout(refreshTimer);
 		refreshTimer = setTimeout(() => {
-			tree.refresh();
-			updateChangesBadge();
+			updateCommitBadge();
 			commitView.refresh();
 			logTree.refresh();
 			branchesTree.refresh();
@@ -175,7 +177,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		branchesTree.refresh();
 		logTree.refresh();
 		worktreeTree.refresh();
-		updateChangesBadge();
+		updateCommitBadge();
 	}, 500);
 }
 

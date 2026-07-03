@@ -8,6 +8,7 @@ import { computeGraphLayout, maxLanes } from '../../engine/log/graph-layout';
 import { getBaseStyles } from './shared-styles';
 import { parseLogLines } from '../../engine/log/log-line';
 import { buildLogArgs, type LogScope } from '../../engine/log/log-query';
+import { buildFileTree } from '../../engine/tree/file-tree';
 import type { GitHubCiService } from '../ci/github-ci-service';
 import type {
 	CiMetaVM,
@@ -21,6 +22,13 @@ import type {
 } from '../../shared/protocol';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/** 悬浮详情正文上限：截断以控 1000 行 payload（超限加省略号，正文另有滚动区兜底展示）。 */
+const BODY_CAP = 2000;
+function capBody(b: string): string {
+	const t = (b ?? '').replace(/\s+$/, '');
+	return t.length > BODY_CAP ? `${Array.from(t).slice(0, BODY_CAP).join('')}…` : t;
+}
 
 /** 单页拉取的 commit 数（滚动触底增量加载下一页）。 */
 const PAGE = 1000;
@@ -291,7 +299,11 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				isMerge: s.raw.parents.length > 1,
 				subject: s.raw.subject,
 				authorName: s.raw.authorName,
+				authorEmail: s.raw.authorEmail,
 				authorDate: s.raw.authorDate,
+				committerName: s.raw.committerName,
+				committerDate: s.raw.committerDate,
+				body: capBody(s.raw.body),
 				chips: chips.get(s.raw.hash) ?? [],
 				layout: layout[i],
 			}));
@@ -365,9 +377,11 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				oldPath: c.oldPath,
 				themeColor: fileIconColor(c.status),
 			}));
-			this.post({ type: 'log/commitFiles', payload: { hash, files } });
+			// 用干净新路径建目录树（重命名归位到新目录）；叶子经 fileIndex 回指展示用 files[i]。
+			const tree = buildFileTree(changes.map((c) => c.path));
+			this.post({ type: 'log/commitFiles', payload: { hash, files, tree } });
 		} catch {
-			this.post({ type: 'log/commitFiles', payload: { hash, files: [] } });
+			this.post({ type: 'log/commitFiles', payload: { hash, files: [], tree: [] } });
 		}
 	}
 
@@ -473,6 +487,24 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #ci-tip .g-failure { color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground, #f85149)); }
 #ci-tip .g-pending { color: var(--vscode-testing-iconQueued, var(--vscode-editorWarning-foreground, #d29922)); }
 #ci-tip .g-skipped, #ci-tip .g-unknown { color: var(--vscode-descriptionForeground, #8b949e); }
+/* ── 变更文件目录树（详情面板 Group By Directory 形态）── */
+#details .dh .seg { flex: 0 0 auto; }
+#details .tree-dir { display: flex; align-items: center; gap: 6px; padding: 2px 10px; font-size: 12px; cursor: pointer; user-select: none; }
+#details .tree-dir:hover { background: var(--vscode-list-hoverBackground); }
+#details .tree-dir .tree-twist { flex: 0 0 12px; text-align: center; font-size: 10px; opacity: 0.8; }
+#details .tree-dir .tree-name { color: var(--vscode-descriptionForeground); overflow: hidden; text-overflow: ellipsis; }
+/* ── 提交悬浮详情（自定义浮层，置于 #rows 之外，虚拟滚动重写不销毁；仿 CI Tooltip）── */
+#commit-tip { position: fixed; z-index: 50; display: none; max-width: 420px; min-width: 260px; max-height: 360px; overflow: hidden; background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background)); color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, rgba(128,128,128,.3))); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.35); font-size: 12px; }
+#commit-tip.show { display: flex; flex-direction: column; }
+#commit-tip .ct-scroll { overflow-y: auto; max-height: 360px; padding: 4px 0; }
+#commit-tip .ct-sec { padding: 4px 10px; display: flex; gap: 8px; align-items: baseline; }
+#commit-tip .ct-sec .ct-k { flex: 0 0 62px; color: var(--vscode-descriptionForeground); font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
+#commit-tip .ct-sec .ct-v { flex: 1 1 auto; min-width: 0; word-break: break-word; }
+#commit-tip .ct-msg .ct-subj { font-weight: 600; display: block; margin-bottom: 3px; }
+#commit-tip .ct-msg .ct-body { white-space: pre-wrap; word-break: break-word; opacity: 0.92; }
+#commit-tip .ct-refs { display: flex; flex-wrap: wrap; gap: 3px; }
+#commit-tip .ct-div { border-top: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); margin: 2px 0; }
+#commit-tip .ct-sha { font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; opacity: 0.85; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -491,8 +523,9 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
   <div id="error" style="display:none"><div class="empty-title">Failed to Load Commits</div><div class="empty-hint" id="error-msg"></div><button class="hg-btn hg-btn--sm" id="retry-btn" style="margin-top:8px">Retry</button></div>
   <div id="spinner">Loading…</div>
 </div>
-<div id="details"><div class="dh" id="details-head"><span id="details-title"></span><button class="dh-close" id="details-close" title="Close" aria-label="Close details">×</button></div><div id="details-list"></div></div>
+<div id="details"><div class="dh" id="details-head"><span id="details-title"></span><span class="seg" role="group" aria-label="Changed files view mode"><button id="dmode-flat" class="active" aria-pressed="true" title="Flat list">List</button><button id="dmode-tree" aria-pressed="false" title="Group by directory">Tree</button></span><button class="dh-close" id="details-close" title="Close" aria-label="Close details">×</button></div><div id="details-list"></div></div>
 <div id="ci-tip" role="dialog" aria-label="CI check details"></div>
+<div id="commit-tip" role="tooltip" aria-label="Commit details"></div>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 const LANE_FALLBACK = ${laneFallback};
@@ -518,6 +551,9 @@ function normalizeScope(v) { return v === 'all' || v === 'current' || v === 'che
 const persisted = vscode.getState() || {};
 let selectedHash = persisted.selectedHash || null;
 let scope = normalizeScope(persisted.scope);
+let detailsMode = persisted.dmode === 'tree' ? 'tree' : 'flat';
+const dcollapsed = new Set(persisted.dcollapsed || []);
+function persist() { vscode.setState({ selectedHash: selectedHash, scope: scope, dmode: detailsMode, dcollapsed: Array.from(dcollapsed) }); }
 let model = { rows: [], maxLanes: 0, hasMore: false, repoRoot: '' };
 let renderedFirst = -1, renderedLast = -1, fetching = false;
 // ── CI 状态（懒加载、仅取可见行；ciByHash 稳定缓存、ciRequested 去重、ciPending 防抖批量）──
@@ -543,6 +579,11 @@ const detailsEl = document.getElementById('details');
 const detailsList = document.getElementById('details-list');
 const detailsTitleEl = document.getElementById('details-title');
 const detailsCloseEl = document.getElementById('details-close');
+const dmodeFlatEl = document.getElementById('dmode-flat');
+const dmodeTreeEl = document.getElementById('dmode-tree');
+const commitTipEl = document.getElementById('commit-tip');
+let ctHash = null, ctShowT = null, ctHideT = null, overCtRow = false, overCt = false;
+let curDetailHash = null, curDetailFiles = [], curDetailTree = [];
 const errorEl = document.getElementById('error');
 const errorMsgEl = document.getElementById('error-msg');
 const retryBtnEl = document.getElementById('retry-btn');
@@ -553,6 +594,17 @@ function colX(c) { return c * LANE_W + LANE_W / 2; }
 /** 本行实际绘制的最右列号（node + 各边 from/to 的最大值）——行宽据此自适应，消除「全局 maxLanes 撑宽」的留白。 */
 function rowMaxCol(row) { const L = row.layout; let m = L.node.col; for (const e of L.incoming) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } for (const e of L.outgoing) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } for (const e of L.passThrough) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } return m; }
 function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; const m = String(d.getMonth() + 1).padStart(2, '0'); const da = String(d.getDate()).padStart(2, '0'); return d.getFullYear() + '-' + m + '-' + da; }
+function fmtAbs(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; return d.toLocaleString(); }
+function fmtRel(iso) {
+  const t = new Date(iso).getTime(); if (isNaN(t)) return '';
+  const diff = Date.now() - t, min = 60000, hr = 3600000, day = 86400000;
+  if (diff < min) return 'just now';
+  if (diff < hr) return Math.floor(diff / min) + ' min ago';
+  if (diff < day) return Math.floor(diff / hr) + ' hr ago';
+  const days = Math.floor(diff / day);
+  if (days < 30) return days + (days === 1 ? ' day ago' : ' days ago');
+  return new Date(t).toLocaleDateString();
+}
 
 function rowSvg(row) {
   const L = row.layout;
@@ -577,7 +629,8 @@ function chipsHtml(row) {
   const parts = ['<span class="chips">'];
   for (const c of row.chips) {
     const cls = 'chip ' + c.kind + (c.isHeadTarget ? ' head-target' : '');
-    parts.push('<span class="', cls, '" title="', esc(c.name), '">', esc(c.name), '</span>');
+    // 不加原生 title：引用明细统一由自定义 #commit-tip 浮层展示，避免原生+自定义双重气泡。
+    parts.push('<span class="', cls, '">', esc(c.name), '</span>');
   }
   parts.push('</span>');
   return parts.join('');
@@ -796,7 +849,7 @@ function renderCiMeta() { ciSignInEl.style.display = ciMeta.needsSignIn ? 'inlin
 
 function selectRow(hash) {
   selectedHash = hash;
-  vscode.setState({ selectedHash: hash, scope: scope });
+  persist();
   renderedFirst = -1; scheduleRender();
   vscode.postMessage({ type: 'log/selectCommit', payload: { hash: hash } });
 }
@@ -868,39 +921,171 @@ rowsEl.addEventListener('contextmenu', function (e) {
   e.preventDefault();
   vscode.postMessage({ type: 'log/commitAction', payload: { op: 'menu', hash: r.getAttribute('data-hash') } });
 });
-function setScope(next) { if (scope !== next) { scope = next; vscode.setState({ selectedHash: selectedHash, scope: scope }); vscode.postMessage({ type: 'log/setScope', payload: { scope: next } }); } }
+function setScope(next) { if (scope !== next) { scope = next; persist(); vscode.postMessage({ type: 'log/setScope', payload: { scope: next } }); } }
 document.getElementById('scope-all').addEventListener('click', function () { setScope('all'); });
 document.getElementById('scope-current').addEventListener('click', function () { setScope('current'); });
 document.getElementById('scope-checkpointer').addEventListener('click', function () { setScope('checkpointer'); });
 detailsCloseEl.addEventListener('click', function () { detailsEl.classList.remove('show'); });
 retryBtnEl.addEventListener('click', function () { errorEl.style.display = 'none'; spinnerEl.style.display = 'block'; vscode.postMessage({ type: 'log/retry' }); });
 viewport.addEventListener('scroll', scheduleRender, { passive: true });
-viewport.addEventListener('scroll', function () { if (tipHash) hideTip(); }, { passive: true });
+viewport.addEventListener('scroll', function () { if (tipHash) hideTip(); if (ctHash) hideCommitTip(); }, { passive: true });
 viewport.addEventListener('keydown', function (e) {
   if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-1); }
   else if (e.key === 'Home') { e.preventDefault(); if (model.rows.length) selectRow(model.rows[0].hash); }
   else if (e.key === 'End') { e.preventDefault(); if (model.rows.length) selectRow(model.rows[model.rows.length - 1].hash); }
   else if (e.key === 'Enter') { e.preventDefault(); if (selectedHash) vscode.postMessage({ type: 'log/commitAction', payload: { op: 'menu', hash: selectedHash } }); }
+  else if (e.key === 'i' || e.key === 'I') {
+    e.preventDefault();
+    const el = rowsEl.querySelector('.row.selected');
+    const row = selectedHash ? model.rows.find(function (r) { return r.hash === selectedHash; }) : null;
+    if (el && row) { hideTip(); ctHash = selectedHash; buildCommitTip(row); positionCommitTip(el.getBoundingClientRect()); commitTipEl.classList.add('show'); }
+  }
+  else if (e.key === 'Escape') { hideCommitTip(); }
 });
 detailsList.addEventListener('click', function (e) {
+  const d = e.target.closest('.tree-dir');
+  if (d) { toggleDetailCollapse(d.getAttribute('data-dir')); return; }
   const f = e.target.closest('.file'); if (!f) return;
   vscode.postMessage({ type: 'log/openFile', payload: { hash: f.getAttribute('data-hash'), path: f.getAttribute('data-path'), hasParent: f.getAttribute('data-hasparent') === '1' } });
 });
 
-function renderDetails(hash, files) {
+const DINDENT = 14;
+function detailLeafHtml(hash, f, hasParent, depth, label) {
+  return '<div class="file" style="padding-left:' + (depth * DINDENT + 10) + 'px" data-hash="' + esc(hash) + '" data-path="' + esc(f.path) + '" data-hasparent="' + hasParent + '"><span class="dot" style="color:var(--vscode-' + f.themeColor.replace(/\\./g, '-') + ')">' + esc(f.statusLabel) + '</span><span class="nm">' + esc(label) + '</span></div>';
+}
+function renderDetailNode(node, depth, hash, hasParent, files, out) {
+  if (node.dir) {
+    const isCol = dcollapsed.has(node.path);
+    out.push('<div class="tree-dir" style="padding-left:' + (depth * DINDENT + 8) + 'px" data-dir="' + esc(node.path) + '"><span class="tree-twist">' + (isCol ? '\\u25B8' : '\\u25BE') + '</span><span class="tree-name">' + esc(node.name) + '</span></div>');
+    if (!isCol) { for (const c of node.children) renderDetailNode(c, depth + 1, hash, hasParent, files, out); }
+  } else {
+    out.push(detailLeafHtml(hash, files[node.fileIndex], hasParent, depth, node.name));
+  }
+}
+function pruneDetailCollapsed(tree) {
+  const present = new Set();
+  (function walk(nodes) { (nodes || []).forEach(function (n) { if (n.dir) { present.add(n.path); walk(n.children); } }); })(tree);
+  Array.from(dcollapsed).forEach(function (p) { if (!present.has(p)) dcollapsed.delete(p); });
+}
+function toggleDetailCollapse(p) {
+  if (dcollapsed.has(p)) dcollapsed.delete(p); else dcollapsed.add(p);
+  persist();
+  renderDetails(curDetailHash, curDetailFiles, curDetailTree);
+}
+function updateDetailModeButtons() {
+  dmodeFlatEl.classList.toggle('active', detailsMode === 'flat');
+  dmodeTreeEl.classList.toggle('active', detailsMode === 'tree');
+  dmodeFlatEl.setAttribute('aria-pressed', String(detailsMode === 'flat'));
+  dmodeTreeEl.setAttribute('aria-pressed', String(detailsMode === 'tree'));
+}
+function setDetailMode(m) { if (detailsMode === m) return; detailsMode = m; persist(); updateDetailModeButtons(); if (curDetailHash) renderDetails(curDetailHash, curDetailFiles, curDetailTree); }
+dmodeFlatEl.addEventListener('click', function () { setDetailMode('flat'); });
+dmodeTreeEl.addEventListener('click', function () { setDetailMode('tree'); });
+
+function renderDetails(hash, files, tree) {
   if (!hash) { detailsEl.classList.remove('show'); return; }
+  curDetailHash = hash; curDetailFiles = files || []; curDetailTree = tree || [];
+  updateDetailModeButtons();
   const row = model.rows.find(function (r) { return r.hash === hash; });
   const hasParent = row && row.parents && row.parents.length > 0 ? '1' : '0';
-  detailsTitleEl.textContent = 'Changed Files (' + files.length + ') · ' + hash.slice(0, 7);
-  if (files.length === 0) { detailsList.innerHTML = '<div class="file" style="opacity:.6">No changed files (may be a root or merge commit)</div>'; detailsEl.classList.add('show'); return; }
-  const html = [];
-  for (const f of files) {
-    html.push('<div class="file" data-hash="', esc(hash), '" data-path="', esc(f.path), '" data-hasparent="', hasParent, '"><span class="dot" style="color:var(--vscode-', f.themeColor.replace(/\\./g, '-'), ')">', esc(f.statusLabel), '</span><span class="nm">', esc(f.path), '</span></div>');
-  }
-  detailsList.innerHTML = html.join('');
+  detailsTitleEl.textContent = 'Changed Files (' + curDetailFiles.length + ') · ' + hash.slice(0, 7);
+  if (curDetailFiles.length === 0) { detailsList.innerHTML = '<div class="file" style="opacity:.6">No changed files (may be a root or merge commit)</div>'; detailsEl.classList.add('show'); return; }
+  pruneDetailCollapsed(curDetailTree);
+  const out = [];
+  if (detailsMode === 'tree') { for (const n of curDetailTree) renderDetailNode(n, 0, hash, hasParent, curDetailFiles, out); }
+  else { for (const f of curDetailFiles) out.push(detailLeafHtml(hash, f, hasParent, 0, f.path)); }
+  detailsList.innerHTML = out.join('');
   detailsEl.classList.add('show');
 }
+
+// ── 提交悬浮详情（自定义浮层，仿 CI Tooltip；数据随图上前下发，悬停零往返）──
+function buildCommitTip(row) {
+  const parts = ['<div class="ct-scroll">'];
+  const refGroups = [['head', 'HEAD'], ['localBranch', 'Branches'], ['remoteBranch', 'Remotes'], ['tag', 'Tags']];
+  for (const g of refGroups) {
+    const kind = g[0];
+    const chips = (row.chips || []).filter(function (c) { return c.kind === kind; });
+    if (chips.length === 0) continue;
+    const inner = chips.map(function (c) { return '<span class="chip ' + kind + (c.isHeadTarget ? ' head-target' : '') + '">' + esc(c.name) + '</span>'; }).join('');
+    parts.push('<div class="ct-sec"><span class="ct-k">' + g[1] + '</span><span class="ct-v ct-refs">' + inner + '</span></div>');
+  }
+  let msg = '<div class="ct-msg"><span class="ct-subj">' + esc(row.subject) + '</span>';
+  if (row.body) msg += '<span class="ct-body">' + esc(row.body) + '</span>';
+  msg += '</div>';
+  parts.push('<div class="ct-sec"><span class="ct-k">Message</span><span class="ct-v">' + msg + '</span></div>');
+  parts.push('<div class="ct-div"></div>');
+  const author = esc(row.authorName) + (row.authorEmail ? ' &lt;' + esc(row.authorEmail) + '&gt;' : '');
+  parts.push('<div class="ct-sec"><span class="ct-k">Author</span><span class="ct-v">' + author + '</span></div>');
+  if (row.committerName && (row.committerName !== row.authorName || row.committerDate !== row.authorDate)) {
+    parts.push('<div class="ct-sec"><span class="ct-k">Committer</span><span class="ct-v">' + esc(row.committerName) + '</span></div>');
+  }
+  const authored = fmtAbs(row.authorDate) + (fmtRel(row.authorDate) ? ' (' + fmtRel(row.authorDate) + ')' : '');
+  parts.push('<div class="ct-sec"><span class="ct-k">Authored</span><span class="ct-v">' + esc(authored) + '</span></div>');
+  if (row.committerDate && row.committerDate !== row.authorDate) {
+    const committed = fmtAbs(row.committerDate) + (fmtRel(row.committerDate) ? ' (' + fmtRel(row.committerDate) + ')' : '');
+    parts.push('<div class="ct-sec"><span class="ct-k">Committed</span><span class="ct-v">' + esc(committed) + '</span></div>');
+  }
+  parts.push('<div class="ct-sec"><span class="ct-k">Commit</span><span class="ct-v ct-sha">' + esc(row.hash) + '</span></div>');
+  parts.push('</div>');
+  commitTipEl.innerHTML = parts.join('');
+}
+function positionCommitTip(rect) {
+  commitTipEl.style.display = 'flex';
+  const tw = commitTipEl.offsetWidth, th = commitTipEl.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight, pad = 6;
+  let left = rect.left;
+  if (left + tw > vw - pad) left = vw - pad - tw;
+  if (left < pad) left = pad;
+  let top = rect.bottom + 4;
+  if (top + th > vh - pad) top = rect.top - th - 4;
+  if (top < pad) top = pad;
+  commitTipEl.style.left = left + 'px';
+  commitTipEl.style.top = top + 'px';
+}
+function scheduleShowCommit(hash, rowEl) {
+  clearTimeout(ctHideT);
+  if (ctHash === hash && commitTipEl.classList.contains('show')) return;
+  clearTimeout(ctShowT);
+  ctShowT = setTimeout(function () {
+    const row = model.rows.find(function (r) { return r.hash === hash; });
+    if (!row) return;
+    hideTip(); // 与 CI 浮层互斥：二者不同时显示
+    ctHash = hash;
+    buildCommitTip(row);
+    positionCommitTip(rowEl.getBoundingClientRect());
+    commitTipEl.classList.add('show');
+  }, 400);
+}
+function scheduleHideCommit() {
+  clearTimeout(ctShowT);
+  clearTimeout(ctHideT);
+  ctHideT = setTimeout(function () { if (!overCtRow && !overCt) hideCommitTip(); }, 200);
+}
+function hideCommitTip() {
+  clearTimeout(ctShowT); // 取消可能在途的延迟显示，避免移到 CI 图标后仍弹出提交浮层
+  commitTipEl.classList.remove('show');
+  commitTipEl.style.display = 'none';
+  ctHash = null;
+}
+rowsEl.addEventListener('mouseover', function (e) {
+  const ci = e.target.closest && e.target.closest('.ci');
+  if (ci && !ci.classList.contains('ci-empty')) { overCtRow = false; hideCommitTip(); return; } // CI 图标区归 CI 浮层
+  const r = e.target.closest && e.target.closest('.row');
+  if (!r) return;
+  overCtRow = true;
+  scheduleShowCommit(r.getAttribute('data-hash'), r);
+});
+rowsEl.addEventListener('mouseout', function (e) {
+  const r = e.target.closest && e.target.closest('.row');
+  if (!r) return;
+  const to = e.relatedTarget;
+  if (to && (commitTipEl.contains(to) || r.contains(to))) return; // 行内移动或进入浮层不隐藏
+  overCtRow = false;
+  scheduleHideCommit();
+});
+commitTipEl.addEventListener('mouseenter', function () { overCt = true; clearTimeout(ctHideT); });
+commitTipEl.addEventListener('mouseleave', function () { overCt = false; overCtRow = false; scheduleHideCommit(); });
 
 window.addEventListener('message', function (e) {
   const m = e.data;
@@ -911,7 +1096,7 @@ window.addEventListener('message', function (e) {
     // 已缓存的提交重绘时立即可见图标，避免「清缓存→重拉→整行重建」的闪烁。
     ciRequested.clear(); ciPending.clear();
     if (ciReqTimer) { clearTimeout(ciReqTimer); ciReqTimer = null; }
-    hideTip();
+    hideTip(); hideCommitTip();
     renderedFirst = -1; renderedLast = -1; viewport.scrollTop = 0; fetching = false; spinnerEl.style.display = 'none';
     if (!model.rows.some(function (r) { return r.hash === selectedHash; })) selectedHash = null;
     scheduleRender();
@@ -919,9 +1104,10 @@ window.addEventListener('message', function (e) {
     model.rows = model.rows.concat(m.payload.rows);
     model.maxLanes = Math.max(model.maxLanes, m.payload.maxLanes);
     model.hasMore = m.payload.hasMore; fetching = false; spinnerEl.style.display = 'none';
+    hideCommitTip(); // #rows 将整体重写，取消可能在途的悬浮显示，避免对已脱离节点定位
     renderedFirst = -1; scheduleRender();
   } else if (m.type === 'log/commitFiles') {
-    renderDetails(m.payload.hash, m.payload.files);
+    renderDetails(m.payload.hash, m.payload.files, m.payload.tree);
   } else if (m.type === 'log/busy') {
     spinnerEl.style.display = m.payload.busy ? 'block' : 'none';
   } else if (m.type === 'log/error') {
@@ -932,6 +1118,7 @@ window.addEventListener('message', function (e) {
     ciMeta = { available: !!m.payload.available, needsSignIn: !!m.payload.needsSignIn, error: m.payload.error || '' };
     renderCiMeta();
     if (ciMeta.available) ensurePendingRefresh(); else stopPendingRefresh();
+    hideCommitTip(); // 可见行将整体重绘，取消在途悬浮显示，避免对已脱离节点定位
     renderedFirst = -1; // 强制重绘可见行（CI 槽位/登录提示出现或消失）
     scheduleRender();
   } else if (m.type === 'log/ciData') {
