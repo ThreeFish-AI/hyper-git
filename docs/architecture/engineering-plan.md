@@ -1,7 +1,7 @@
 # Hyper Git — VS Code 扩展工程实施方案
 
 > 提供完整的「Git 变更管理 + Commit 提交工作流」（功能完备性参考 IntelliJ IDEA 等成熟实现），并为未来 AI Agent 自主代理预留架构接缝。
-> 决策已与用户确认：**路径 B**（消费 `vscode.git` API + 自建 changelist registry + 独立视图容器）、扩展命名 **Hyper Git**、**双市场发布**、**AI 现仅预留接缝 + Null 实现、延后至 M5**。
+> 决策已与用户确认：**路径 B**（消费 `vscode.git` API + 自建 changelist registry + 独立视图容器）、扩展命名 **Hyper Git**、**VS Code Marketplace 单市场发布**、**AI 现仅预留接缝 + Null 实现、延后至 M5**。
 
 ---
 
@@ -28,7 +28,7 @@
 | **Commit 编辑器** | WebviewView 自绘（多行 / 模板 / Conventional Commits 校验 / Amend / Author / sign-off） | 原生 `SourceControlInputBox` 仅 `value` 字段，Provider 已删除 |
 | **Log 提交图** | Webview 自绘 SVG graph + 消费 `Repository.log()` | `scmHistoryProvider` 为 proposed，上架不可用 |
 | **Diff 预览** | 复用 `vscode.diff` + `api.toGitUri(uri,'HEAD')`（零成本） | Track2 §5.5 |
-| **发布** | 双市场（Marketplace + OpenVSX） | Cursor/Windsurf 走 OpenVSX；AI 受众主战场 |
+| **发布** | VS Code Marketplace 单市场 | 官方市场为唯一渠道；每个 `v*` tag 附 `.vsix` GitHub Release 作兜底安装 |
 | **AI** | 现仅定义接缝 + Null 实现，实现延后 M5 | YAGNI + 借鉴 JetBrains `CheckinHandler` 责任链语义 |
 
 **架构总览（Mermaid，深色模式高对比）**：
@@ -148,10 +148,10 @@ hyper-git/
 | `api.toGitUri(uri, ref)` | 构造任意 ref 版本的资源 Uri（diff 原始端） | 同上 |
 | `vscode.commands.executeCommand('vscode.diff', left, right, title)` | 文件 diff 预览（零成本，不自绘 diff） | VS Code 稳定 API |
 | `ThemeColor('gitDecoration.modifiedResourceForeground')` 等 | 文件状态色（深色模式一致） | 复用原生 token |
-| `@vscode/vsce` / `ovsx` | 打包 / 发布 | 官方工具 |
+| `@vscode/vsce` | 打包 / 发布 | 官方工具 |
 | `@vscode/test-electron` | 集成测试 | 官方唯一推荐 |
 | `esbuild-sample` 模板 | 工程骨架零点（`esbuild.js` + scripts） | microsoft/vscode-extension-samples |
-| `HaaLeo/publish-vs-code-extension` Action | 一键双市场发布 | GitHub Marketplace |
+| `HaaLeo/publish-vs-code-extension` Action | Marketplace 发布 | GitHub Marketplace |
 
 **消费 `vscode.git` API 的声明**：`package.json` 加 `"extensionDependencies": ["vscode.git"]`；TS 类型复制 `git.d.ts` 入仓；运行时 `getExtension<GitExtension>('vscode.git').activate().getAPI(1)`。
 
@@ -230,9 +230,9 @@ hyper-git/
 
 ## 7. CI/CD 与发布策略
 
-- **发布渠道**：双市场（Marketplace + OpenVSX）。**立即**：`ovsx create-namespace <publisher>` 并 **claim ownership**（OpenVSX namespace 默认非排他，防抢注）。
+- **发布渠道**：VS Code Marketplace 单市场（`vsce publish`，`ENABLE_MARKETPLACE_PUBLISH` 变量门控，`rc` tag 走 `--pre-release` 预发布通道）；每个 `v*` tag 附 `.vsix` GitHub Release 作兜底安装。
 - **publisher / 扩展 id**：扩展显示名 **Hyper Git**，id `hyper-git`；publisher 建议与 git owner 一致取 `threefish-ai`（**待你最终确认 publisher id**，创建后不可改）。
-- **CI 流水线**（`.github/workflows/ci.yml`）：`push/PR → lint→build→test 矩阵(ubuntu/mac/win, Linux 用 xvfb-run -a) → package vsix(Linux 打包保 POSIX 位) → upload artifact`；`tag v* → publish(vsce + ovsx, environment:production 审批门, PAT as secret)`。PR 仅跑 ubuntu 单格快门，main/tag 跑全矩阵（控成本）。
+- **CI 流水线**（`.github/workflows/ci.yml`）：`push/PR → lint→build→test 矩阵(ubuntu/mac/win, Linux 用 xvfb-run -a) → package vsix(Linux 打包保 POSIX 位) → upload artifact`；`tag v* → publish(vsce, environment:production 审批门, VSCE_PAT as secret)`。PR 仅跑 ubuntu 单格快门，main/tag 跑全矩阵（控成本）。
 - **版本治理**：Marketplace 版本不可撤销 → **快速补丁版本为唯一回滚范式**；pre-release 用奇数 minor 吸收 M5 AI 等高风险特性；CHANGELOG 用 Keep a Changelog 格式。
 - **安全**：PAT 短过期(90d) + 最小 scope + 仅存 GitHub encrypted secret；action pin 到完整 commit SHA；启用 Dependabot + CodeQL + `pnpm audit`；AI/遥测默认关闭。
 - **engines.vscode**：M0-M4 锁 `^1.85.0`（`@types/vscode:1.85.0` 严格对齐，让 tsc 拦截越界 API）；M5 评估上调以支持 LM/Chat API。
@@ -268,7 +268,7 @@ hyper-git/
 
 1. **建工作分支**（基于 `origin/feature/1.x.x`），创建 `package.json` + esbuild 骨架（复制官方 `esbuild-sample`），落地 M0。
 2. **PoC 验证两个关键风险点**：(a) `extensionDependencies:["vscode.git"]` + `getAPI(1)` 拿到 `Repository` 读 `workingTreeChanges`；(b) WebviewView Commit 编辑器 `postMessage → Repository.commit()`。两项跑通即消除主要技术不确定性。
-3. **并行**：`ovsx create-namespace` + claim ownership（防抢注）；将 Track1 的 56 功能矩阵固化为 `docs/requirements/idea-feature-matrix.md` 作为后续验收基线，并同步 `.agents/knowledge-map.md` 索引。
+3. **并行**：将 Track1 的 56 功能矩阵固化为 `docs/requirements/idea-feature-matrix.md` 作为后续验收基线，并同步 `.agents/knowledge-map.md` 索引。
 4. **提交规范**：按用户偏好，commit 用 `/commit` 命令；PR 基线为 `origin/feature/1.x.x`，不直接推 master。
 
 ---
@@ -289,4 +289,4 @@ hyper-git/
 - AI 机制：[Language Model API](https://code.visualstudio.com/api/extension-guides/ai/language-model)、[Chat](https://code.visualstudio.com/api/extension-guides/ai/chat)、[Tools](https://code.visualstudio.com/api/extension-guides/ai/tools)、[BYOK Provider](https://code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider)
 
 **发布生态**
-- [eclipse/openvsx cli](https://github.com/eclipse/openvsx/blob/master/cli/README.md)、[Cursor 使用 OpenVSX](https://forum.cursor.com/t/cursor-marketplace-installs-offers-outdated-version-of-open-vsx-extension-despite-latest-version-being-available-upstream/159718)、[HaaLeo/publish-vs-code-extension](https://github.com/marketplace/actions/publish-vs-code-extension)
+- [Publishing Extensions（官方）](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)、[HaaLeo/publish-vs-code-extension](https://github.com/marketplace/actions/publish-vs-code-extension)

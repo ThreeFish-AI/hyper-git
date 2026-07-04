@@ -2,8 +2,12 @@
 	"name": "hyper-git-agentic-git",
 	"displayName": "Hyper Git - Agentic Git",
 	"icon": "media/icon.png",
+	"galleryBanner": {
+		"color": "#0E2A1C",
+		"theme": "dark"
+	},
 	"description": "Hyper Git brings IntelliJ IDEA's powerful Git & Commit modules to VS Code, enhanced with AI-powered autonomous agents for intelligent repository management. Experience Git in a higher dimension.",
-	"version": "0.0.8",
+	"version": "0.0.11",
 	"publisher": "ThreeFish-AI",
 	"license": "MIT",
 	"preview": true,
@@ -55,49 +59,51 @@
 		"views": {
 			"hyper-git": [
 				{
-					"id": "hyperGit.changes",
-					"name": "Changes",
-					"visibility": "visible"
-				},
-				{
 					"id": "hyperGit.commit",
 					"name": "Commit",
 					"type": "webview",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 3
 				},
 				{
 					"id": "hyperGit.log",
-					"name": "Log",
+					"name": "Graph",
 					"type": "webview",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 3
 				},
 				{
 					"id": "hyperGit.branches",
 					"name": "Branches",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 2
 				},
 				{
 					"id": "hyperGit.stash",
 					"name": "Stash",
-					"visibility": "visible"
+					"visibility": "collapsed",
+					"initialSize": 1
 				},
 				{
 					"id": "hyperGit.shelf",
 					"name": "Shelf",
-					"visibility": "visible"
+					"visibility": "collapsed",
+					"initialSize": 1
 				},
 				{
 					"id": "hyperGit.worktrees",
 					"name": "Worktrees",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 1
+				},
+				{
+					"id": "hyperGit.changesBadge",
+					"name": "Uncommitted",
+					"when": "false"
 				}
 			]
 		},
 		"viewsWelcome": [
-			{
-				"view": "hyperGit.changes",
-				"contents": "No Git changes or repository detected.\nOpen a workspace inside a Git repository and changes will be grouped by changelist.\n[New Changelist…](command:hyperGit.newChangelist)"
-			},
 			{
 				"view": "hyperGit.branches",
 				"contents": "No Git repository or branches detected.\n[New Branch…](command:hyperGit.branchCreate)"
@@ -172,7 +178,7 @@
 			},
 			{
 				"command": "hyperGit.refreshLog",
-				"title": "Refresh Log",
+				"title": "Refresh Graph",
 				"category": "Hyper Git",
 				"icon": "$(refresh)"
 			},
@@ -190,7 +196,7 @@
 			},
 			{
 				"command": "hyperGit.logFilter",
-				"title": "Filter Log…",
+				"title": "Filter Graph…",
 				"category": "Hyper Git",
 				"icon": "$(filter)"
 			},
@@ -206,7 +212,7 @@
 			},
 			{
 				"command": "hyperGit.logClearFilter",
-				"title": "Clear Log Filter",
+				"title": "Clear Graph Filter",
 				"category": "Hyper Git",
 				"icon": "$(clear-all)"
 			},
@@ -665,57 +671,47 @@
 			"view/title": [
 				{
 					"command": "hyperGit.refresh",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "navigation@1"
 				},
 				{
 					"command": "hyperGit.newChangelist",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "navigation@2"
 				},
 				{
-					"command": "hyperGit.commit",
-					"when": "view == hyperGit.changes",
-					"group": "navigation@3"
-				},
-				{
-					"command": "hyperGit.commitAndPush",
-					"when": "view == hyperGit.changes",
-					"group": "navigation@4"
-				},
-				{
 					"command": "hyperGit.push",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "navigation@5"
 				},
 				{
 					"command": "hyperGit.pull",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@1"
 				},
 				{
 					"command": "hyperGit.fetch",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@2"
 				},
 				{
 					"command": "hyperGit.pushDialog",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@3"
 				},
 				{
 					"command": "hyperGit.updateProject",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@4"
 				},
 				{
 					"command": "hyperGit.createPatch",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@5"
 				},
 				{
 					"command": "hyperGit.applyPatch",
-					"when": "view == hyperGit.changes",
+					"when": "view == hyperGit.commit",
 					"group": "1_sync@6"
 				},
 				{
@@ -826,41 +822,6 @@
 			],
 			"view/item/context": [
 				{
-					"command": "hyperGit.setActiveChangelist",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.changelist",
-					"group": "1_changelist@1"
-				},
-				{
-					"command": "hyperGit.renameChangelist",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.changelist",
-					"group": "1_changelist@2"
-				},
-				{
-					"command": "hyperGit.deleteChangelist",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.changelist",
-					"group": "1_changelist@3"
-				},
-				{
-					"command": "hyperGit.moveChangelist",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "inline"
-				},
-				{
-					"command": "hyperGit.moveChangelist",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "1_file@1"
-				},
-				{
-					"command": "hyperGit.showHistory",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "1_file@2"
-				},
-				{
-					"command": "hyperGit.discardChanges",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "9_dangerous@1"
-				},
-				{
 					"command": "hyperGit.branchCheckout",
 					"when": "view == hyperGit.branches && viewItem =~ /hyperGit.branch|hyperGit.remoteBranch/ && !listMultiSelection",
 					"group": "1_branch@1"
@@ -929,21 +890,6 @@
 					"command": "hyperGit.tagDelete",
 					"when": "view == hyperGit.branches && viewItem == hyperGit.tag",
 					"group": "9_dangerous@1"
-				},
-				{
-					"command": "hyperGit.ignorePath",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "1_file@4"
-				},
-				{
-					"command": "hyperGit.partialStage",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "1_file@5"
-				},
-				{
-					"command": "hyperGit.partialUnstage",
-					"when": "view == hyperGit.changes && viewItem == hyperGit.fileChange",
-					"group": "1_file@6"
 				},
 				{
 					"command": "hyperGit.stashApply",
@@ -1250,7 +1196,7 @@
 				"hyperGit.log.ci.enabled": {
 					"type": "boolean",
 					"default": true,
-					"markdownDescription": "Show the final CI status on each commit in the Log view (GitHub Actions + Commit Statuses). Green check = passed, red cross = failed; hover to see each check and any failure reasons. Requires a GitHub remote."
+					"markdownDescription": "Show the final CI status on each commit in the Graph view (GitHub Actions + Commit Statuses). Green check = passed, red cross = failed; hover to see each check and any failure reasons. Requires a GitHub remote."
 				},
 				"hyperGit.log.ci.remote": {
 					"type": "string",
@@ -1297,10 +1243,11 @@
 		"esbuild": "^0.28.1",
 		"eslint": "^10.6.0",
 		"mocha": "^11.0.1",
-		"prettier": "^3.9.3",
+		"prettier": "^3.9.4",
 		"rimraf": "^6.0.1",
-		"typescript": "^5.9.2",
-		"typescript-eslint": "^8.39.0",
-		"vitest": "^2.1.8"
+		"typescript": "^6.0.3",
+		"typescript-eslint": "^8.62.1",
+		"vite": "^7.0.0",
+		"vitest": "^4.1.9"
 	}
 }

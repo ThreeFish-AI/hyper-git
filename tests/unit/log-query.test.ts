@@ -56,6 +56,6 @@ describe('buildLogArgs — 服务端过滤翻译', () => {
 
 	it('--format 使用 LOG_GRAPH_FORMAT 契约', () => {
 		const args = buildLogArgs(noFilter, 'all', { maxCount: 300 });
-		expect(args).toContain(`--format=${'%H%x00%P%x00%an%x00%ae%x00%aI%x00%s%x1e'}`);
+		expect(args).toContain(`--format=${'%H%x00%P%x00%an%x00%ae%x00%aI%x00%cn%x00%cI%x00%s%x00%b%x1e'}`);
 	});
 });

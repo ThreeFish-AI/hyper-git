@@ -4,10 +4,77 @@
 
 > 面向用户的发布说明（含完整特性叙述与安装指引）见 [`docs/releases/`](./docs/releases/README.md)。
 
-## [0.0.7] - 未发布
+## [Unreleased]
+
+### Changed
+- **侧边栏视图默认布局优化**：Stash / Shelf 两个次要视图默认折叠（`visibility: "collapsed"`，仅占标题栏、点击即展开），Worktrees 保持默认展开、仅以 `initialSize` 收窄；并为各视图设置初始高度权重（`initialSize`：Commit / Graph 较高、Branches 居中、次要视图紧凑），缓解视图挤占空间的体感。注：VS Code 侧边栏视图存在约 142px 硬性最小展开高度（核心硬编码、官方特性请求 [microsoft/vscode#123715](https://github.com/microsoft/vscode/issues/123715) 已 not planned），**无法经扩展解除**；上述默认仅对**新安装**或执行「View: Reset View Locations」后的布局生效。详见 [issue #12](./docs/.agents/issue.md)。
+
+## [0.0.11] - 2026-07-04 — 首个正式版（承载 0.0.10 内容）· 发布渠道收敛 Marketplace
+
+首个 VS Code Marketplace **正式发布**版本，承载 0.0.10 预发布通道（rc.1 / rc.2）已验证的全部内容——提交图更名 **Graph** 并对齐官方 Source Control GRAPH、悬浮浮层 iframe 裁剪修复、未提交角标承载迁移、README 真实性校准与中英双语；并将发布渠道收敛为 **VS Code Marketplace 单市场**。`0.0.10` 版位已被预发布通道占用，正式版按官方规则顺延至 `0.0.11`。完整用户视角叙述见 [Release Note v0.0.11](./docs/releases/v0.0.11.md)。
+
+### Changed
+- **发布渠道收敛为 VS Code Marketplace 单市场**：移除 CI `publish` job 的 OpenVSX 发布步骤及对 `OVSX_PAT` 的依赖，README 双语安装渠道同步移除 OpenVSX；发布流水线现为 **GitHub Release + VS Code Marketplace**（由 `ENABLE_MARKETPLACE_PUBLISH` 变量门控，`rc` 标签走预发布通道）。
+- **Log 视图更名为 Graph 并对齐官方 Source Control GRAPH**：泳道连线改三次贝塞尔平滑曲线、HEAD 空心双环高亮、引用胶囊改全圆角实心 pill 并跟随泳道色、工具栏 seg 贴近官方；命令标题 / 视图名 / aria-label 统一为 Graph（内部标识符不动，不改数据 / 协议 / 布局算法 / CI 逻辑）。(#53)
 
 ### Fixed
+- **提交 / CI 悬浮浮层被侧边栏 iframe 裁剪失效**：抽出共用 `positionFloat`（锚右侧 → 越界翻左 → 再越界收进视口）彻底修复。(#53)
+- **活动栏未提交变更数角标更新不及时**：角标承载由 Commit `WebviewView` 迁至隐藏 Treeview（`hyperGit.changesBadge`，`when:false`），`activate` 即实例化、面板未打开也可靠；新增 engine 纯函数 `change-count` 作去重单一事实源。(#52)
+- **发布流水线预发布打包缺陷**：`package` job 对 rc tag 补 `--pre-release` 打包，与 `vsce publish --pre-release` 对齐，修复 Marketplace 预发布 publish 失败。详见 [issue #11](./docs/.agents/issue.md)。
+
+### Docs
+- **README 真实性校准 + 中英双语重构**：单测计数校正为 324、移除不存在的 `ui/` 层描述、publisher 落实为 `ThreeFish-AI`；根英文、中文迁入 [`docs/i18n/zh-CN/README.md`](./docs/i18n/zh-CN/README.md)。(#51)
+
+## [0.0.10-rc.2] - 2026-07-04 — 修复发布流水线预发布打包缺陷
+
+rc.1 因 CI `package` job 未以 `--pre-release` 打包，致 `publish` job 的 Marketplace 步骤报「VSIX 未以 pre-release 打包」而失败（OpenVSX 步骤随之被 skipped），三渠道仅 GitHub Release 成功、Marketplace/OpenVSX 未发出。rc.2 修复该流水线缺陷后重新走通；产品内容与 rc.1 一致。完整叙述见 [Release Note v0.0.10-rc.2](./docs/releases/v0.0.10-rc.2.md)。
+
+### Fixed
+- **CI `package` job 对 rc tag 以 `--pre-release` 打包**：VS Code 要求「以预发布方式发布的 VSIX 必须在打包时即带 `--pre-release` 标记」，否则 `vsce publish --pre-release` 报 `Cannot use '--pre-release' flag with a package that was not packaged as pre-release`。`package` 步骤改为与 publish / OpenVSX 同款 `PRE_FLAG` 判定（`GITHUB_REF_NAME` 含 `rc` 即追加 `--pre-release`），令同一枚预发布 VSIX 贯穿 GitHub Release / Marketplace / OpenVSX 三渠道；正式版 tag 与分支 / PR CI 行为不变。详见 [issue #11](./docs/.agents/issue.md)。
+
+## [0.0.10-rc.1] - 2026-07-04 — Graph 视图对齐官方 · 浮层与角标修复 · 发布链路验证
+
+面向 0.0.10 的首个预发布（RC）。在 v0.0.9 基础上将提交图视图更名为 **Graph** 并视觉对齐 VS Code 官方 Source Control GRAPH 视图，修复提交/CI 悬浮浮层被侧边栏 iframe 裁剪失效、活动栏未提交数角标更新不及时两处缺陷，并完成 README 真实性校准与中英双语重构。本版亦作为 **VS Code Marketplace 发布链路打通**的验证版（首次以官方预发布模型 `--pre-release` 发布 `0.0.10`）。完整用户视角叙述见 [Release Note v0.0.10-rc.1](./docs/releases/v0.0.10-rc.1.md)。
+
+### Changed
+- **Log 视图更名为 Graph 并对齐官方 Source Control GRAPH**：泳道连线由直线改三次贝塞尔平滑曲线（同列自动退化直线）；当前 HEAD 行渲染为空心环 + 内点（双环高亮）；引用胶囊移至 message 右侧后缀、底色跟随本行泳道色、改全圆角实心 pill + 分支/云/tag 内联 SVG 图标前缀；工具栏 seg 按钮间距 / 圆角 / hover 态贴近官方。视图名与 Refresh / Filter / Clear Graph Filter 命令标题、CI 配置描述、aria-label 统一为 Graph（`viewType hyperGit.log`、`log/*` 消息前缀等内部标识符不动，不改底层数据 / 协议 / 布局算法 / CI 逻辑）。(#53)
+
+### Fixed
+- **提交 / CI 悬浮浮层被侧边栏 iframe 裁剪失效**：#48 的浮层定位将横向定位改为 `left = window.innerWidth + 8`，误以为 webview `position:fixed` 可越界渲染到编辑器；实则侧边栏 WebviewView 是沙箱 iframe，坐标系为自身视口，该值落到右边界外被裁剪不可见。抽出共用 `positionFloat`（锚触发元素右侧 → 越界翻左 → 再越界收进视口），彻底修复 CI 与提交两处浮层。(#53)
+- **活动栏未提交变更数角标更新不及时**：角标原挂 Commit `WebviewView`，VS Code 在 `resolveWebviewView`（用户打开过面板）前无法显示 webview 角标（vscode#164974 / #146330），致面板未打开时新变更不点亮、提交 / 撤销后不清除。改由隐藏 TreeView（`hyperGit.changesBadge`，`when:false`）承载，`activate` 即实例化、无论面板是否打开都可靠聚合到容器图标；新增 engine 纯函数 [`change-count`](./src/engine/scm-mapping/change-count.ts)（`toRelKey` / `countUniqueChanges`）与 `GitRepositoryService.getChangeCount()` 作单一事实源（`getChanges` 复用同一去重逻辑），角标走独立 40ms 微防抖快路径、与 150ms 重刷新解耦；移除 Commit webview 死代码（`updateBadge` / `pendingBadge`）杜绝容器 2× 计数，并补 change-count 单元测试锁定计数不变式。(#52)
+
+### Docs
+- **README 真实性校准 + 中英双语重构**：经 3 路只读核验 + 单测实跑取证修正——移除不存在的 `ui/` 层（改述 `engine/` → `adapter/`）、单元测试计数 280 → **324**、行级提交 CodeLens 标签校准为 "Commit this Hunk"、publisher 占位符落实为真实 `ThreeFish-AI`；根 `README.md` 改写为地道英文版，中文版迁入 [`docs/i18n/zh-CN/README.md`](./docs/i18n/zh-CN/README.md) 并互加语言切换、补入 CHANGELOG 链接。同步校正文档中心「最新」发布指针与知识索引 agent 接缝清单。(#51)
+- 补充 `vsce` 发布用法说明并重构 README 底部 footer，修复链接渲染与协议措辞。
+
+> 规模实证（README 校准后）：**6 视图 / 97 命令 / 6 配置项 / 324 单元测试**（32 文件全绿）+ 集成测试，CI 三平台（Ubuntu / macOS / Windows）矩阵全程 GREEN。
+
+## [0.0.9] - 2026-07-04 — 视图整合 · UI 系统化 · 分支与 CI 增强
+
+自上一个正式版 0.0.6 以来的首个公开版本，聚合 0.0.7 / 0.0.8 / 0.0.9 三轮迭代：提交/日志视图内聚重构、UI/UX 全局系统化、分支与 CI 能力增强，以及一批工程修复。完整用户视角叙述见 [Release Note v0.0.9](./docs/releases/v0.0.9.md)。
+
+### Added
+- **变更文件目录树切换**：Commit 视图活动 Changelist 文件列表、Log 视图选中提交的变更文件列表均支持「平铺 / 按目录分组（Group by Directory）」两态切换（工具栏 List/Tree 段控），偏好按视图 `webview.setState` 记忆。目录树由纯逻辑 [`engine/tree/file-tree.buildFileTree`](./src/engine/tree/file-tree.ts) host 侧构建随 payload 下发（复用 graph-layout「host 算、webview 渲」范式，规避内联脚本无法 import engine 的 Split-Brain），叶子以 `fileIndex` 回指扁平列表；支持单目录子链折叠（对齐 VS Code `explorer.compactFolders`）；Commit 树形附目录级三态复选框。详见 [变更文件目录树](./docs/features/file-list-group-by-directory.md)。(#47)
+- **Log 提交悬浮详情**：鼠标悬停 Log 提交行以浮层展示完整信息——所在本地/远程分支、标签、HEAD、完整提交消息（subject + body）、作者 `name <email>`、（与作者不同时）提交者、作者/提交时间（绝对 + 相对）、完整 SHA；复用 CI 状态浮层范式（置于虚拟滚动容器外、与 CI 浮层互斥），`i` 键开、`Esc` 关，滚动/刷新自动消隐。`git log` 取数扩展 `%cn/%cI/%b`（body 置末，NUL/RS 分隔容多行），正文上限截断以控 payload。详见 [Log 提交悬浮详情](./docs/features/log-commit-tooltip.md)。(#47)
+- **清理已删远程分支入口**：Branches 视图新增「Clean up Deleted Remote Branches」命令，一键剔除远端已删除却仍残留于本地的 remote-tracking 引用，根治 Log 视图残留已删分支提交的游离泳道。(#44)
+- **远程分支右键删除**：Branches 视图远程分支支持右键删除（`git push --delete <remote> <branch>`），无需切到命令行。(#42)
+
+### Changed
+- **Commit 视图承接全部变更管理能力**（原 Changes 视图平移）：活动 Changelist 文件单击看 Diff、右键（原生 QuickPick）执行 移动到 Changelist / 查看历史 / 暂存·撤销 Hunks / 加入 `.gitignore` / 丢弃改动；头部提供 Changelist 切换下拉 + ⋯ 管理菜单（新建 / 重命名 / 删除）。详见 [Commit 视图整合](./docs/features/commit-view-consolidation.md)。(#47)
+- **Git 操作工具栏与未提交数角标迁至 Commit 视图**：原挂在 Changes 视图标题栏的 refresh / push / pull / fetch / patch 等动作迁到 Commit 视图标题栏（去掉与 webview 内按钮重复的 commit / commitAndPush）；活动栏未提交数角标改由 Commit `WebviewView.badge` 承载，首帧未 resolve 以 `pendingBadge` 兜底。(#47)
+- **UI/UX 全局系统化**：建立共享设计 Token 地基（spacing / radius / button，`shared-styles.ts`）并注入 Commit / Log / Merge / Rebase 四个 Webview；Log DAG 泳道色改读 `--vscode-charts-*` 主题令牌（深浅主题自适应）；命令层去冗余（标题栏 ≤5 项、同步操作下沉溢出组、危险操作归入 `9_dangerous`、新增 `hyperGit.logFilter` 聚合过滤器）；~94 项命令标题 / 配置 / viewsWelcome 统一英文并为高频与危险命令补齐 codicon；Webview 加固（空态、加载态、快捷键、ARIA）与 5 棵 TreeView 的 Markdown Tooltip 统一。(#43)
+- **品牌图标改用透明底 Emerald 绿环方案**：源图标改为透明底 + `#3FB950` 绿色圆环 + git-pull-request 字形，重生成 256×256 透明 PNG（66KB→14KB）；新增 `galleryBanner`（`#0E2A1C` 深绿、dark 主题）与 Marketplace 页头协调。(#49)
+
+### Removed
+- **移除 CHANGES 树视图**：其展示的活动 Changelist 与 Commit 视图的 Active Changelist 完全重复（同源 `getChanges()` + `getGroups()`）；全部独有能力已零回归平移入 Commit 视图（见 Changed），视图数由 7 降为 6。(#47)
+
+### Fixed
+- **Log 提交/CI 浮层定位重做**：原 `positionTip`/`positionCommitTip` 把浮层锚定在所悬元素左沿并按 webview 宽度夹紧，420px 宽的浮层在 ~240px 窄侧边栏中从左沿一路铺到编辑器，既「撑满 LOG 视图」又方位怪异。改为横向固定到 `window.innerWidth + 8`（侧边栏右沿外、编辑器区内），纵向与所悬行/图标顶部对齐并按视口高度夹紧；复用 webview `position:fixed` 可越界渲染到编辑器区的特性，浮层不再压住 LOG 列表，自然悬浮于所悬行的右侧。(#48)
+- **Log All 范围改用 `--branches --tags --remotes`**：原 `--all` 遍历全部 refs，含宿主工具注入的 `refs/conductor-checkpoints/*` 与 `refs/conductor-archive-heads/*`，致游离提交仍可达、被画成游离泳道；改用三大标准命名空间根治污染（Checkpointer 页保留 `--all` 以见原始完整图）。(#45)
+- **CI 状态图标防闪烁与准实时刷新**：终态缓存避免重复请求以消除闪烁，轮询间隔优化实现准实时刷新，各检查项状态图标与 Tooltip 颜色按通过 / 失败 / 运行中语义对齐。(#41, #40)
 - 修复 `vsce package` 打包因 ESLint `no-useless-assignment` 阻断：`engine/ci/remote-parser.ts` 中 `host`/`path` 的空串初值为 dead store（`hasScheme` 真假两分支均无条件重赋、解析失败处先 `return null`），改为带类型标注的纯声明消除，由 TS 确定赋值分析接管，运行时行为不变。
+- 修复 Log 提交悬浮浮层「行→浮层→空白」后卡死不消失：`commitTipEl.mouseleave` 未复位 `overCtRow`，致 `scheduleHideCommit` 的 `!overCtRow && !overCt` 守卫恒不成立；在 `mouseleave` 一并复位 `overCtRow` 修复。
+- 修复 `capBody` 截断劈开 Unicode 代理对：`String.prototype.slice(0, BODY_CAP)` 按 UTF-16 码元计数，2000 边界落在 emoji 代理对中间会留下孤立高代理位（渲染为 `�`）；改用 `Array.from(t).slice(0, BODY_CAP).join('')` 按码点截断。
 
 ## [0.0.6] - 2026-06-30 — 首个 MVP 正式版
 
@@ -72,4 +139,5 @@
 - 目录 / folder diff（虚拟文档）、Submodules 管理。
 - M5 AI Agent（5 个接缝已预埋 Null 实现，本版未启动）。
 
+[0.0.9]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.9
 [0.0.6]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.6
