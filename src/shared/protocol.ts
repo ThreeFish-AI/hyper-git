@@ -159,6 +159,10 @@ export interface CommitDetailVM {
 	readonly authorDateAbs: string;
 	readonly committerName: string;
 	readonly committerDate: string;
+	/** 提交者相对时间（host 预格式化）；仅当与作者不同才展示。 */
+	readonly committerDateRel: string;
+	/** 提交者绝对时间（host 预格式化）；仅当与作者不同才展示。 */
+	readonly committerDateAbs: string;
 	readonly parents: readonly string[];
 	readonly stat: CommitDetailStat;
 	/** GitHub 提交页 URL；远程非 GitHub 时缺省，面板隐藏「Open on GitHub」。 */

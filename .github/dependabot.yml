@@ -2,6 +2,9 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: /
+    # 集成流为「deps 先落 feature/1.x.x，再由其合入 master」。不设 target-branch 时 Dependabot
+    # 回退到默认分支 master，与该流冲突。锚定到 feature/1.x.x 使 deps PR 直接进入集成分支。
+    target-branch: feature/1.x.x
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -12,6 +15,7 @@ updates:
       - dependency-name: '@types/vscode'
   - package-ecosystem: github-actions
     directory: /
+    target-branch: feature/1.x.x
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

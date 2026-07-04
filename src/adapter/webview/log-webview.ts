@@ -228,6 +228,8 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				authorDateAbs: formatAbsolute(authorDate),
 				committerName,
 				committerDate,
+				committerDateRel: formatRelative(committerDate),
+				committerDateAbs: formatAbsolute(committerDate),
 				parents: parentsRaw ? parentsRaw.trim().split(/\s+/).filter(Boolean) : [],
 				stat,
 				githubUrl: remote ? commitWebUrl(remote, fullHash) : undefined,
@@ -551,6 +553,15 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #commit-tip .ct-msg { margin-bottom: 10px; }
 #commit-tip .ct-subj { font-size: 13px; font-weight: 600; line-height: 1.4; word-break: break-word; }
 #commit-tip .ct-body { margin-top: 6px; white-space: pre-wrap; word-break: break-word; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; line-height: 1.5; opacity: 0.9; }
+#commit-tip .ct-refs-wrap { margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
+#commit-tip .ct-sec { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+#commit-tip .ct-sec .ct-k { flex: 0 0 66px; color: var(--vscode-descriptionForeground); font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
+#commit-tip .ct-sec .ct-v { flex: 1 1 auto; min-width: 0; word-break: break-word; }
+#commit-tip .ct-refs { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 浮层内引用胶囊完整显示（覆盖行内 .chip 的 max-width/省略号截断）：换行不截断，空间由浮层承载。 */
+#commit-tip .chip { max-width: none; }
+#commit-tip .chip .chip-nm { overflow: visible; text-overflow: clip; white-space: normal; word-break: break-all; }
+#commit-tip .ct-dim { color: var(--vscode-descriptionForeground); }
 #commit-tip .ct-stat { display: flex; gap: 12px; padding: 8px 0; border-top: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); border-bottom: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); font-size: 12px; font-variant-numeric: tabular-nums; }
 #commit-tip .ct-stat .files { color: var(--vscode-descriptionForeground); }
 #commit-tip .ct-stat .ins { color: var(--vscode-gitDecoration-addedResourceForeground, #3fb950); }
@@ -909,14 +920,14 @@ document.addEventListener('mousemove', function (e) { cursorX = e.clientX; curso
 function positionAtCursor(el) {
   el.style.display = 'flex';
   const w = el.offsetWidth, h = el.offsetHeight;
-  const vw = window.innerWidth, vh = window.innerHeight, pad = 6, gap = 14;
-  // 横向：默认在光标右侧；越右沿翻到左侧；仍越界则收进视口。
+  const vw = window.innerWidth, vh = window.innerHeight, pad = 6, gap = 8;
+  // 横向：默认贴光标右侧；越右沿则翻到光标左侧（右沿紧邻光标）；仍越界收进视口。
   let left = cursorX + gap;
   if (left + w > vw - pad) left = cursorX - gap - w;
   if (left < pad) left = Math.max(pad, vw - pad - w);
-  // 纵向：默认在光标下方；越下沿翻到上方；钳制视口。
+  // 纵向：默认贴光标下方；越下沿则翻到光标上方（底边紧邻光标）；钳制视口。
   let top = cursorY + gap;
-  if (top + h > vh - pad) top = cursorY - gap - h;
+  if (top + h > vh - pad) top = Math.max(pad, cursorY - gap - h);
   if (top < pad) top = pad;
   el.style.left = left + 'px';
   el.style.top = top + 'px';
@@ -934,7 +945,7 @@ function positionAtRect(el, rect) {
   el.style.left = left + 'px';
   el.style.top = top + 'px';
 }
-function positionTip() { positionAtCursor(ciTipEl); }
+function positionTip(rect) { rect ? positionAtRect(ciTipEl, rect) : positionAtCursor(ciTipEl); }
 function scheduleShow(hash, iconEl) {
   clearTimeout(tipHideT);
   if (tipHash === hash && ciTipEl.classList.contains('show')) return;
@@ -992,6 +1003,7 @@ rowsEl.addEventListener('mouseover', function (e) {
   const icon = e.target.closest && e.target.closest('.ci');
   if (!icon || icon.classList.contains('ci-empty')) return;
   overIcon = true;
+  hideCommitTip(); // 进入 CI 图标：立即隐藏提交浮层并取消在途，二者互斥。
   scheduleShow(icon.getAttribute('data-ci'), icon);
 });
 rowsEl.addEventListener('mouseout', function (e) {
@@ -999,6 +1011,10 @@ rowsEl.addEventListener('mouseout', function (e) {
   if (!icon) return;
   overIcon = false;
   scheduleHide();
+  // 离开 CI 图标但仍在同一行内（移回行体）：切回提交详情浮层。
+  const to = e.relatedTarget;
+  const r = to && to.closest && to.closest('.row');
+  if (r && !(to.closest && to.closest('.ci'))) scheduleShowCommit(r.getAttribute('data-hash'));
 });
 rowsEl.addEventListener('keydown', function (e) {
   const icon = e.target.closest && e.target.closest('.ci');
@@ -1009,7 +1025,7 @@ rowsEl.addEventListener('keydown', function (e) {
     if (!ci || ci.state === 'unknown') return;
     tipHash = icon.getAttribute('data-ci');
     buildTip(ci);
-    positionTip();
+    positionTip(icon.getBoundingClientRect()); // 键盘触发：无光标，锚图标 rect。
     ciTipEl.classList.add('show');
     const first = ciTipEl.querySelector('[data-url]'); if (first) first.focus();
   }
@@ -1128,6 +1144,23 @@ function commitStatHtml(s) {
   if (s.deletions > 0) parts.push('<span class="del">' + s.deletions + (s.deletions === 1 ? ' deletion(-)' : ' deletions(-)') + '</span>');
   return parts.join(', ');
 }
+// 引用胶囊分组（HEAD/Branches/Remotes/Tags）：从图行 chips 取，底色跟随该行泳道色，与行内胶囊同款。
+function refsHtml(row) {
+  if (!row || !row.chips || row.chips.length === 0) return '';
+  const bg = laneColor(row.layout.node.colorIdx), fg = onColor(bg);
+  const groups = [['head', 'HEAD'], ['localBranch', 'Branches'], ['remoteBranch', 'Remotes'], ['tag', 'Tags']];
+  const secs = [];
+  for (const g of groups) {
+    const kind = g[0];
+    const chips = row.chips.filter(function (c) { return c.kind === kind; });
+    if (chips.length === 0) continue;
+    const inner = chips.map(function (c) {
+      return '<span class="chip ' + kind + (c.isHeadTarget ? ' head-target' : '') + '" style="background:' + bg + ';color:' + fg + '">' + chipIcon(kind) + '<span class="chip-nm">' + esc(c.name) + '</span></span>';
+    }).join('');
+    secs.push('<div class="ct-sec"><span class="ct-k">' + g[1] + '</span><span class="ct-v ct-refs">' + inner + '</span></div>');
+  }
+  return secs.length ? '<div class="ct-refs-wrap">' + secs.join('') + '</div>' : '';
+}
 function renderCommitTip(vm) {
   if (!vm) return;
   const tb = [];
@@ -1136,10 +1169,21 @@ function renderCommitTip(vm) {
   const meta = [];
   if (vm.authorEmail) meta.push(esc(vm.authorEmail));
   if (tb.length) meta.push(tb.join(' '));
+  const row = model.rows.find(function (r) { return r.hash === vm.hash; });
+  // Committer 行：仅当提交者与作者不同（名字或时间）才展示，避免与头部作者信息冗余。
+  let committerRow = '';
+  if (vm.committerName && (vm.committerName !== vm.authorName || vm.committerDate !== vm.authorDate)) {
+    const ctb = [];
+    if (vm.committerDateRel) ctb.push(esc(vm.committerDateRel));
+    if (vm.committerDateAbs) ctb.push('(' + esc(vm.committerDateAbs) + ')');
+    committerRow = '<div class="ct-sec"><span class="ct-k">Committer</span><span class="ct-v">' + esc(vm.committerName) + (ctb.length ? ' <span class="ct-dim">· ' + ctb.join(' ') + '</span>' : '') + '</span></div>';
+  }
   const gh = vm.githubUrl ? '<span class="ct-gh" role="link" tabindex="0" data-url="' + esc(vm.githubUrl) + '">' + ICO_GH + 'Open on GitHub</span>' : '';
   commitTipEl.innerHTML = '<div class="ct-scroll">'
     + '<div class="ct-head"><span class="ct-avatar">' + ICO_PERSON + '</span><span class="ct-who"><span class="ct-author">' + esc(vm.authorName) + '</span>' + (meta.length ? '<span class="ct-time">' + meta.join(' · ') + '</span>' : '') + '</span></div>'
+    + refsHtml(row)
     + '<div class="ct-msg"><div class="ct-subj">' + esc(vm.subject) + '</div>' + (vm.body ? '<div class="ct-body">' + esc(vm.body) + '</div>' : '') + '</div>'
+    + committerRow
     + '<div class="ct-stat">' + commitStatHtml(vm.stat) + '</div>'
     + '<div class="ct-foot"><span class="ct-sha">' + esc(vm.hash) + '</span>' + gh + '</div>'
     + '</div>';
@@ -1171,7 +1215,7 @@ function scheduleHideCommit() {
 }
 rowsEl.addEventListener('mouseover', function (e) {
   const ci = e.target.closest && e.target.closest('.ci');
-  if (ci && !ci.classList.contains('ci-empty')) return; // CI 图标区归 CI 浮层。
+  if (ci && !ci.classList.contains('ci-empty')) { hideCommitTip(); return; } // 进入 CI 图标区：即时隐藏提交浮层并取消在途，二者互斥。
   const r = e.target.closest && e.target.closest('.row');
   if (!r) return;
   scheduleShowCommit(r.getAttribute('data-hash'));
