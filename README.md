@@ -73,12 +73,20 @@ pnpm run test:unit            # 单元测试（engine 纯逻辑，Vitest，280 �
 pnpm run test:integration     # 集成测试（@vscode/test-electron）
 pnpm run package              # 生产构建
 pnpm dlx @vscode/vsce package # 打包 .vsix
+
+### use vsce
+vsce package
+# hyper-git-agentic-git-x.x.x.vsix generated
+$ vsce publish
+# <publisher id>.hyper-git-agentic-git-x.x.x published to VS Code Marketplace
 ```
 
 - **分层**：`engine/`（纯逻辑）→ `adapter/`（唯一接触 vscode API）→ `ui/`；`agent/` 以接口注入 `engine`，不反向依赖 UI；`shared/protocol.ts` 为 Webview ↔ Host 契约单一事实源。
 - **发布**：`v*` 标签触发 CI 产出 GitHub Release（附 `.vsix`，正文取自 [`docs/releases/`](./docs/releases/README.md)）+ OpenVSX；VS Code Marketplace 由 `ENABLE_MARKETPLACE_PUBLISH` 变量门控。
 - 包管理与脚本统一使用 `pnpm`（遵循 [AGENTS.md](./AGENTS.md) 工程规范）。完整文档见[文档中心](./docs/README.md)。
 
-## 许可证
+---
 
-[MIT](./LICENSE)。
+<div align="center">
+  <sub>Built with 🧠, ❤️, and an absurd amount of coffee by <a href="https://github.com/ThreeFish-AI">ThreeFish-AI</a> · Released under the <a href="./LICENSE">MIT License</a>.</sub>
+</div>
