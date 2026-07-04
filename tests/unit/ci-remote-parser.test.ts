@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { authProviderId, graphqlEndpoint, parseGitHubRemote } from '../../src/engine/ci/remote-parser';
+import { authProviderId, graphqlEndpoint, parseGitHubRemote, commitWebUrl } from '../../src/engine/ci/remote-parser';
 
 describe('parseGitHubRemote — 合法形态', () => {
 	it('https（带 .git）', () => {
@@ -73,5 +73,16 @@ describe('authProviderId', () => {
 	});
 	it('GHE → github-enterprise', () => {
 		expect(authProviderId(parseGitHubRemote('https://ghe.acme.com/o/r.git')!)).toBe('github-enterprise');
+	});
+});
+
+describe('commitWebUrl', () => {
+	it('github.com 提交页 URL', () => {
+		const r = parseGitHubRemote('git@github.com:ThreeFish-AI/hyper-git.git')!;
+		expect(commitWebUrl(r, '52c3624abcdef')).toBe('https://github.com/ThreeFish-AI/hyper-git/commit/52c3624abcdef');
+	});
+	it('GHE 主机同构（web 域，非 api）', () => {
+		const r = parseGitHubRemote('https://ghe.acme.com/o/r.git')!;
+		expect(commitWebUrl(r, 'deadbeef')).toBe('https://ghe.acme.com/o/r/commit/deadbeef');
 	});
 });

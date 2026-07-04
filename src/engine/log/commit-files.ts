@@ -56,3 +56,39 @@ export function parseNameStatus(output: string): CommitFileChange[] {
 	}
 	return result;
 }
+
+/** 提交的变更统计（对齐 `git ... --shortstat` 摘要行）。 */
+export interface CommitDiffStat {
+	/** 变更文件数。 */
+	readonly files: number;
+	/** 新增行数。 */
+	readonly insertions: number;
+	/** 删除行数。 */
+	readonly deletions: number;
+}
+
+/**
+ * 解析 `git diff-tree --shortstat` / `git show --shortstat` 的摘要行为结构化统计。
+ *
+ * 形如 ` 3 files changed, 32 insertions(+), 8 deletions(-)`；三段任意缺省（如仅删除、单文件）
+ * 均按 0 回落。空输入（合并/根提交无改动）返回全 0。取最后一条匹配行，避免 diff-tree
+ * 输出前缀（如 commit hash 行）干扰。
+ */
+export function parseShortStat(output: string): CommitDiffStat {
+	let files = 0;
+	let insertions = 0;
+	let deletions = 0;
+	for (const line of output.split('\n')) {
+		if (!/changed/.test(line)) {
+			continue;
+		}
+		const f = line.match(/(\d+)\s+files?\s+changed/);
+		const ins = line.match(/(\d+)\s+insertions?\(\+\)/);
+		const del = line.match(/(\d+)\s+deletions?\(-\)/);
+		// 最后一条 changed 行整体覆盖（三段任缺回 0），避免 diff-tree 前缀行干扰。
+		files = f ? parseInt(f[1], 10) : 0;
+		insertions = ins ? parseInt(ins[1], 10) : 0;
+		deletions = del ? parseInt(del[1], 10) : 0;
+	}
+	return { files, insertions, deletions };
+}
