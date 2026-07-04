@@ -228,6 +228,8 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				authorDateAbs: formatAbsolute(authorDate),
 				committerName,
 				committerDate,
+				committerDateRel: formatRelative(committerDate),
+				committerDateAbs: formatAbsolute(committerDate),
 				parents: parentsRaw ? parentsRaw.trim().split(/\s+/).filter(Boolean) : [],
 				stat,
 				githubUrl: remote ? commitWebUrl(remote, fullHash) : undefined,
@@ -551,6 +553,12 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #commit-tip .ct-msg { margin-bottom: 10px; }
 #commit-tip .ct-subj { font-size: 13px; font-weight: 600; line-height: 1.4; word-break: break-word; }
 #commit-tip .ct-body { margin-top: 6px; white-space: pre-wrap; word-break: break-word; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; line-height: 1.5; opacity: 0.9; }
+#commit-tip .ct-refs-wrap { margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
+#commit-tip .ct-sec { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+#commit-tip .ct-sec .ct-k { flex: 0 0 66px; color: var(--vscode-descriptionForeground); font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
+#commit-tip .ct-sec .ct-v { flex: 1 1 auto; min-width: 0; word-break: break-word; }
+#commit-tip .ct-refs { display: flex; flex-wrap: wrap; gap: 4px; }
+#commit-tip .ct-dim { color: var(--vscode-descriptionForeground); }
 #commit-tip .ct-stat { display: flex; gap: 12px; padding: 8px 0; border-top: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); border-bottom: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); font-size: 12px; font-variant-numeric: tabular-nums; }
 #commit-tip .ct-stat .files { color: var(--vscode-descriptionForeground); }
 #commit-tip .ct-stat .ins { color: var(--vscode-gitDecoration-addedResourceForeground, #3fb950); }
@@ -934,7 +942,7 @@ function positionAtRect(el, rect) {
   el.style.left = left + 'px';
   el.style.top = top + 'px';
 }
-function positionTip() { positionAtCursor(ciTipEl); }
+function positionTip(rect) { rect ? positionAtRect(ciTipEl, rect) : positionAtCursor(ciTipEl); }
 function scheduleShow(hash, iconEl) {
   clearTimeout(tipHideT);
   if (tipHash === hash && ciTipEl.classList.contains('show')) return;
@@ -1009,7 +1017,7 @@ rowsEl.addEventListener('keydown', function (e) {
     if (!ci || ci.state === 'unknown') return;
     tipHash = icon.getAttribute('data-ci');
     buildTip(ci);
-    positionTip();
+    positionTip(icon.getBoundingClientRect()); // 键盘触发：无光标，锚图标 rect。
     ciTipEl.classList.add('show');
     const first = ciTipEl.querySelector('[data-url]'); if (first) first.focus();
   }
@@ -1128,6 +1136,23 @@ function commitStatHtml(s) {
   if (s.deletions > 0) parts.push('<span class="del">' + s.deletions + (s.deletions === 1 ? ' deletion(-)' : ' deletions(-)') + '</span>');
   return parts.join(', ');
 }
+// 引用胶囊分组（HEAD/Branches/Remotes/Tags）：从图行 chips 取，底色跟随该行泳道色，与行内胶囊同款。
+function refsHtml(row) {
+  if (!row || !row.chips || row.chips.length === 0) return '';
+  const bg = laneColor(row.layout.node.colorIdx), fg = onColor(bg);
+  const groups = [['head', 'HEAD'], ['localBranch', 'Branches'], ['remoteBranch', 'Remotes'], ['tag', 'Tags']];
+  const secs = [];
+  for (const g of groups) {
+    const kind = g[0];
+    const chips = row.chips.filter(function (c) { return c.kind === kind; });
+    if (chips.length === 0) continue;
+    const inner = chips.map(function (c) {
+      return '<span class="chip ' + kind + (c.isHeadTarget ? ' head-target' : '') + '" style="background:' + bg + ';color:' + fg + '">' + chipIcon(kind) + '<span class="chip-nm">' + esc(c.name) + '</span></span>';
+    }).join('');
+    secs.push('<div class="ct-sec"><span class="ct-k">' + g[1] + '</span><span class="ct-v ct-refs">' + inner + '</span></div>');
+  }
+  return secs.length ? '<div class="ct-refs-wrap">' + secs.join('') + '</div>' : '';
+}
 function renderCommitTip(vm) {
   if (!vm) return;
   const tb = [];
@@ -1136,10 +1161,21 @@ function renderCommitTip(vm) {
   const meta = [];
   if (vm.authorEmail) meta.push(esc(vm.authorEmail));
   if (tb.length) meta.push(tb.join(' '));
+  const row = model.rows.find(function (r) { return r.hash === vm.hash; });
+  // Committer 行：仅当提交者与作者不同（名字或时间）才展示，避免与头部作者信息冗余。
+  let committerRow = '';
+  if (vm.committerName && (vm.committerName !== vm.authorName || vm.committerDate !== vm.authorDate)) {
+    const ctb = [];
+    if (vm.committerDateRel) ctb.push(esc(vm.committerDateRel));
+    if (vm.committerDateAbs) ctb.push('(' + esc(vm.committerDateAbs) + ')');
+    committerRow = '<div class="ct-sec"><span class="ct-k">Committer</span><span class="ct-v">' + esc(vm.committerName) + (ctb.length ? ' <span class="ct-dim">· ' + ctb.join(' ') + '</span>' : '') + '</span></div>';
+  }
   const gh = vm.githubUrl ? '<span class="ct-gh" role="link" tabindex="0" data-url="' + esc(vm.githubUrl) + '">' + ICO_GH + 'Open on GitHub</span>' : '';
   commitTipEl.innerHTML = '<div class="ct-scroll">'
     + '<div class="ct-head"><span class="ct-avatar">' + ICO_PERSON + '</span><span class="ct-who"><span class="ct-author">' + esc(vm.authorName) + '</span>' + (meta.length ? '<span class="ct-time">' + meta.join(' · ') + '</span>' : '') + '</span></div>'
+    + refsHtml(row)
     + '<div class="ct-msg"><div class="ct-subj">' + esc(vm.subject) + '</div>' + (vm.body ? '<div class="ct-body">' + esc(vm.body) + '</div>' : '') + '</div>'
+    + committerRow
     + '<div class="ct-stat">' + commitStatHtml(vm.stat) + '</div>'
     + '<div class="ct-foot"><span class="ct-sha">' + esc(vm.hash) + '</span>' + gh + '</div>'
     + '</div>';
