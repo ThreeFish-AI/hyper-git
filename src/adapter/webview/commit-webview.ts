@@ -22,14 +22,13 @@ import { getBaseStyles } from './shared-styles';
  * 承载活动 changelist 文件列表（平铺 / 目录树两态可切）+ 文件单击看 diff + 单文件右键操作 +
  * changelist 切换与管理（由原 Changes 视图平移而来）+ 多行 Commit Message 编辑器 +
  * Amend/sign-off/skip-hooks 选项 + Commit/Commit and Push 按钮 + Conventional Commits 实时校验 +
- * 最近消息复用 + 活动栏未提交数角标。选中态由 webview 端管理（host 不回写，避免覆盖用户操作）。
+ * 最近消息复用。选中态由 webview 端管理（host 不回写，避免覆盖用户操作）。
+ * 注：活动栏未提交数角标已迁至隐藏的 hyperGit.changesBadge TreeView 承载（见 extension.ts）。
  */
 export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'hyperGit.commit';
 	private view?: vscode.WebviewView;
 	private currentMessage = '';
-	/** view 尚未 resolve 时暂存的角标计数，resolve 后回填（活动栏容器角标 = 各视图 badge 之和）。 */
-	private pendingBadge?: number;
 
 	constructor(
 		private readonly service: GitRepositoryService,
@@ -46,26 +45,11 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 			msgSub.dispose();
 			this.view = undefined;
 		});
-		if (this.pendingBadge !== undefined) {
-			const c = this.pendingBadge;
-			this.pendingBadge = undefined;
-			this.updateBadge(c);
-		}
 		this.pushState();
 	}
 
 	refresh(): void {
 		this.pushState();
-	}
-
-	/** 未提交数角标（由 extension 的 refreshAll 驱动）：迁自原 Changes 视图，未 resolve 时暂存。 */
-	updateBadge(count: number): void {
-		const badge = count > 0 ? { value: count, tooltip: `${count} uncommitted change(s)` } : undefined;
-		if (this.view) {
-			this.view.badge = badge;
-		} else {
-			this.pendingBadge = count;
-		}
 	}
 
 	private onMessage(msg: WebviewToHostMessage): void {
