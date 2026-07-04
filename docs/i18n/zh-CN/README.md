@@ -45,8 +45,7 @@
 ## 安装
 
 - **手动（当前推荐）**：从 [Releases](https://github.com/ThreeFish-AI/hyper-git/releases) 下载 `hyper-git-agentic-git-x.x.x.vsix` → 命令面板 `Extensions: Install from VSIX`。
-- **OpenVSX**（Cursor / Windsurf / Gitpod / VSCodium）：搜索 `Hyper Git - Agentic Git`。
-- **VS Code Marketplace**：搜索 `Hyper Git - Agentic Git`（发布上线后可用）。
+- **VS Code Marketplace**：搜索 `Hyper Git - Agentic Git`。
 - **要求**：VS Code ≥ 1.85.0 + 启用内置 Git 扩展（`vscode.git`，默认随附）。仅支持本地 git 仓库，不支持虚拟 / Web 工作区。
 
 ## 已知限制
@@ -91,7 +90,7 @@ pnpm dlx @vscode/vsce publish
 ```
 
 - **分层**：`engine/`（纯逻辑）→ `adapter/`（唯一接触 vscode API，含自绘 `adapter/webview/` UI）；`agent/` 以接口注入 `engine`，不反向依赖 UI；`shared/protocol.ts` 为 Webview ↔ Host 契约单一事实源。
-- **发布**：`v*` 标签触发 CI 产出 GitHub Release（附 `.vsix`，正文取自 [`docs/releases/`](../../releases/README.md)）+ OpenVSX；VS Code Marketplace 由 `ENABLE_MARKETPLACE_PUBLISH` 变量门控。
+- **发布**：`v*` 标签触发 CI 产出 GitHub Release（附 `.vsix`，正文取自 [`docs/releases/`](../../releases/README.md)）并发布到 VS Code Marketplace（由 `ENABLE_MARKETPLACE_PUBLISH` 变量门控；`rc` 标签发预发布通道）。
 - 包管理与脚本统一使用 `pnpm`（遵循 [AGENTS.md](../../../AGENTS.md) 工程规范）。版本变更记录见[变更日志](../../../CHANGELOG.md)。完整文档见[文档中心](../../README.md)。
 
 ---

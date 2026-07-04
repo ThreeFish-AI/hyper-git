@@ -4,6 +4,22 @@
 
 > 面向用户的发布说明（含完整特性叙述与安装指引）见 [`docs/releases/`](./docs/releases/README.md)。
 
+## [0.0.11] - 2026-07-04 — 首个正式版（承载 0.0.10 内容）· 发布渠道收敛 Marketplace
+
+首个 VS Code Marketplace **正式发布**版本，承载 0.0.10 预发布通道（rc.1 / rc.2）已验证的全部内容——提交图更名 **Graph** 并对齐官方 Source Control GRAPH、悬浮浮层 iframe 裁剪修复、未提交角标承载迁移、README 真实性校准与中英双语；并将发布渠道收敛为 **VS Code Marketplace 单市场**。`0.0.10` 版位已被预发布通道占用，正式版按官方规则顺延至 `0.0.11`。完整用户视角叙述见 [Release Note v0.0.11](./docs/releases/v0.0.11.md)。
+
+### Changed
+- **发布渠道收敛为 VS Code Marketplace 单市场**：移除 CI `publish` job 的 OpenVSX 发布步骤及对 `OVSX_PAT` 的依赖，README 双语安装渠道同步移除 OpenVSX；发布流水线现为 **GitHub Release + VS Code Marketplace**（由 `ENABLE_MARKETPLACE_PUBLISH` 变量门控，`rc` 标签走预发布通道）。
+- **Log 视图更名为 Graph 并对齐官方 Source Control GRAPH**：泳道连线改三次贝塞尔平滑曲线、HEAD 空心双环高亮、引用胶囊改全圆角实心 pill 并跟随泳道色、工具栏 seg 贴近官方；命令标题 / 视图名 / aria-label 统一为 Graph（内部标识符不动，不改数据 / 协议 / 布局算法 / CI 逻辑）。(#53)
+
+### Fixed
+- **提交 / CI 悬浮浮层被侧边栏 iframe 裁剪失效**：抽出共用 `positionFloat`（锚右侧 → 越界翻左 → 再越界收进视口）彻底修复。(#53)
+- **活动栏未提交变更数角标更新不及时**：角标承载由 Commit `WebviewView` 迁至隐藏 Treeview（`hyperGit.changesBadge`，`when:false`），`activate` 即实例化、面板未打开也可靠；新增 engine 纯函数 `change-count` 作去重单一事实源。(#52)
+- **发布流水线预发布打包缺陷**：`package` job 对 rc tag 补 `--pre-release` 打包，与 `vsce publish --pre-release` 对齐，修复 Marketplace 预发布 publish 失败。详见 [issue #11](./docs/.agents/issue.md)。
+
+### Docs
+- **README 真实性校准 + 中英双语重构**：单测计数校正为 324、移除不存在的 `ui/` 层描述、publisher 落实为 `ThreeFish-AI`；根英文、中文迁入 [`docs/i18n/zh-CN/README.md`](./docs/i18n/zh-CN/README.md)。(#51)
+
 ## [0.0.10-rc.2] - 2026-07-04 — 修复发布流水线预发布打包缺陷
 
 rc.1 因 CI `package` job 未以 `--pre-release` 打包，致 `publish` job 的 Marketplace 步骤报「VSIX 未以 pre-release 打包」而失败（OpenVSX 步骤随之被 skipped），三渠道仅 GitHub Release 成功、Marketplace/OpenVSX 未发出。rc.2 修复该流水线缺陷后重新走通；产品内容与 rc.1 一致。完整叙述见 [Release Note v0.0.10-rc.2](./docs/releases/v0.0.10-rc.2.md)。

@@ -69,7 +69,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # rc tag 以 --pre-release 打包：VS Code 要求「预发布 VSIX」在打包时即标记，
       # 否则 publish job 的 `vsce publish --pre-release` 会报「未以 pre-release 打包」而失败。
-      # 与 publish/OpenVSX 步骤同款 PRE_FLAG 判定，保证同一枚 VSIX 贯穿三渠道。
+      # 与 publish 步骤同款 PRE_FLAG 判定，保证同一枚 VSIX 贯穿 GitHub Release 与 Marketplace。
       - name: 打包 vsix（rc tag 自动带 --pre-release）
         run: |
           PRE_FLAG=$([[ "${GITHUB_REF_NAME}" == *rc* ]] && echo "--pre-release" || echo "")
@@ -103,7 +103,7 @@ jobs:
           body_path: docs/releases/${{ github.ref_name }}.md
           fail_on_unmatched_files: true
 
-  # 发布：仅 tag 触发；OpenVSX 默认发布，VS Code Marketplace 由 ENABLE_MARKETPLACE_PUBLISH 变量门控（默认关闭）；生产环境审批门
+  # 发布：仅 tag 触发；发布到 VS Code Marketplace，由 ENABLE_MARKETPLACE_PUBLISH 变量门控；生产环境审批门
   publish:
     name: Publish
     needs: package
@@ -121,9 +121,8 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: vsix
-      # VS Code Marketplace 发布：默认关闭（未配置 VSCE_PAT）。
-      # 配好 VSCE_PAT 后，在仓库 Settings → Secrets and variables → Actions → Variables
-      # 新增 ENABLE_MARKETPLACE_PUBLISH=true 即恢复，无需改代码或发 PR。
+      # VS Code Marketplace 发布：由仓库变量 ENABLE_MARKETPLACE_PUBLISH 门控（=true 时发布）。
+      # 需配置 VSCE_PAT（Azure DevOps PAT，scope: Marketplace → Manage）；rc tag 自动以 --pre-release 发预发布通道。
       - name: 发布到 VS Code Marketplace
         if: ${{ vars.ENABLE_MARKETPLACE_PUBLISH == 'true' }}
         run: |
@@ -131,12 +130,3 @@ jobs:
           pnpm dlx @vscode/vsce publish --packagePath *.vsix $PRE_FLAG
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      # OpenVSX 不支持覆盖已存在版本：若该版本号已发布则此步报错。
-      # 以 continue-on-error 隔离——不阻断 GitHub Release 产出，亦不让首发 workflow 标红。
-      - name: 发布到 OpenVSX（覆盖 Cursor / Windsurf 等 AI IDE）
-        continue-on-error: true
-        run: |
-          PRE_FLAG=$([[ "${GITHUB_REF_NAME}" == *rc* ]] && echo "--pre-release" || echo "")
-          pnpm dlx ovsx publish *.vsix $PRE_FLAG
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
