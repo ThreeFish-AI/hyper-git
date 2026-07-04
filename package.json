@@ -1246,7 +1246,8 @@
 		"prettier": "^3.9.4",
 		"rimraf": "^6.0.1",
 		"typescript": "^5.9.2",
-		"typescript-eslint": "^8.39.0",
-		"vitest": "^2.1.8"
+		"typescript-eslint": "^8.62.1",
+		"vite": "^7.0.0",
+		"vitest": "^4.1.9"
 	}
 }
