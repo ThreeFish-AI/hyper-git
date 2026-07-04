@@ -4,7 +4,12 @@
 
 > 面向用户的发布说明（含完整特性叙述与安装指引）见 [`docs/releases/`](./docs/releases/README.md)。
 
-## [0.0.7] - 未发布
+## [0.0.9-rc.2] - 2026-07-04 — 浮层定位修复
+
+### Fixed
+- **Log 提交/CI 浮层定位重做**：原 `positionTip`/`positionCommitTip` 把浮层锚定在所悬元素左沿并按 webview 宽度夹紧，420px 宽的浮层在 ~240px 窄侧边栏中从左沿一路铺到编辑器，既「撑满 LOG 视图」又方位怪异。改为横向固定到 `window.innerWidth + 8`（侧边栏右沿外、编辑器区内），纵向与所悬行/图标顶部对齐并按视口高度夹紧；复用 webview `position:fixed` 可越界渲染到编辑器区的特性，浮层不再压住 LOG 列表，自然悬浮于所悬行的右侧。
+
+## [0.0.9-rc.1] - 2026-07-04 — 0.0.9 候选版
 
 ### Added
 - **变更文件目录树切换**：Commit 视图活动 Changelist 文件列表、Log 视图选中提交的变更文件列表均支持「平铺 / 按目录分组（Group by Directory）」两态切换（工具栏 List/Tree 段控），偏好按视图 `webview.setState` 记忆。目录树由纯逻辑 [`engine/tree/file-tree.buildFileTree`](./src/engine/tree/file-tree.ts) host 侧构建随 payload 下发（复用 graph-layout「host 算、webview 渲」范式，规避内联脚本无法 import engine 的 Split-Brain），叶子以 `fileIndex` 回指扁平列表；支持单目录子链折叠（对齐 VS Code `explorer.compactFolders`）；Commit 树形附目录级三态复选框。详见 [变更文件目录树](./docs/features/file-list-group-by-directory.md)。
@@ -19,6 +24,8 @@
 
 ### Fixed
 - 修复 `vsce package` 打包因 ESLint `no-useless-assignment` 阻断：`engine/ci/remote-parser.ts` 中 `host`/`path` 的空串初值为 dead store（`hasScheme` 真假两分支均无条件重赋、解析失败处先 `return null`），改为带类型标注的纯声明消除，由 TS 确定赋值分析接管，运行时行为不变。
+- 修复 Log 提交悬浮浮层「行→浮层→空白」后卡死不消失：`commitTipEl.mouseleave` 未复位 `overCtRow`，致 `scheduleHideCommit` 的 `!overCtRow && !overCt` 守卫恒不成立；在 `mouseleave` 一并复位 `overCtRow` 修复。
+- 修复 `capBody` 截断劈开 Unicode 代理对：`String.prototype.slice(0, BODY_CAP)` 按 UTF-16 码元计数，2000 边界落在 emoji 代理对中间会留下孤立高代理位（渲染为 `�`）；改用 `Array.from(t).slice(0, BODY_CAP).join('')` 按码点截断。
 
 ## [0.0.6] - 2026-06-30 — 首个 MVP 正式版
 
@@ -83,4 +90,6 @@
 - 目录 / folder diff（虚拟文档）、Submodules 管理。
 - M5 AI Agent（5 个接缝已预埋 Null 实现，本版未启动）。
 
+[0.0.9-rc.2]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.9-rc.2
+[0.0.9-rc.1]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.9-rc.1
 [0.0.6]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.6

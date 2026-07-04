@@ -3,7 +3,7 @@
 	"displayName": "Hyper Git - Agentic Git",
 	"icon": "media/icon.png",
 	"description": "Hyper Git brings IntelliJ IDEA's powerful Git & Commit modules to VS Code, enhanced with AI-powered autonomous agents for intelligent repository management. Experience Git in a higher dimension.",
-	"version": "0.0.8",
+	"version": "0.0.9-rc.2",
 	"publisher": "ThreeFish-AI",
 	"license": "MIT",
 	"preview": true,
