@@ -160,19 +160,28 @@ function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').repla
 const ICO_PERSON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 1.5c-2.5 0-6 1.25-6 3.5V14h12v-1c0-2.25-3.5-3.5-6-3.5z"/></svg>';
 const ICO_GH = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 .2a8 8 0 0 0-2.53 15.6c.4.07.55-.17.55-.38l-.01-1.34c-2.23.49-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.83-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.22 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.52.56.83 1.28.83 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.2c0 .21.15.46.55.38A8 8 0 0 0 8 .2z"/></svg>';
 function stat(s) {
+  // 对齐官方 GRAPH：完整文字 "N files changed, X insertions(+), Y deletions(-)"，逗号分隔；
+  // 绿/红着色覆盖「数字 + insertions(+) / deletions(-)」整段。
   const parts = ['<span class="files">' + s.files + (s.files === 1 ? ' file' : ' files') + ' changed</span>'];
-  if (s.insertions > 0) parts.push('<span class="ins">+' + s.insertions + '</span>');
-  if (s.deletions > 0) parts.push('<span class="del">-' + s.deletions + '</span>');
-  return parts.join('');
+  if (s.insertions > 0) parts.push('<span class="ins">' + s.insertions + (s.insertions === 1 ? ' insertion(+)' : ' insertions(+)') + '</span>');
+  if (s.deletions > 0) parts.push('<span class="del">' + s.deletions + (s.deletions === 1 ? ' deletion(-)' : ' deletions(-)') + '</span>');
+  return parts.join(', ');
 }
 function render(vm) {
   if (!vm) { detailEl.classList.remove('show'); emptyEl.style.display = 'block'; emptyEl.textContent = 'Commit details unavailable.'; return; }
   emptyEl.style.display = 'none';
-  const time = esc(vm.authorDateRel) + (vm.authorDateAbs ? '' : '');
+  // 头部对齐官方 GRAPH：作者名独占一行；第二行 = 邮箱 · 相对时间 (绝对时间)，与时间同色。
+  // 相对时间与括号绝对时间之间仅空格（无 ·），绝对时间无秒。
+  const timeBits = [];
+  if (vm.authorDateRel) timeBits.push(esc(vm.authorDateRel));
+  if (vm.authorDateAbs) timeBits.push('(' + esc(vm.authorDateAbs) + ')');
+  const meta = [];
+  if (vm.authorEmail) meta.push(esc(vm.authorEmail));
+  if (timeBits.length) meta.push(timeBits.join(' '));
   const p = [];
   p.push('<div class="cd-head"><span class="cd-avatar">' + ICO_PERSON + '</span><span class="cd-who">'
-    + '<span class="cd-author">' + esc(vm.authorName) + (vm.authorEmail ? ' <span class="cd-time">&lt;' + esc(vm.authorEmail) + '&gt;</span>' : '') + '</span>'
-    + '<span class="cd-time" title="' + esc(vm.authorDateAbs) + '">' + esc(vm.authorDateRel) + (vm.authorDateAbs ? ' · ' + esc(vm.authorDateAbs) : '') + '</span>'
+    + '<span class="cd-author">' + esc(vm.authorName) + '</span>'
+    + (meta.length ? '<span class="cd-time">' + meta.join(' · ') + '</span>' : '')
     + '</span></div>');
   p.push('<div class="cd-msg"><div class="cd-subj">' + esc(vm.subject) + '</div>' + (vm.body ? '<div class="cd-body">' + esc(vm.body) + '</div>' : '') + '</div>');
   p.push('<div class="cd-stat">' + stat(vm.stat) + '</div>');
