@@ -216,7 +216,8 @@ export type LogHostToWebviewMessage =
 	| { readonly type: 'log/busy'; readonly payload: { readonly busy: boolean } }
 	| { readonly type: 'log/error'; readonly payload: { readonly message: string } }
 	| { readonly type: 'log/ciMeta'; readonly payload: CiMetaVM }
-	| { readonly type: 'log/ciData'; readonly payload: { readonly map: Readonly<Record<string, CiStatusVM>> } };
+	| { readonly type: 'log/ciData'; readonly payload: { readonly map: Readonly<Record<string, CiStatusVM>> } }
+	| { readonly type: 'log/commitDetail'; readonly payload: { readonly vm: CommitDetailVM | null } };
 
 /** Webview → Host（Log Graph）。 */
 export type LogWebviewToHostMessage =

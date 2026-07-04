@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import type { GitRepositoryService } from '../git-repository-service';
-import { parseNameStatus, statusLabel } from '../../engine/log/commit-files';
+import { parseNameStatus, statusLabel, parseShortStat } from '../../engine/log/commit-files';
 import { applyClientFilters, toClientFilter, type LogFilter } from '../../engine/log/log-filter';
 import { DEFAULT_LANE_PALETTE } from '../../engine/log/graph-color';
 import { computeGraphLayout, maxLanes } from '../../engine/log/graph-layout';
@@ -9,11 +9,13 @@ import { getBaseStyles } from './shared-styles';
 import { parseLogLines } from '../../engine/log/log-line';
 import { buildLogArgs, type LogScope } from '../../engine/log/log-query';
 import { buildFileTree } from '../../engine/tree/file-tree';
+import { formatRelative, formatAbsolute } from '../../engine/log/format-time';
+import { commitWebUrl } from '../../engine/ci/remote-parser';
 import type { GitHubCiService } from '../ci/github-ci-service';
-import { CommitDetailPanel } from './commit-detail-panel';
 import type {
 	CiMetaVM,
 	CiStatusVM,
+	CommitDetailVM,
 	GraphRowVM,
 	LogCommitFileItem,
 	LogGraphState,
@@ -188,8 +190,51 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				void this.handleCiSignIn();
 				break;
 			case 'log/showCommitDetail':
-				void CommitDetailPanel.show(this.service, this.ciService, msg.payload.hash);
+				void this.showCommitDetail(msg.payload.hash);
 				break;
+		}
+	}
+
+	/** 组装提交详情 VM（基础字段 + 预格式化时间 + 变更统计 + GitHub URL），下发给 webview 浮层渲染。 */
+	private async showCommitDetail(hash: string): Promise<void> {
+		if (!this.service.repo) {
+			this.post({ type: 'log/commitDetail', payload: { vm: null } });
+			return;
+		}
+		try {
+			// %x00 分隔，与 LOG_GRAPH_FORMAT 同范式；单条 git show 开销极小。
+			const fmt = '%H%x00%s%x00%b%x00%an%x00%ae%x00%aI%x00%cn%x00%cI%x00%P';
+			const raw = await this.service.execGit(['show', '-s', `--format=${fmt}`, hash]);
+			const f = raw.split('\0');
+			if (f.length < 9 || !f[0]) {
+				this.post({ type: 'log/commitDetail', payload: { vm: null } });
+				return;
+			}
+			const [fullHash, subject, body, authorName, authorEmail, authorDate, committerName, committerDate, parentsRaw] = f;
+			const stat = parseShortStat(
+				await this.service.execGit(['diff-tree', '--no-commit-id', '--shortstat', '-r', '--root', hash]),
+			);
+			const remote = this.ciService.getGitHubRemote();
+			const cappedBody = body.length > 4000 ? `${body.slice(0, 4000)}…` : body.replace(/\s+$/, '');
+			const vm: CommitDetailVM = {
+				hash: fullHash,
+				shortHash: fullHash.slice(0, 7),
+				subject,
+				body: cappedBody,
+				authorName,
+				authorEmail,
+				authorDate,
+				authorDateRel: formatRelative(authorDate),
+				authorDateAbs: formatAbsolute(authorDate),
+				committerName,
+				committerDate,
+				parents: parentsRaw ? parentsRaw.trim().split(/\s+/).filter(Boolean) : [],
+				stat,
+				githubUrl: remote ? commitWebUrl(remote, fullHash) : undefined,
+			};
+			this.post({ type: 'log/commitDetail', payload: { vm } });
+		} catch {
+			this.post({ type: 'log/commitDetail', payload: { vm: null } });
 		}
 	}
 
@@ -493,6 +538,29 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #ci-tip .g-failure { color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground, #f85149)); }
 #ci-tip .g-pending { color: var(--vscode-testing-iconQueued, var(--vscode-editorWarning-foreground, #d29922)); }
 #ci-tip .g-skipped, #ci-tip .g-unknown { color: var(--vscode-descriptionForeground, #8b949e); }
+/* ── 提交详情悬浮卡（cursor-anchored；editorHoverWidget 语义令牌，与 CI 浮层同款视觉语言）── */
+#commit-tip { position: fixed; z-index: 50; display: none; max-width: 480px; min-width: 300px; max-height: 80vh; overflow: hidden; background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background)); color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, rgba(128,128,128,.3))); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.4); font-size: 12px; }
+#commit-tip.show { display: flex; flex-direction: column; }
+#commit-tip .ct-scroll { overflow-y: auto; max-height: 80vh; padding: 12px 14px; }
+#commit-tip .ct-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+#commit-tip .ct-avatar { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; background: var(--vscode-badge-background, rgba(128,128,128,.25)); color: var(--vscode-badge-foreground, var(--vscode-foreground)); display: inline-flex; align-items: center; justify-content: center; }
+#commit-tip .ct-avatar svg { width: 16px; height: 16px; opacity: 0.85; }
+#commit-tip .ct-who { display: flex; flex-direction: column; min-width: 0; }
+#commit-tip .ct-author { font-weight: 600; font-size: 13px; }
+#commit-tip .ct-time { font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 1px; }
+#commit-tip .ct-msg { margin-bottom: 10px; }
+#commit-tip .ct-subj { font-size: 13px; font-weight: 600; line-height: 1.4; word-break: break-word; }
+#commit-tip .ct-body { margin-top: 6px; white-space: pre-wrap; word-break: break-word; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; line-height: 1.5; opacity: 0.9; }
+#commit-tip .ct-stat { display: flex; gap: 12px; padding: 8px 0; border-top: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); border-bottom: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); font-size: 12px; font-variant-numeric: tabular-nums; }
+#commit-tip .ct-stat .files { color: var(--vscode-descriptionForeground); }
+#commit-tip .ct-stat .ins { color: var(--vscode-gitDecoration-addedResourceForeground, #3fb950); }
+#commit-tip .ct-stat .del { color: var(--vscode-gitDecoration-deletedResourceForeground, #f14c4c); }
+#commit-tip .ct-foot { display: flex; align-items: center; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
+#commit-tip .ct-sha { font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; color: var(--vscode-descriptionForeground); word-break: break-all; }
+#commit-tip .ct-gh { color: var(--vscode-textLink-foreground); cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+#commit-tip .ct-gh:hover { text-decoration: underline; }
+#commit-tip .ct-gh:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; border-radius: 2px; }
+#commit-tip .ct-gh svg { width: 13px; height: 13px; }
 /* ── 变更文件目录树（详情面板 Group By Directory 形态）── */
 #details .dh .seg { flex: 0 0 auto; }
 #details .tree-dir { display: flex; align-items: center; gap: 6px; padding: 2px 10px; font-size: 12px; cursor: pointer; user-select: none; }
@@ -519,6 +587,7 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 </div>
 <div id="details"><div class="dh" id="details-head"><span id="details-title"></span><span class="seg" role="group" aria-label="Changed files view mode"><button id="dmode-flat" class="active" aria-pressed="true" title="Flat list">List</button><button id="dmode-tree" aria-pressed="false" title="Group by directory">Tree</button></span><button class="dh-close" id="details-close" title="Close" aria-label="Close details">×</button></div><div id="details-list"></div></div>
 <div id="ci-tip" role="dialog" aria-label="CI check details"></div>
+<div id="commit-tip" role="tooltip" aria-label="Commit details"></div>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 const LANE_FALLBACK = ${laneFallback};
@@ -574,7 +643,8 @@ const detailsTitleEl = document.getElementById('details-title');
 const detailsCloseEl = document.getElementById('details-close');
 const dmodeFlatEl = document.getElementById('dmode-flat');
 const dmodeTreeEl = document.getElementById('dmode-tree');
-let ctHash = null, ctShowT = null; // 悬停详情：已请求的 hash + 防抖计时器（面板在编辑器区，见 scheduleShowCommit）。
+const commitTipEl = document.getElementById('commit-tip');
+let ctHash = null, ctShowT = null, ctHideT = null; // 悬停详情：当前 hash + 显示/隐藏防抖计时器。
 let curDetailHash = null, curDetailFiles = [], curDetailTree = [];
 const errorEl = document.getElementById('error');
 const errorMsgEl = document.getElementById('error-msg');
@@ -587,6 +657,9 @@ const ICO_BRANCH = '<svg class="chip-ico" viewBox="0 0 16 16" width="11" height=
 const ICO_CLOUD = '<svg class="chip-ico" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M4.7 6.04A3.5 3.5 0 0 1 11.4 6.5h.35a2.75 2.75 0 0 1 .25 5.49l-.13.01H4.5a3 3 0 0 1-.3-5.96zM8 5a2.5 2.5 0 0 0-2.45 2.01l-.1.5-.5.06A2 2 0 0 0 4.5 11.5h7.3a1.75 1.75 0 0 0 .05-3.5l-.1-.01h-1.02l-.12-.63A2.5 2.5 0 0 0 8 5z"/></svg>';
 const ICO_TAG = '<svg class="chip-ico" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M2 2.75A.75.75 0 0 1 2.75 2h5.19c.33 0 .65.13.88.37l4.81 4.8a1.25 1.25 0 0 1 0 1.77l-4.69 4.69a1.25 1.25 0 0 1-1.77 0l-4.8-4.81A1.25 1.25 0 0 1 2 7.94V2.75zm1.5.75v4.44l4.69 4.69 4.44-4.44L7.94 3.5H3.5zm1.75 1a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5z"/></svg>';
 function chipIcon(kind) { return kind === 'remoteBranch' ? ICO_CLOUD : kind === 'tag' ? ICO_TAG : ICO_BRANCH; }
+// 提交详情浮层图标（内联 SVG，fill=currentColor 继承前景色）。
+const ICO_PERSON = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 1.5c-2.5 0-6 1.25-6 3.5V14h12v-1c0-2.25-3.5-3.5-6-3.5z"/></svg>';
+const ICO_GH = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M8 .2a8 8 0 0 0-2.53 15.6c.4.07.55-.17.55-.38l-.01-1.34c-2.23.49-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.83-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.22 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.52.56.83 1.28.83 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.2c0 .21.15.46.55.38A8 8 0 0 0 8 .2z"/></svg>';
 function laneColor(i) { return PALETTE[((i % PALETTE.length) + PALETTE.length) % PALETTE.length]; }
 // 实心胶囊前景色：按底色相对亮度择深/白字（WCAG 阈值 0.6），保证任意泳道底色上文字均可读。解析失败回落白字。
 function onColor(bg) {
@@ -829,22 +902,39 @@ function buildTip(ci) {
   ciTipEl.innerHTML = parts.join('');
 }
 // 浮层定位（CI / 提交详情共用）：webview 是沙箱 iframe，position:fixed 相对 iframe 自身视口，
-// 越界坐标（如 innerWidth+8）会被 iframe 裁剪不可见。故一律锚在触发元素右侧，越右翻左，仍越界则收进视口。
-function positionFloat(el, rect) {
+// 越界坐标会被 iframe 裁剪不可见。所有浮层统一「锚在鼠标处」——跟随光标、贴近用户视觉焦点；
+// 边沿自动翻转（右→左、下→上），并钳制在视口内。
+let cursorX = 0, cursorY = 0;
+document.addEventListener('mousemove', function (e) { cursorX = e.clientX; cursorY = e.clientY; }, { passive: true });
+function positionAtCursor(el) {
+  el.style.display = 'flex';
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight, pad = 6, gap = 14;
+  // 横向：默认在光标右侧；越右沿翻到左侧；仍越界则收进视口。
+  let left = cursorX + gap;
+  if (left + w > vw - pad) left = cursorX - gap - w;
+  if (left < pad) left = Math.max(pad, vw - pad - w);
+  // 纵向：默认在光标下方；越下沿翻到上方；钳制视口。
+  let top = cursorY + gap;
+  if (top + h > vh - pad) top = cursorY - gap - h;
+  if (top < pad) top = pad;
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+}
+// 键盘触发（无光标坐标）：锚在目标元素右侧，越界翻转。
+function positionAtRect(el, rect) {
   el.style.display = 'flex';
   const w = el.offsetWidth, h = el.offsetHeight;
   const vw = window.innerWidth, vh = window.innerHeight, pad = 6, gap = 8;
-  // 横向：默认贴触发元素右侧；越右沿翻到左侧；仍越界则收进视口。
   let left = rect.right + gap;
   if (left + w > vw - pad) left = rect.left - gap - w;
   if (left < pad) left = Math.max(pad, vw - pad - w);
-  el.style.left = left + 'px';
-  // 纵向：与触发元素顶部对齐，超出视口下沿则上移。
   let top = rect.top;
   if (top + h > vh - pad) top = Math.max(pad, vh - pad - h);
+  el.style.left = left + 'px';
   el.style.top = top + 'px';
 }
-function positionTip(rect) { positionFloat(ciTipEl, rect); }
+function positionTip() { positionAtCursor(ciTipEl); }
 function scheduleShow(hash, iconEl) {
   clearTimeout(tipHideT);
   if (tipHash === hash && ciTipEl.classList.contains('show')) return;
@@ -854,7 +944,7 @@ function scheduleShow(hash, iconEl) {
     if (!ci || ci.state === 'unknown') return;
     tipHash = hash;
     buildTip(ci);
-    positionTip(iconEl.getBoundingClientRect());
+    positionTip();
     ciTipEl.classList.add('show');
   }, 350);
 }
@@ -919,7 +1009,7 @@ rowsEl.addEventListener('keydown', function (e) {
     if (!ci || ci.state === 'unknown') return;
     tipHash = icon.getAttribute('data-ci');
     buildTip(ci);
-    positionTip(icon.getBoundingClientRect());
+    positionTip();
     ciTipEl.classList.add('show');
     const first = ciTipEl.querySelector('[data-url]'); if (first) first.focus();
   }
@@ -952,7 +1042,7 @@ document.getElementById('scope-checkpointer').addEventListener('click', function
 detailsCloseEl.addEventListener('click', function () { detailsEl.classList.remove('show'); });
 retryBtnEl.addEventListener('click', function () { errorEl.style.display = 'none'; spinnerEl.style.display = 'block'; vscode.postMessage({ type: 'log/retry' }); });
 viewport.addEventListener('scroll', scheduleRender, { passive: true });
-viewport.addEventListener('scroll', function () { if (tipHash) hideTip(); }, { passive: true });
+viewport.addEventListener('scroll', function () { if (tipHash) hideTip(); if (ctHash) hideCommitTip(); }, { passive: true });
 viewport.addEventListener('keydown', function (e) {
   if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-1); }
@@ -960,10 +1050,17 @@ viewport.addEventListener('keydown', function (e) {
   else if (e.key === 'End') { e.preventDefault(); if (model.rows.length) selectRow(model.rows[model.rows.length - 1].hash); }
   else if (e.key === 'Enter') { e.preventDefault(); if (selectedHash) vscode.postMessage({ type: 'log/commitAction', payload: { op: 'menu', hash: selectedHash } }); }
   else if (e.key === 'i' || e.key === 'I') {
-    // 键盘可达：对选中提交在右侧编辑器区打开详情面板（与悬停同一入口）。
+    // 键盘可达（hover-vs-tap 保险）：对选中提交打开详情浮层；无光标，锚在选中行 rect。
     e.preventDefault();
-    if (selectedHash) { ctHash = selectedHash; vscode.postMessage({ type: 'log/showCommitDetail', payload: { hash: selectedHash } }); }
+    if (selectedHash) {
+      const el = rowsEl.querySelector('.row.selected');
+      ctHash = selectedHash;
+      vscode.postMessage({ type: 'log/showCommitDetail', payload: { hash: selectedHash } });
+      // 回包后由 message 处理器渲染；此处仅在有选中行时预锚定（光标未知 → 用 rect）。
+      el && (window.__ctKeybRect = el.getBoundingClientRect());
+    }
   }
+  else if (e.key === 'Escape') { hideCommitTip(); }
 });
 detailsList.addEventListener('click', function (e) {
   const d = e.target.closest('.tree-dir');
@@ -1021,19 +1118,60 @@ function renderDetails(hash, files, tree) {
   detailsEl.classList.add('show');
 }
 
-// ── 提交详情（悬停 → 请求 host 在右侧编辑器区打开详情面板，对齐官方 Source Control Graph）──
-// 400ms 防抖：仅在悬停稳定后发消息，避免快速划过时逐行请求；面板单例复用，host 侧只换数据不重开。
+// ── 提交详情悬浮卡（cursor-anchored hover tooltip，对齐官方 Source Control Graph 的观感）──
+// webview 是沙箱 iframe，浮层无法溢出到编辑器区像素（这是 VS Code 扩展的硬限制，GitLens 亦然），
+// 故贴近「光标处」呈现：mousemove 跟踪光标 → 悬停稳定 400ms 后请 host 组装富数据 → 回包后渲染并
+// 锚在光标处（边沿自动翻转）。鼠标移到浮层上不消失（hover bridge，方便点 Open on GitHub）。
+function commitStatHtml(s) {
+  const parts = ['<span class="files">' + s.files + (s.files === 1 ? ' file' : ' files') + ' changed</span>'];
+  if (s.insertions > 0) parts.push('<span class="ins">' + s.insertions + (s.insertions === 1 ? ' insertion(+)' : ' insertions(+)') + '</span>');
+  if (s.deletions > 0) parts.push('<span class="del">' + s.deletions + (s.deletions === 1 ? ' deletion(-)' : ' deletions(-)') + '</span>');
+  return parts.join(', ');
+}
+function renderCommitTip(vm) {
+  if (!vm) return;
+  const tb = [];
+  if (vm.authorDateRel) tb.push(esc(vm.authorDateRel));
+  if (vm.authorDateAbs) tb.push('(' + esc(vm.authorDateAbs) + ')');
+  const meta = [];
+  if (vm.authorEmail) meta.push(esc(vm.authorEmail));
+  if (tb.length) meta.push(tb.join(' '));
+  const gh = vm.githubUrl ? '<span class="ct-gh" role="link" tabindex="0" data-url="' + esc(vm.githubUrl) + '">' + ICO_GH + 'Open on GitHub</span>' : '';
+  commitTipEl.innerHTML = '<div class="ct-scroll">'
+    + '<div class="ct-head"><span class="ct-avatar">' + ICO_PERSON + '</span><span class="ct-who"><span class="ct-author">' + esc(vm.authorName) + '</span>' + (meta.length ? '<span class="ct-time">' + meta.join(' · ') + '</span>' : '') + '</span></div>'
+    + '<div class="ct-msg"><div class="ct-subj">' + esc(vm.subject) + '</div>' + (vm.body ? '<div class="ct-body">' + esc(vm.body) + '</div>' : '') + '</div>'
+    + '<div class="ct-stat">' + commitStatHtml(vm.stat) + '</div>'
+    + '<div class="ct-foot"><span class="ct-sha">' + esc(vm.hash) + '</span>' + gh + '</div>'
+    + '</div>';
+}
+function showCommitTipNow() {
+  positionAtCursor(commitTipEl);
+  commitTipEl.classList.add('show');
+}
+function hideCommitTip() {
+  clearTimeout(ctShowT); clearTimeout(ctHideT);
+  commitTipEl.classList.remove('show');
+  commitTipEl.style.display = 'none';
+  commitTipEl.innerHTML = '';
+  ctHash = null;
+}
 function scheduleShowCommit(hash) {
+  clearTimeout(ctHideT);
+  if (ctHash === hash && commitTipEl.classList.contains('show')) return;
   clearTimeout(ctShowT);
-  if (ctHash === hash) return; // 已请求同一提交，不重复发。
+  ctHash = hash; // 标记当前意图 hash；回包校验一致才渲染，过期响应丢弃。
   ctShowT = setTimeout(function () {
-    ctHash = hash;
     vscode.postMessage({ type: 'log/showCommitDetail', payload: { hash: hash } });
   }, 400);
 }
+function scheduleHideCommit() {
+  clearTimeout(ctShowT);
+  clearTimeout(ctHideT);
+  ctHideT = setTimeout(function () { hideCommitTip(); }, 200);
+}
 rowsEl.addEventListener('mouseover', function (e) {
   const ci = e.target.closest && e.target.closest('.ci');
-  if (ci && !ci.classList.contains('ci-empty')) return; // CI 图标区归 CI 浮层，不触发详情面板。
+  if (ci && !ci.classList.contains('ci-empty')) return; // CI 图标区归 CI 浮层。
   const r = e.target.closest && e.target.closest('.row');
   if (!r) return;
   scheduleShowCommit(r.getAttribute('data-hash'));
@@ -1041,7 +1179,21 @@ rowsEl.addEventListener('mouseover', function (e) {
 rowsEl.addEventListener('mouseout', function (e) {
   const r = e.target.closest && e.target.closest('.row');
   if (!r) return;
-  clearTimeout(ctShowT); // 取消在途的延迟请求；已打开的面板保持（对齐官方：移开不关面板）。
+  const to = e.relatedTarget;
+  if (to && (commitTipEl.contains(to) || r.contains(to))) return; // 行内移动或进入浮层不隐藏。
+  scheduleHideCommit();
+});
+// hover bridge：鼠标移到浮层上时取消隐藏（方便点击 Open on GitHub），离开则隐藏。
+commitTipEl.addEventListener('mouseenter', function () { clearTimeout(ctHideT); });
+commitTipEl.addEventListener('mouseleave', scheduleHideCommit);
+commitTipEl.addEventListener('click', function (e) {
+  const t = e.target.closest('.ct-gh'); if (!t) return;
+  const u = t.getAttribute('data-url');
+  if (u) vscode.postMessage({ type: 'log/openExternal', payload: { url: u } });
+});
+commitTipEl.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' || e.key === ' ') { const t = e.target.closest('.ct-gh'); if (t) { e.preventDefault(); const u = t.getAttribute('data-url'); if (u) vscode.postMessage({ type: 'log/openExternal', payload: { url: u } }); } }
+  if (e.key === 'Escape') { hideCommitTip(); }
 });
 
 window.addEventListener('message', function (e) {
@@ -1085,10 +1237,17 @@ window.addEventListener('message', function (e) {
     if (tipHash && (tipHash in map) && ciTipEl.classList.contains('show')) {
       requestAnimationFrame(function () {
         const el = rowsEl.querySelector('[data-ci="' + tipHash.replace(/[^a-f0-9]/gi, '') + '"]');
-        if (el) { buildTip(ciByHash[tipHash]); positionTip(el.getBoundingClientRect()); }
+        if (el) { buildTip(ciByHash[tipHash]); positionTip(); }
         else hideTip();
       });
     }
+  } else if (m.type === 'log/commitDetail') {
+    // 提交详情回包：仅当仍是当前意图 hash 才渲染（丢弃过期响应）；光标已知→锚光标，键盘→锚行 rect。
+    const vm = m.payload.vm;
+    if (!vm || vm.hash !== ctHash) return;
+    renderCommitTip(vm);
+    if (window.__ctKeybRect) { positionAtRect(commitTipEl, window.__ctKeybRect); window.__ctKeybRect = null; }
+    else showCommitTipNow();
   }
 });
 
