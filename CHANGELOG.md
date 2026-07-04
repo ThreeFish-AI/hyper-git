@@ -4,6 +4,11 @@
 
 > 面向用户的发布说明（含完整特性叙述与安装指引）见 [`docs/releases/`](./docs/releases/README.md)。
 
+## [Unreleased]
+
+### Changed
+- **侧边栏视图默认布局优化**：Stash / Shelf 两个次要视图默认折叠（`visibility: "collapsed"`，仅占标题栏、点击即展开），Worktrees 保持默认展开、仅以 `initialSize` 收窄；并为各视图设置初始高度权重（`initialSize`：Commit / Graph 较高、Branches 居中、次要视图紧凑），缓解视图挤占空间的体感。注：VS Code 侧边栏视图存在约 142px 硬性最小展开高度（核心硬编码、官方特性请求 [microsoft/vscode#123715](https://github.com/microsoft/vscode/issues/123715) 已 not planned），**无法经扩展解除**；上述默认仅对**新安装**或执行「View: Reset View Locations」后的布局生效。详见 [issue #12](./docs/.agents/issue.md)。
+
 ## [0.0.11] - 2026-07-04 — 首个正式版（承载 0.0.10 内容）· 发布渠道收敛 Marketplace
 
 首个 VS Code Marketplace **正式发布**版本，承载 0.0.10 预发布通道（rc.1 / rc.2）已验证的全部内容——提交图更名 **Graph** 并对齐官方 Source Control GRAPH、悬浮浮层 iframe 裁剪修复、未提交角标承载迁移、README 真实性校准与中英双语；并将发布渠道收敛为 **VS Code Marketplace 单市场**。`0.0.10` 版位已被预发布通道占用，正式版按官方规则顺延至 `0.0.11`。完整用户视角叙述见 [Release Note v0.0.11](./docs/releases/v0.0.11.md)。

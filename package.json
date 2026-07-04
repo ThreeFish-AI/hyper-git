@@ -62,33 +62,39 @@
 					"id": "hyperGit.commit",
 					"name": "Commit",
 					"type": "webview",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 3
 				},
 				{
 					"id": "hyperGit.log",
 					"name": "Graph",
 					"type": "webview",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 3
 				},
 				{
 					"id": "hyperGit.branches",
 					"name": "Branches",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 2
 				},
 				{
 					"id": "hyperGit.stash",
 					"name": "Stash",
-					"visibility": "visible"
+					"visibility": "collapsed",
+					"initialSize": 1
 				},
 				{
 					"id": "hyperGit.shelf",
 					"name": "Shelf",
-					"visibility": "visible"
+					"visibility": "collapsed",
+					"initialSize": 1
 				},
 				{
 					"id": "hyperGit.worktrees",
 					"name": "Worktrees",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 1
 				},
 				{
 					"id": "hyperGit.changesBadge",
