@@ -6,8 +6,28 @@
 
 ## [Unreleased]
 
+## [0.0.12] - 2026-07-04 — 提交详情光标跟随悬浮卡 · Tooltip 交互修复 · 布局优化 · 依赖升级基线
+
+在 v0.0.11 基础上，将 Graph 提交详情悬浮卡重做为**随光标浮现、逐项对齐 VS Code 官方 Source Control GRAPH** 的形态（其间曾尝试迁移至右侧编辑器区面板，最终撤回、改回光标跟随浮层），并配套修复 CI / 提交两类 Tooltip 的定位、互斥、键盘触发与引用胶囊截断等一系列交互回归；同时优化侧边栏视图默认布局，并合入 TypeScript 6 / vitest 4 / vite 8 等依赖升级基线。完整用户视角叙述见 [Release Note v0.0.12](./docs/releases/v0.0.12.md)。
+
 ### Changed
-- **侧边栏视图默认布局优化**：Stash / Shelf 两个次要视图默认折叠（`visibility: "collapsed"`，仅占标题栏、点击即展开），Worktrees 保持默认展开、仅以 `initialSize` 收窄；并为各视图设置初始高度权重（`initialSize`：Commit / Graph 较高、Branches 居中、次要视图紧凑），缓解视图挤占空间的体感。注：VS Code 侧边栏视图存在约 142px 硬性最小展开高度（核心硬编码、官方特性请求 [microsoft/vscode#123715](https://github.com/microsoft/vscode/issues/123715) 已 not planned），**无法经扩展解除**；上述默认仅对**新安装**或执行「View: Reset View Locations」后的布局生效。详见 [issue #12](./docs/.agents/issue.md)。
+- **Graph 提交详情改为「光标跟随 hover 悬浮卡」并逐项对齐官方**：撤销中途「提交详情迁移至右侧编辑器区 WebviewPanel」的方案，改为随光标浮现的 `#commit-tip` 悬浮卡（采用 `editorHoverWidget` 语义令牌、与 CI 状态浮层同款视觉语言）；内容逐项对齐官方 Source Control GRAPH——变更文件 diffstat、作者 / 提交者邮箱、作者 / 提交时间（绝对 + 相对）、所在 branches / tags / remotes 引用胶囊与 Committer 行。新增 engine 纯函数 [`format-time`](./src/engine/log/format-time.ts)（绝对 + 相对时间格式化）作单一事实源，并扩展 [`commit-files`](./src/engine/log/commit-files.ts) diffstat 解析与 [`protocol`](./src/shared/protocol.ts) 提交详情载荷。(#65, #69)
+- **侧边栏视图默认布局优化**：Stash / Shelf 两个次要视图默认折叠（`visibility: "collapsed"`，仅占标题栏、点击即展开），Worktrees 保持默认展开、仅以 `initialSize` 收窄；并为各视图设置初始高度权重（`initialSize`：Commit / Graph 较高、Branches 居中、次要视图紧凑），缓解视图挤占空间的体感。注：VS Code 侧边栏视图存在约 142px 硬性最小展开高度（核心硬编码、官方特性请求 [microsoft/vscode#123715](https://github.com/microsoft/vscode/issues/123715) 已 not planned），**无法经扩展解除**；上述默认仅对**新安装**或执行「View: Reset View Locations」后的布局生效。详见 [issue #12](./docs/.agents/issue.md)。(#64)
+
+### Fixed
+- **CI 与提交详情 Tooltip 定位更贴近光标**：浮层与光标间距由 14 收窄至 8，并对纵向翻转做视口钳制，避免浮层超出可视区或与光标脱节。(#77)
+- **CI 与提交详情 Tooltip 互斥 + 浮层内引用胶囊完整不截断**：两类浮层不再同时显现互相遮挡；提交悬浮卡内的 branches / tags / remotes 引用胶囊改为完整显示、不再被省略号截断。(#76)
+- **CI 状态 Tooltip 键盘触发丢失**：`positionTip` 改为 rect / cursor 双模式定位，键盘（`i` 键）触发时以行 rect 锚定，恢复鼠标之外的可访问触发路径。(#74)
+- **恢复提交 Tooltip 丢失的 branches / tags / remotes 胶囊与 Committer 行**：修复重做过程中的回归，提交悬浮卡重新完整呈现引用胶囊与（与作者不同时的）提交者行。(#74)
+
+### Build
+- **TypeScript `5.9` → `6.0.3` 升级并迁移 tsconfig 模块解析策略**。(#67)
+- **测试与构建工具链升级**：`vitest 2` → `4.1.9`、新增显式 `vite ^8.1.3`、`typescript-eslint 8.39` → `8.62.1`，并重生锁文件。(#66)
+- **其余开发依赖升级**：`@stylistic/eslint-plugin 2` → `5.10.0`、`@types/node 26.0.1` → `26.1.0`、`prettier 3.9.3` → `3.9.4`。(#55)
+- **依赖治理**：`actions/checkout 4` → `7` (#54)，并将 dependabot `target-branch` 锚定至 `feature/1.x.x`、4 项依赖升级改道版本演进分支。(#75)
+
+### Docs
+- **文档口径同步为 VS Code Marketplace 单市场**：移除文档中残留的 OpenVSX 记述，与 v0.0.11 起的单市场发布决策对齐。(#63)
 
 ## [0.0.11] - 2026-07-04 — 首个正式版（承载 0.0.10 内容）· 发布渠道收敛 Marketplace
 
