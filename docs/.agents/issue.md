@@ -86,4 +86,12 @@
 - **后续防范**：① 需要「面板未打开也持续显示」的活动栏计数角标，**必须**承载于 `createTreeView` 建立的 TreeView（可用 `when:false` 隐藏视图专职承载），**不可**依赖 `WebviewView.badge`——其 resolve 前不显示是 VS Code 已知限制而非本仓 bug；这与 #8「`.badge` TreeView/WebviewView 均支持」并行：「支持置 badge」≠「未 resolve 也上屏」。② 容器角标为**各视图 badge 之和**，全仓须保证**唯一承载者**，迁移承载时务必删除旧承载，否则重复计数。③ 计数与文件列表去重须共用单一事实源（`toRelKey`），避免「列表条目数 ≠ 角标数」漂移。④ `when:false` 承载视图的实机角标渲染需在 EDH 回归确认（跨 VS Code 版本聚合行为），失败则回退为 `visibility:collapsed` 的空视图。
 - **同类问题影响**：所有以 `WebviewView.badge` 承载活动栏/视图角标的自定义视图容器扩展；凡角标承载迁移未清理旧承载导致的重复计数；以及把「支持 badge 属性」误判为「隐藏态也能显示 badge」的时序类误区。
 
+## #11 VS Code Marketplace 预发布 publish 失败（VSIX 未以 `--pre-release` 打包）
+
+- **表因**：以 rc tag（`v0.0.10-rc.1`）触发发布时，`publish` job 的「发布到 VS Code Marketplace」步骤报错 `Cannot use '--pre-release' flag with a package that was not packaged as pre-release. Please package it using the '--pre-release' flag and publish again.`，job 失败；其后的 OpenVSX 步骤（虽 `continue-on-error`）因前序步骤失败被 skipped，致三渠道仅 `github-release` 成功、Marketplace/OpenVSX 均未发出。
+- **根因**：`package` job 以 `vsce package --no-yarn`（**不带** `--pre-release`）打出「正式版」VSIX 作为 artifact；`publish` job 却对 rc tag 用 `vsce publish --packagePath *.vsix --pre-release`。vsce 强约束——以 `--pre-release` 发布的 VSIX 必须在**打包时**即带 `--pre-release`（预发布标志写入 VSIX manifest），否则拒绝发布。打包端与发布端的 `--pre-release` 判定不对称即致此错。历史 rc（0.0.9-rc.*）从未真正发到市场（Marketplace 步骤因缺 `VSCE_PAT`/变量被跳过），故该缺陷此前从未被触发暴露。
+- **处理方式**：`package` job 打包步骤改为与 publish/OpenVSX 同款 `PRE_FLAG` 判定——`GITHUB_REF_NAME` 含 `rc` 时追加 `--pre-release`，使同一枚「预发布 VSIX」贯穿 `github-release` / Marketplace / OpenVSX 三渠道（单一产物、零重复打包）。正式版 tag（无 `rc`）与分支/PR CI 仍打普通 VSIX，行为不变。
+- **后续防范**：① VS Code 预发布模型下，**打包与发布两端的 `--pre-release` 必须成对出现**；凡「先 package 成 artifact、后 publish 复用同一枚 VSIX」的流水线，预发布判定要在 package 端就落地，不能只在 publish 端加 flag。② 预发布版本号仍须纯 `major.minor.patch`（Marketplace 不接受 `-rc.N` semver 后缀），预发布语义由 `--pre-release` 标志 + tag 命名承载；`0.0.10` 作预发布后正式版须用更高版本（如 `0.0.11`），同一版本号不可既预发布又正式发布。③ OpenVSX 步骤的 `continue-on-error` 只隔离其自身失败——前序 Marketplace 步骤失败仍会使其 skipped；排障时勿因「OpenVSX 未报错」误判其已发布，须查其步骤实际状态与日志。④ Marketplace 发布链路的双凭证不可混淆：`VSCE_PAT`（Azure DevOps PAT，scope Marketplace→Manage）与 `OVSX_PAT`（open-vsx.org token）是不同服务的两个不同 token，且 Marketplace 发布还受仓库变量 `ENABLE_MARKETPLACE_PUBLISH` 门控。
+- **同类问题影响**：所有「package 出 artifact → publish 复用」且需发布预发布通道的 VS Code 扩展 CI；凡打包端与发布端 flag 判定不对称（`--pre-release`、平台化 `--target` 等同理）的流水线均会踩。
+
 

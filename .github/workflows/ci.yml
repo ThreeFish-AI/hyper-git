@@ -67,7 +67,13 @@ jobs:
           node-version: 22
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm dlx @vscode/vsce package --no-yarn
+      # rc tag 以 --pre-release 打包：VS Code 要求「预发布 VSIX」在打包时即标记，
+      # 否则 publish job 的 `vsce publish --pre-release` 会报「未以 pre-release 打包」而失败。
+      # 与 publish/OpenVSX 步骤同款 PRE_FLAG 判定，保证同一枚 VSIX 贯穿三渠道。
+      - name: 打包 vsix（rc tag 自动带 --pre-release）
+        run: |
+          PRE_FLAG=$([[ "${GITHUB_REF_NAME}" == *rc* ]] && echo "--pre-release" || echo "")
+          pnpm dlx @vscode/vsce package --no-yarn $PRE_FLAG
       - uses: actions/upload-artifact@v7
         with:
           name: vsix

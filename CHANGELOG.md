@@ -4,6 +4,13 @@
 
 > 面向用户的发布说明（含完整特性叙述与安装指引）见 [`docs/releases/`](./docs/releases/README.md)。
 
+## [0.0.10-rc.2] - 2026-07-04 — 修复发布流水线预发布打包缺陷
+
+rc.1 因 CI `package` job 未以 `--pre-release` 打包，致 `publish` job 的 Marketplace 步骤报「VSIX 未以 pre-release 打包」而失败（OpenVSX 步骤随之被 skipped），三渠道仅 GitHub Release 成功、Marketplace/OpenVSX 未发出。rc.2 修复该流水线缺陷后重新走通；产品内容与 rc.1 一致。完整叙述见 [Release Note v0.0.10-rc.2](./docs/releases/v0.0.10-rc.2.md)。
+
+### Fixed
+- **CI `package` job 对 rc tag 以 `--pre-release` 打包**：VS Code 要求「以预发布方式发布的 VSIX 必须在打包时即带 `--pre-release` 标记」，否则 `vsce publish --pre-release` 报 `Cannot use '--pre-release' flag with a package that was not packaged as pre-release`。`package` 步骤改为与 publish / OpenVSX 同款 `PRE_FLAG` 判定（`GITHUB_REF_NAME` 含 `rc` 即追加 `--pre-release`），令同一枚预发布 VSIX 贯穿 GitHub Release / Marketplace / OpenVSX 三渠道；正式版 tag 与分支 / PR CI 行为不变。详见 [issue #11](./docs/.agents/issue.md)。
+
 ## [0.0.10-rc.1] - 2026-07-04 — Graph 视图对齐官方 · 浮层与角标修复 · 发布链路验证
 
 面向 0.0.10 的首个预发布（RC）。在 v0.0.9 基础上将提交图视图更名为 **Graph** 并视觉对齐 VS Code 官方 Source Control GRAPH 视图，修复提交/CI 悬浮浮层被侧边栏 iframe 裁剪失效、活动栏未提交数角标更新不及时两处缺陷，并完成 README 真实性校准与中英双语重构。本版亦作为 **VS Code Marketplace 发布链路打通**的验证版（首次以官方预发布模型 `--pre-release` 发布 `0.0.10`）。完整用户视角叙述见 [Release Note v0.0.10-rc.1](./docs/releases/v0.0.10-rc.1.md)。
