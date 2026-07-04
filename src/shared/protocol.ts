@@ -133,6 +133,38 @@ export interface LogCommitFileItem {
 	readonly themeColor: string;
 }
 
+/** 提交的变更统计（对齐 `git ... --shortstat`）。 */
+export interface CommitDetailStat {
+	readonly files: number;
+	readonly insertions: number;
+	readonly deletions: number;
+}
+
+/**
+ * Commit 详情面板视图模型（编辑器区 WebviewPanel 显示，对齐官方 Source Control Graph）。
+ * host 侧一次备齐：基础字段（git show）+ 相对/绝对时间（预格式化）+ 变更统计 + 可选 GitHub 提交页 URL。
+ */
+export interface CommitDetailVM {
+	readonly hash: string;
+	readonly shortHash: string;
+	readonly subject: string;
+	readonly body: string;
+	readonly authorName: string;
+	readonly authorEmail: string;
+	/** 作者时间 ISO（%aI）。 */
+	readonly authorDate: string;
+	/** 相对时间（host 预格式化，如 "2 days ago"）。 */
+	readonly authorDateRel: string;
+	/** 绝对时间（host 预格式化，本地化）。 */
+	readonly authorDateAbs: string;
+	readonly committerName: string;
+	readonly committerDate: string;
+	readonly parents: readonly string[];
+	readonly stat: CommitDetailStat;
+	/** GitHub 提交页 URL；远程非 GitHub 时缺省，面板隐藏「Open on GitHub」。 */
+	readonly githubUrl?: string;
+}
+
 /** Host → Webview：图数据全量重置（首帧 / 刷新 / 过滤 / 范围切换）。 */
 export interface LogGraphState {
 	readonly rows: readonly GraphRowVM[];
@@ -197,4 +229,15 @@ export type LogWebviewToHostMessage =
 	| { readonly type: 'log/openFile'; readonly payload: { readonly hash: string; readonly path: string; readonly hasParent: boolean } }
 	| { readonly type: 'log/requestCi'; readonly payload: { readonly hashes: readonly string[] } }
 	| { readonly type: 'log/ciSignIn' }
-	| { readonly type: 'log/openExternal'; readonly payload: { readonly url: string } };
+	| { readonly type: 'log/openExternal'; readonly payload: { readonly url: string } }
+	/** 悬停提交行 → 请求在右侧编辑器区打开该提交的详情面板。 */
+	| { readonly type: 'log/showCommitDetail'; readonly payload: { readonly hash: string } };
+
+/** Host → Commit 详情面板（编辑器区 WebviewPanel）。 */
+export type CommitDetailHostToWebviewMessage =
+	/** 详情数据到达（null = 取数失败/坏 hash，面板显示空态）。 */
+	| { readonly type: 'commitDetail/data'; readonly payload: CommitDetailVM | null };
+
+/** Commit 详情面板 → Host。 */
+export type CommitDetailWebviewToHostMessage =
+	| { readonly type: 'commitDetail/openExternal'; readonly payload: { readonly url: string } };
