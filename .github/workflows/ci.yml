@@ -84,7 +84,7 @@ jobs:
       contents: write
     steps:
       # 检出仓库：使 body_path 指向的 Release Note 文件可见
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: vsix
