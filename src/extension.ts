@@ -99,6 +99,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const blame = new BlameAnnotationController(service);
 	const shelfService = new ShelfService(service, context.globalStorageUri.fsPath);
 	const shelfTree = new ShelfTreeProvider(shelfService);
+	// 活动栏未提交数角标承载：隐藏 TreeView（package.json 中 when:false，永不渲染）。createTreeView 于
+	// activate 即实例化视图对象，其 badge 无论面板是否打开都可靠聚合到容器图标——规避 WebviewView.badge
+	// 在 resolveWebviewView（用户至少打开过一次视图）前无法显示的已知限制（microsoft/vscode#164974、#146330）。
+	// 复用占位 EmptyTreeProvider（空树）。
+	const badgeView = vscode.window.createTreeView('hyperGit.changesBadge', {
+		treeDataProvider: new EmptyTreeProvider(),
+	});
 	const focusCommitView = (): void => {
 		void vscode.commands.executeCommand('hyperGit.commit.focus');
 	};
@@ -116,6 +123,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		shelfTree,
 		blame,
 		branchesView,
+		badgeView,
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
 		vscode.window.registerWebviewViewProvider(LogWebviewProvider.viewType, logTree),
 		vscode.window.registerTreeDataProvider('hyperGit.stash', stashTree),
@@ -142,19 +150,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		registerInlineCommitCommand(service, inlineLens),
 	);
 
-	// 活动栏角标：复用 service.getChanges() 计数（index+工作区+未跟踪去重），承载于 Commit webview；
-	// 活动栏容器图标角标 = 容器内各视图 badge 之和，故点亮 Commit 视图角标即映射到 Hyper Git 图标。
-	// 计数为 0 时清空，对齐原生 SCM 行为。
-	const updateCommitBadge = (): void => {
-		commitView.updateBadge(service.getChanges().length);
+	// 活动栏未提交数角标：承载于隐藏的 changesBadge TreeView（见其创建处说明）。
+	// 计数复用 service.getChangeCount()（index+工作区+未跟踪去重），为 0 时清空，对齐原生 SCM 行为。
+	const updateBadge = (): void => {
+		const n = service.getChangeCount();
+		badgeView.badge = n > 0 ? { value: n, tooltip: `${n} uncommitted change(s)` } : undefined;
 	};
 
-	// git 状态变化频繁（add/checkout/diff 缓存失效均触发），防抖合并避免 log/stash 高频重拉。
+	// 角标走独立快路径（~40ms 微防抖）：面板即便未打开也近实时更新，并合并 add -A/checkout 等事件风暴，
+	// 与下方重刷新（150ms）解耦，避免被 log/branches 等高频重拉阻塞。
+	let badgeTimer: ReturnType<typeof setTimeout> | undefined;
+	const scheduleBadge = (): void => {
+		clearTimeout(badgeTimer);
+		badgeTimer = setTimeout(updateBadge, 40);
+	};
+
+	// git 状态变化频繁（add/checkout/diff 缓存失效均触发），重刷新防抖合并避免 log/stash 高频重拉。
 	let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 	const refreshAll = (): void => {
+		scheduleBadge();
 		clearTimeout(refreshTimer);
 		refreshTimer = setTimeout(() => {
-			updateCommitBadge();
 			commitView.refresh();
 			logTree.refresh();
 			branchesTree.refresh();
@@ -168,7 +184,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		service.onDidChange(refreshAll),
 		registry.onDidChange(refreshAll),
 		commit.onDidChange(refreshAll),
+		// 释放期清理悬挂定时器，避免回调触及已 dispose 的视图。
+		new vscode.Disposable(() => {
+			clearTimeout(badgeTimer);
+			clearTimeout(refreshTimer);
+		}),
 	);
+	// 首帧同步：即便后续无事件也确保角标初值正确。
+	updateBadge();
 
 	// 首帧保险：若 repo 在 activate 前已就绪，GitRepositoryService 构造函数的 _onDidChange.fire()
 	// 早于任何订阅者挂载而被丢失，state.onDidChange 此后可能不再触发。主动刷新一次确保
@@ -177,7 +200,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		branchesTree.refresh();
 		logTree.refresh();
 		worktreeTree.refresh();
-		updateCommitBadge();
+		updateBadge();
 	}, 500);
 }
 

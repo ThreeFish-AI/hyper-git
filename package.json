@@ -7,7 +7,7 @@
 		"theme": "dark"
 	},
 	"description": "Hyper Git brings IntelliJ IDEA's powerful Git & Commit modules to VS Code, enhanced with AI-powered autonomous agents for intelligent repository management. Experience Git in a higher dimension.",
-	"version": "0.0.9",
+	"version": "0.0.11",
 	"publisher": "ThreeFish-AI",
 	"license": "MIT",
 	"preview": true,
@@ -62,33 +62,44 @@
 					"id": "hyperGit.commit",
 					"name": "Commit",
 					"type": "webview",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 3
 				},
 				{
 					"id": "hyperGit.log",
 					"name": "Graph",
 					"type": "webview",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 3
 				},
 				{
 					"id": "hyperGit.branches",
 					"name": "Branches",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 2
 				},
 				{
 					"id": "hyperGit.stash",
 					"name": "Stash",
-					"visibility": "visible"
+					"visibility": "collapsed",
+					"initialSize": 1
 				},
 				{
 					"id": "hyperGit.shelf",
 					"name": "Shelf",
-					"visibility": "visible"
+					"visibility": "collapsed",
+					"initialSize": 1
 				},
 				{
 					"id": "hyperGit.worktrees",
 					"name": "Worktrees",
-					"visibility": "visible"
+					"visibility": "visible",
+					"initialSize": 1
+				},
+				{
+					"id": "hyperGit.changesBadge",
+					"name": "Uncommitted",
+					"when": "false"
 				}
 			]
 		},
@@ -1226,13 +1237,13 @@
 		"@eslint/js": "^10.0.1",
 		"@stylistic/eslint-plugin": "^2.9.0",
 		"@types/node": "^26.0.1",
-		"@types/vscode": "~1.85.0",
+		"@types/vscode": "~1.125.0",
 		"@vscode/test-electron": "^2.4.1",
 		"@vscode/vsce": "^3.2.1",
 		"esbuild": "^0.28.1",
 		"eslint": "^10.6.0",
 		"mocha": "^11.0.1",
-		"prettier": "^3.9.3",
+		"prettier": "^3.9.4",
 		"rimraf": "^6.0.1",
 		"typescript": "^5.9.2",
 		"typescript-eslint": "^8.39.0",

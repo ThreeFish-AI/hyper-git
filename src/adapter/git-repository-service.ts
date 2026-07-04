@@ -1,9 +1,9 @@
 import { execFile } from 'child_process';
-import * as path from 'path';
 import * as vscode from 'vscode';
 import { logGit } from '../infra/git-console';
 import type { API, Change, Repository } from '../types/git';
 import { FileStatus } from '../engine/model';
+import { countUniqueChanges, toRelKey } from '../engine/scm-mapping/change-count';
 import { mapGitStatus } from './git-status-map';
 
 /** 适配层视图模型：一个文件的变更（携带 vscode.Uri 供 diff/操作）。 */
@@ -72,7 +72,7 @@ export class GitRepositoryService implements vscode.Disposable {
 		const root = repo.rootUri.fsPath;
 		const map = new Map<string, ChangeItem>();
 		const add = (c: Change, staged: boolean): void => {
-			const rel = path.relative(root, c.uri.fsPath).split(path.sep).join('/');
+			const rel = toRelKey(root, c.uri.fsPath);
 			if (map.has(rel)) {
 				return;
 			}
@@ -95,6 +95,23 @@ export class GitRepositoryService implements vscode.Disposable {
 			add(c, false);
 		}
 		return [...map.values()];
+	}
+
+	/**
+	 * 未提交变更计数（已暂存 + 工作区 + 未跟踪，按相对路径去重）。语义等同 `getChanges().length`，
+	 * 但不构造 ChangeItem，供活动栏角标高频刷新走轻量路径（复用同一去重事实源）。
+	 */
+	getChangeCount(): number {
+		const repo = this._repo;
+		if (!repo) {
+			return 0;
+		}
+		return countUniqueChanges(
+			repo.rootUri.fsPath,
+			repo.state.indexChanges,
+			repo.state.workingTreeChanges,
+			repo.state.untrackedChanges,
+		);
 	}
 
 	/** 构造任意 ref 版本的资源 Uri（diff 原始端，复用 vscode.git 的 git scheme）。 */
