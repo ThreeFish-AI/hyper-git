@@ -10,7 +10,7 @@ const MIN = 60_000;
 const HR = 3_600_000;
 const DAY = 86_400_000;
 
-/** ISO 时间 → 相对描述（just now / N min ago / N hr ago / N day(s) ago / 超 30 天回落本地日期）。 */
+/** ISO 时间 → 相对描述（对齐官方 GRAPH：just now / N minute(s) / N hour(s) / N day(s) ago）。 */
 export function formatRelative(iso: string, now: number = Date.now()): string {
 	const t = new Date(iso).getTime();
 	if (isNaN(t)) {
@@ -21,10 +21,12 @@ export function formatRelative(iso: string, now: number = Date.now()): string {
 		return 'just now';
 	}
 	if (diff < HR) {
-		return `${Math.floor(diff / MIN)} min ago`;
+		const n = Math.floor(diff / MIN);
+		return `${n} ${n === 1 ? 'minute' : 'minutes'} ago`;
 	}
 	if (diff < DAY) {
-		return `${Math.floor(diff / HR)} hr ago`;
+		const n = Math.floor(diff / HR);
+		return `${n} ${n === 1 ? 'hour' : 'hours'} ago`;
 	}
 	const days = Math.floor(diff / DAY);
 	if (days < 30) {
@@ -33,11 +35,11 @@ export function formatRelative(iso: string, now: number = Date.now()): string {
 	return new Date(t).toLocaleDateString();
 }
 
-/** ISO 时间 → 本地化绝对时间字符串；非法时间回空串。 */
+/** ISO 时间 → 本地化绝对时间字符串（对齐官方 GRAPH：不含秒）；非法时间回空串。 */
 export function formatAbsolute(iso: string): string {
 	const d = new Date(iso);
 	if (isNaN(d.getTime())) {
 		return '';
 	}
-	return d.toLocaleString();
+	return d.toLocaleString(undefined, { hour12: false, second: undefined });
 }

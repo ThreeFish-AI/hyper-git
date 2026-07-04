@@ -8,10 +8,10 @@ describe('formatRelative', () => {
 		expect(formatRelative('2026-07-04T11:59:40Z', now)).toBe('just now');
 	});
 	it('分钟级', () => {
-		expect(formatRelative('2026-07-04T11:45:00Z', now)).toBe('15 min ago');
+		expect(formatRelative('2026-07-04T11:45:00Z', now)).toBe('15 minutes ago');
 	});
 	it('小时级', () => {
-		expect(formatRelative('2026-07-04T09:00:00Z', now)).toBe('3 hr ago');
+		expect(formatRelative('2026-07-04T09:00:00Z', now)).toBe('3 hours ago');
 	});
 	it('单数 day', () => {
 		expect(formatRelative('2026-07-03T11:00:00Z', now)).toBe('1 day ago');
