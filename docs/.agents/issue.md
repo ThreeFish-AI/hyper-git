@@ -78,4 +78,12 @@
 - **后续防范**：① 「全分支视图」语义应映射到 `--branches --tags --remotes` 而非 `--all`——`--all` 是「全部引用」而非「全部分支」，二者差异恰是工具注入引用的污染面。② 客户端按提交 message 正则过滤是**漏的抽象**（拦不住作为祖先被带入的游离提交）；根治应在 ref 选取层（服务端参数）而非 subject 过滤层。③ **诊断 git 引用类问题时务必先 `git for-each-ref` 列出全部命名空间**——本案最初误判为「远端已删、本地未 prune」（#44 与一度推进的 prune-on-fetch 方案均为此误判），直到列出 refs 才发现真凶是 conductor-* 引用；「prune 无效」本身就是关键反证，应据其反向收敛而非强行加 prune。④ 修正「错漏逻辑」前先用 `git log --all` vs `--branches --tags --remotes` 的差集实证根因，避免再次基于关键字匹配机械式修改。
 - **同类问题影响**：所有在带「工具注入内部引用」环境（IDE/Agent checkpoint、`refs/stash`、`refs/replace/*`、`refs/notes/*` 等）下展示 `git log --all` 图的 Git GUI；凡把「范围 = 引用集合」与「范围 = message 过滤」混为一谈的实现均可能漏过游离提交。
 
+## #10 活动栏未提交数角标更新不及时（WebviewView.badge resolve 前不显示）
+
+- **表因**：用户截图反馈 Hyper Git 活动栏图标的未提交变更数角标更新不及时——有时已有变更却不显示角标，有时文件已提交/撤销角标仍不消失。
+- **根因**：角标承载于 Commit `WebviewView.badge`（#8 移除 Changes 视图后迁入）。命中 VS Code 已知限制：webview 角标在 `resolveWebviewView`（即用户至少打开过一次该视图）之前无法显示（[microsoft/vscode#164974](https://github.com/microsoft/vscode/issues/164974)、[#146330](https://github.com/microsoft/vscode/issues/146330)）；源码印证 `commit-webview.ts` 未 resolve 时 `updateBadge` 仅写入 `pendingBadge`、永不上屏，`WebviewView.onDidDispose` 亦仅在用户显式取消勾选视图时触发。故只要面板未打开/隐藏（用户在编辑器或其他活动容器工作），新变更无法点亮、提交/撤销后无法清除。#8 的「后续防范」已预警此 `pendingBadge` 首帧时序隐患，本 Issue 即其兑现。TreeView 无此限制——`createTreeView` 可在 activate 强制实例化视图对象，`.badge` 无论可见与否都可靠聚合到容器图标（容器角标 = 容器内各视图 badge 之和）。
+- **处理方式**：新增隐藏承载视图 `hyperGit.changesBadge`（package.json `when:false`，永不渲染，复用 `EmptyTreeProvider`），经 `createTreeView` 于 activate 即实例化并置 `.badge`；角标承载由 Commit WebviewView 整体迁出（移除 `updateBadge`/`pendingBadge` 死代码，杜绝容器求和 2× 计数）。新增 `engine/scm-mapping/change-count.ts`（`toRelKey`/`countUniqueChanges`）作为去重单一事实源，`GitRepositoryService.getChangeCount()` 与 `getChanges()` 共用；角标走独立 40ms 微防抖快路径（与 150ms 重刷新解耦、合并事件风暴、释放期清理定时器），首帧同步置初值。
+- **后续防范**：① 需要「面板未打开也持续显示」的活动栏计数角标，**必须**承载于 `createTreeView` 建立的 TreeView（可用 `when:false` 隐藏视图专职承载），**不可**依赖 `WebviewView.badge`——其 resolve 前不显示是 VS Code 已知限制而非本仓 bug；这与 #8「`.badge` TreeView/WebviewView 均支持」并行：「支持置 badge」≠「未 resolve 也上屏」。② 容器角标为**各视图 badge 之和**，全仓须保证**唯一承载者**，迁移承载时务必删除旧承载，否则重复计数。③ 计数与文件列表去重须共用单一事实源（`toRelKey`），避免「列表条目数 ≠ 角标数」漂移。④ `when:false` 承载视图的实机角标渲染需在 EDH 回归确认（跨 VS Code 版本聚合行为），失败则回退为 `visibility:collapsed` 的空视图。
+- **同类问题影响**：所有以 `WebviewView.badge` 承载活动栏/视图角标的自定义视图容器扩展；凡角标承载迁移未清理旧承载导致的重复计数；以及把「支持 badge 属性」误判为「隐藏态也能显示 badge」的时序类误区。
+
 
