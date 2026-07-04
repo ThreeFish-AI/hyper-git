@@ -93,7 +93,7 @@
 				{
 					"id": "hyperGit.worktrees",
 					"name": "Worktrees",
-					"visibility": "collapsed",
+					"visibility": "visible",
 					"initialSize": 1
 				},
 				{
