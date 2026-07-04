@@ -4,25 +4,29 @@
 
 > 面向用户的发布说明（含完整特性叙述与安装指引）见 [`docs/releases/`](./docs/releases/README.md)。
 
-## [0.0.9-rc.2] - 2026-07-04 — 浮层定位修复
+## [0.0.9] - 2026-07-04 — 视图整合 · UI 系统化 · 分支与 CI 增强
 
-### Fixed
-- **Log 提交/CI 浮层定位重做**：原 `positionTip`/`positionCommitTip` 把浮层锚定在所悬元素左沿并按 webview 宽度夹紧，420px 宽的浮层在 ~240px 窄侧边栏中从左沿一路铺到编辑器，既「撑满 LOG 视图」又方位怪异。改为横向固定到 `window.innerWidth + 8`（侧边栏右沿外、编辑器区内），纵向与所悬行/图标顶部对齐并按视口高度夹紧；复用 webview `position:fixed` 可越界渲染到编辑器区的特性，浮层不再压住 LOG 列表，自然悬浮于所悬行的右侧。
-
-## [0.0.9-rc.1] - 2026-07-04 — 0.0.9 候选版
+自上一个正式版 0.0.6 以来的首个公开版本，聚合 0.0.7 / 0.0.8 / 0.0.9 三轮迭代：提交/日志视图内聚重构、UI/UX 全局系统化、分支与 CI 能力增强，以及一批工程修复。完整用户视角叙述见 [Release Note v0.0.9](./docs/releases/v0.0.9.md)。
 
 ### Added
-- **变更文件目录树切换**：Commit 视图活动 Changelist 文件列表、Log 视图选中提交的变更文件列表均支持「平铺 / 按目录分组（Group by Directory）」两态切换（工具栏 List/Tree 段控），偏好按视图 `webview.setState` 记忆。目录树由纯逻辑 [`engine/tree/file-tree.buildFileTree`](./src/engine/tree/file-tree.ts) host 侧构建随 payload 下发（复用 graph-layout「host 算、webview 渲」范式，规避内联脚本无法 import engine 的 Split-Brain），叶子以 `fileIndex` 回指扁平列表；支持单目录子链折叠（对齐 VS Code `explorer.compactFolders`）；Commit 树形附目录级三态复选框。详见 [变更文件目录树](./docs/features/file-list-group-by-directory.md)。
-- **Log 提交悬浮详情**：鼠标悬停 Log 提交行以浮层展示完整信息——所在本地/远程分支、标签、HEAD、完整提交消息（subject + body）、作者 `name <email>`、（与作者不同时）提交者、作者/提交时间（绝对 + 相对）、完整 SHA；复用 CI 状态浮层范式（置于虚拟滚动容器外、与 CI 浮层互斥），`i` 键开、`Esc` 关，滚动/刷新自动消隐。`git log` 取数扩展 `%cn/%cI/%b`（body 置末，NUL/RS 分隔容多行），正文上限截断以控 payload。详见 [Log 提交悬浮详情](./docs/features/log-commit-tooltip.md)。
+- **变更文件目录树切换**：Commit 视图活动 Changelist 文件列表、Log 视图选中提交的变更文件列表均支持「平铺 / 按目录分组（Group by Directory）」两态切换（工具栏 List/Tree 段控），偏好按视图 `webview.setState` 记忆。目录树由纯逻辑 [`engine/tree/file-tree.buildFileTree`](./src/engine/tree/file-tree.ts) host 侧构建随 payload 下发（复用 graph-layout「host 算、webview 渲」范式，规避内联脚本无法 import engine 的 Split-Brain），叶子以 `fileIndex` 回指扁平列表；支持单目录子链折叠（对齐 VS Code `explorer.compactFolders`）；Commit 树形附目录级三态复选框。详见 [变更文件目录树](./docs/features/file-list-group-by-directory.md)。(#47)
+- **Log 提交悬浮详情**：鼠标悬停 Log 提交行以浮层展示完整信息——所在本地/远程分支、标签、HEAD、完整提交消息（subject + body）、作者 `name <email>`、（与作者不同时）提交者、作者/提交时间（绝对 + 相对）、完整 SHA；复用 CI 状态浮层范式（置于虚拟滚动容器外、与 CI 浮层互斥），`i` 键开、`Esc` 关，滚动/刷新自动消隐。`git log` 取数扩展 `%cn/%cI/%b`（body 置末，NUL/RS 分隔容多行），正文上限截断以控 payload。详见 [Log 提交悬浮详情](./docs/features/log-commit-tooltip.md)。(#47)
+- **清理已删远程分支入口**：Branches 视图新增「Clean up Deleted Remote Branches」命令，一键剔除远端已删除却仍残留于本地的 remote-tracking 引用，根治 Log 视图残留已删分支提交的游离泳道。(#44)
+- **远程分支右键删除**：Branches 视图远程分支支持右键删除（`git push --delete <remote> <branch>`），无需切到命令行。(#42)
 
 ### Changed
-- **Commit 视图承接全部变更管理能力**（原 Changes 视图平移）：活动 Changelist 文件单击看 Diff、右键（原生 QuickPick）执行 移动到 Changelist / 查看历史 / 暂存·撤销 Hunks / 加入 `.gitignore` / 丢弃改动；头部提供 Changelist 切换下拉 + ⋯ 管理菜单（新建 / 重命名 / 删除）。
-- **Git 操作工具栏与未提交数角标迁至 Commit 视图**：原挂在 Changes 视图标题栏的 refresh / push / pull / fetch / patch 等动作迁到 Commit 视图标题栏（去掉与 webview 内按钮重复的 commit / commitAndPush）；活动栏未提交数角标改由 Commit `WebviewView.badge` 承载，首帧未 resolve 以 `pendingBadge` 兜底。详见 [Commit 视图整合](./docs/features/commit-view-consolidation.md)。
+- **Commit 视图承接全部变更管理能力**（原 Changes 视图平移）：活动 Changelist 文件单击看 Diff、右键（原生 QuickPick）执行 移动到 Changelist / 查看历史 / 暂存·撤销 Hunks / 加入 `.gitignore` / 丢弃改动；头部提供 Changelist 切换下拉 + ⋯ 管理菜单（新建 / 重命名 / 删除）。详见 [Commit 视图整合](./docs/features/commit-view-consolidation.md)。(#47)
+- **Git 操作工具栏与未提交数角标迁至 Commit 视图**：原挂在 Changes 视图标题栏的 refresh / push / pull / fetch / patch 等动作迁到 Commit 视图标题栏（去掉与 webview 内按钮重复的 commit / commitAndPush）；活动栏未提交数角标改由 Commit `WebviewView.badge` 承载，首帧未 resolve 以 `pendingBadge` 兜底。(#47)
+- **UI/UX 全局系统化**：建立共享设计 Token 地基（spacing / radius / button，`shared-styles.ts`）并注入 Commit / Log / Merge / Rebase 四个 Webview；Log DAG 泳道色改读 `--vscode-charts-*` 主题令牌（深浅主题自适应）；命令层去冗余（标题栏 ≤5 项、同步操作下沉溢出组、危险操作归入 `9_dangerous`、新增 `hyperGit.logFilter` 聚合过滤器）；~94 项命令标题 / 配置 / viewsWelcome 统一英文并为高频与危险命令补齐 codicon；Webview 加固（空态、加载态、快捷键、ARIA）与 5 棵 TreeView 的 Markdown Tooltip 统一。(#43)
+- **品牌图标改用透明底 Emerald 绿环方案**：源图标改为透明底 + `#3FB950` 绿色圆环 + git-pull-request 字形，重生成 256×256 透明 PNG（66KB→14KB）；新增 `galleryBanner`（`#0E2A1C` 深绿、dark 主题）与 Marketplace 页头协调。(#49)
 
 ### Removed
-- **移除 CHANGES 树视图**：其展示的活动 Changelist 与 Commit 视图的 Active Changelist 完全重复（同源 `getChanges()` + `getGroups()`）；全部独有能力已零回归平移入 Commit 视图（见 Changed），视图数由 7 降为 6。
+- **移除 CHANGES 树视图**：其展示的活动 Changelist 与 Commit 视图的 Active Changelist 完全重复（同源 `getChanges()` + `getGroups()`）；全部独有能力已零回归平移入 Commit 视图（见 Changed），视图数由 7 降为 6。(#47)
 
 ### Fixed
+- **Log 提交/CI 浮层定位重做**：原 `positionTip`/`positionCommitTip` 把浮层锚定在所悬元素左沿并按 webview 宽度夹紧，420px 宽的浮层在 ~240px 窄侧边栏中从左沿一路铺到编辑器，既「撑满 LOG 视图」又方位怪异。改为横向固定到 `window.innerWidth + 8`（侧边栏右沿外、编辑器区内），纵向与所悬行/图标顶部对齐并按视口高度夹紧；复用 webview `position:fixed` 可越界渲染到编辑器区的特性，浮层不再压住 LOG 列表，自然悬浮于所悬行的右侧。(#48)
+- **Log All 范围改用 `--branches --tags --remotes`**：原 `--all` 遍历全部 refs，含宿主工具注入的 `refs/conductor-checkpoints/*` 与 `refs/conductor-archive-heads/*`，致游离提交仍可达、被画成游离泳道；改用三大标准命名空间根治污染（Checkpointer 页保留 `--all` 以见原始完整图）。(#45)
+- **CI 状态图标防闪烁与准实时刷新**：终态缓存避免重复请求以消除闪烁，轮询间隔优化实现准实时刷新，各检查项状态图标与 Tooltip 颜色按通过 / 失败 / 运行中语义对齐。(#41, #40)
 - 修复 `vsce package` 打包因 ESLint `no-useless-assignment` 阻断：`engine/ci/remote-parser.ts` 中 `host`/`path` 的空串初值为 dead store（`hasScheme` 真假两分支均无条件重赋、解析失败处先 `return null`），改为带类型标注的纯声明消除，由 TS 确定赋值分析接管，运行时行为不变。
 - 修复 Log 提交悬浮浮层「行→浮层→空白」后卡死不消失：`commitTipEl.mouseleave` 未复位 `overCtRow`，致 `scheduleHideCommit` 的 `!overCtRow && !overCt` 守卫恒不成立；在 `mouseleave` 一并复位 `overCtRow` 修复。
 - 修复 `capBody` 截断劈开 Unicode 代理对：`String.prototype.slice(0, BODY_CAP)` 按 UTF-16 码元计数，2000 边界落在 emoji 代理对中间会留下孤立高代理位（渲染为 `�`）；改用 `Array.from(t).slice(0, BODY_CAP).join('')` 按码点截断。
@@ -90,6 +94,5 @@
 - 目录 / folder diff（虚拟文档）、Submodules 管理。
 - M5 AI Agent（5 个接缝已预埋 Null 实现，本版未启动）。
 
-[0.0.9-rc.2]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.9-rc.2
-[0.0.9-rc.1]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.9-rc.1
+[0.0.9]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.9
 [0.0.6]: https://github.com/ThreeFish-AI/hyper-git/releases/tag/v0.0.6
