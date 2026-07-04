@@ -558,6 +558,9 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #commit-tip .ct-sec .ct-k { flex: 0 0 66px; color: var(--vscode-descriptionForeground); font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
 #commit-tip .ct-sec .ct-v { flex: 1 1 auto; min-width: 0; word-break: break-word; }
 #commit-tip .ct-refs { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 浮层内引用胶囊完整显示（覆盖行内 .chip 的 max-width/省略号截断）：换行不截断，空间由浮层承载。 */
+#commit-tip .chip { max-width: none; }
+#commit-tip .chip .chip-nm { overflow: visible; text-overflow: clip; white-space: normal; word-break: break-all; }
 #commit-tip .ct-dim { color: var(--vscode-descriptionForeground); }
 #commit-tip .ct-stat { display: flex; gap: 12px; padding: 8px 0; border-top: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); border-bottom: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); font-size: 12px; font-variant-numeric: tabular-nums; }
 #commit-tip .ct-stat .files { color: var(--vscode-descriptionForeground); }
@@ -1000,6 +1003,7 @@ rowsEl.addEventListener('mouseover', function (e) {
   const icon = e.target.closest && e.target.closest('.ci');
   if (!icon || icon.classList.contains('ci-empty')) return;
   overIcon = true;
+  hideCommitTip(); // 进入 CI 图标：立即隐藏提交浮层并取消在途，二者互斥。
   scheduleShow(icon.getAttribute('data-ci'), icon);
 });
 rowsEl.addEventListener('mouseout', function (e) {
@@ -1007,6 +1011,10 @@ rowsEl.addEventListener('mouseout', function (e) {
   if (!icon) return;
   overIcon = false;
   scheduleHide();
+  // 离开 CI 图标但仍在同一行内（移回行体）：切回提交详情浮层。
+  const to = e.relatedTarget;
+  const r = to && to.closest && to.closest('.row');
+  if (r && !(to.closest && to.closest('.ci'))) scheduleShowCommit(r.getAttribute('data-hash'));
 });
 rowsEl.addEventListener('keydown', function (e) {
   const icon = e.target.closest && e.target.closest('.ci');
@@ -1207,7 +1215,7 @@ function scheduleHideCommit() {
 }
 rowsEl.addEventListener('mouseover', function (e) {
   const ci = e.target.closest && e.target.closest('.ci');
-  if (ci && !ci.classList.contains('ci-empty')) return; // CI 图标区归 CI 浮层。
+  if (ci && !ci.classList.contains('ci-empty')) { hideCommitTip(); return; } // 进入 CI 图标区：即时隐藏提交浮层并取消在途，二者互斥。
   const r = e.target.closest && e.target.closest('.row');
   if (!r) return;
   scheduleShowCommit(r.getAttribute('data-hash'));
