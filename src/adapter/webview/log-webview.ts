@@ -411,10 +411,11 @@ ${getBaseStyles()}
 :root { --hg-row: 24px; --hg-lane: 14px; }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-sideBar-background); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-.toolbar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.25)); }
-.seg { display: inline-flex; border: 1px solid var(--vscode-input-border, transparent); border-radius: 3px; overflow: hidden; }
-.seg button { background: transparent; color: var(--vscode-foreground); border: none; padding: 2px 8px; font-size: 11px; cursor: pointer; opacity: 0.7; }
-.seg button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); opacity: 1; }
+.toolbar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.25)); }
+.seg { display: inline-flex; border: 1px solid var(--vscode-input-border, transparent); border-radius: 4px; overflow: hidden; }
+.seg button { background: transparent; color: var(--vscode-foreground); border: none; padding: 2px 9px; font-size: 11px; cursor: pointer; opacity: 0.65; transition: background-color .12s ease, opacity .12s ease; }
+.seg button:hover { background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground)); opacity: 0.9; }
+.seg button.active { background: var(--vscode-inputOption-activeBackground, var(--vscode-button-background)); color: var(--vscode-inputOption-activeForeground, var(--vscode-button-foreground)); opacity: 1; }
 .repo { margin-left: auto; font-size: 10px; opacity: 0.55; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #viewport { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; outline: none; }
 #spacer { position: relative; }
@@ -424,17 +425,18 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 .row.selected { background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground)); }
 .row svg.graph { flex: 0 0 auto; display: block; }
 .row svg.graph .node { stroke: var(--vscode-sideBar-background); stroke-width: 1.5; }
+.row svg.graph .node-dot { stroke: var(--vscode-sideBar-background); stroke-width: 1; }
 .row.selected svg.graph .node { stroke: var(--vscode-focusBorder); stroke-width: 2.2; }
-.subject { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
-.msg { overflow: hidden; text-overflow: ellipsis; }
-.merge { opacity: 0.6; font-size: 10px; padding: 0 2px; }
-.chips { display: inline-flex; gap: 3px; flex: 0 1 auto; min-width: 0; overflow: hidden; }
-.chip { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid transparent; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
-.chip.head { background: var(--vscode-statusBarItem-prominentBackground, var(--vscode-button-background)); color: var(--vscode-statusBarItem-prominentForeground, var(--vscode-button-foreground)); font-weight: 600; }
-.chip.localBranch { color: var(--vscode-charts-blue, #58a6ff); border-color: var(--vscode-charts-blue, #58a6ff); }
-.chip.head-target { font-weight: 700; }
-.chip.remoteBranch { color: var(--vscode-descriptionForeground, #8b949e); border-color: var(--vscode-descriptionForeground, #8b949e); }
-.chip.tag { color: var(--vscode-charts-yellow, #d29922); border-color: var(--vscode-charts-yellow, #d29922); }
+.row.selected svg.graph .node-ring { stroke: var(--vscode-focusBorder); stroke-width: 2; }
+.subject { flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; align-items: center; gap: 6px; }
+.msg { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.merge { flex: 0 0 auto; opacity: 0.6; font-size: 10px; padding: 0 2px; }
+/* 引用胶囊：实心圆角 pill + 图标前缀，底色跟随本行泳道色（内联 style 注入），类型靠图标区分（对齐官方 GRAPH 视图）。 */
+.chips { display: inline-flex; gap: 4px; flex: 0 0 auto; min-width: 0; overflow: hidden; }
+.chip { display: inline-flex; align-items: center; gap: 3px; height: 16px; line-height: 16px; font-size: 10px; font-weight: 600; padding: 0 7px 0 6px; border-radius: 8px; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.chip .chip-ico { flex: 0 0 auto; width: 11px; height: 11px; display: inline-flex; }
+.chip .chip-ico svg { width: 11px; height: 11px; display: block; }
+.chip .chip-nm { overflow: hidden; text-overflow: ellipsis; }
 .author { flex: 0 0 auto; font-size: 11px; opacity: 0.7; max-width: 110px; overflow: hidden; text-overflow: ellipsis; padding-left: 8px; }
 .date { flex: 0 0 auto; font-size: 11px; opacity: 0.55; padding-left: 8px; }
 #viewport.narrow .author, #viewport.narrow .date { display: none; }
@@ -517,7 +519,7 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
   <span class="repo" id="repo"></span>
   <button id="ci-signin" class="ci-signin" title="Sign in to GitHub to view CI status">Sign In to GitHub</button>
 </div>
-<div id="viewport" tabindex="0" role="tree" aria-label="Commit history">
+<div id="viewport" tabindex="0" role="tree" aria-label="Commit graph">
   <div id="spacer"><div id="rows"></div></div>
   <div id="empty"><div class="empty-icon" aria-hidden="true">⌥</div><div class="empty-title">No Commits</div><div class="empty-hint">No commits match the current scope or filter.</div></div>
   <div id="error" style="display:none"><div class="empty-title">Failed to Load Commits</div><div class="empty-hint" id="error-msg"></div><button class="hg-btn hg-btn--sm" id="retry-btn" style="margin-top:8px">Retry</button></div>
@@ -589,7 +591,21 @@ const errorMsgEl = document.getElementById('error-msg');
 const retryBtnEl = document.getElementById('retry-btn');
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+// 引用胶囊图标（内联 SVG，仿 codicon git-branch / cloud / tag；fill=currentColor 继承 chip 前景色）。
+// 项目未引入 codicon 字体（localResourceRoots=[]、CSP 无 font-src），故图标一律内联，与 ciGlyph 一致。
+const ICO_BRANCH = '<svg class="chip-ico" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9.5 3.25a2.25 2.25 0 1 1-3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 1 1 9.5 3.25zm-4 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0zm.75 8.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5z"/></svg>';
+const ICO_CLOUD = '<svg class="chip-ico" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M4.7 6.04A3.5 3.5 0 0 1 11.4 6.5h.35a2.75 2.75 0 0 1 .25 5.49l-.13.01H4.5a3 3 0 0 1-.3-5.96zM8 5a2.5 2.5 0 0 0-2.45 2.01l-.1.5-.5.06A2 2 0 0 0 4.5 11.5h7.3a1.75 1.75 0 0 0 .05-3.5l-.1-.01h-1.02l-.12-.63A2.5 2.5 0 0 0 8 5z"/></svg>';
+const ICO_TAG = '<svg class="chip-ico" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M2 2.75A.75.75 0 0 1 2.75 2h5.19c.33 0 .65.13.88.37l4.81 4.8a1.25 1.25 0 0 1 0 1.77l-4.69 4.69a1.25 1.25 0 0 1-1.77 0l-4.8-4.81A1.25 1.25 0 0 1 2 7.94V2.75zm1.5.75v4.44l4.69 4.69 4.44-4.44L7.94 3.5H3.5zm1.75 1a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5z"/></svg>';
+function chipIcon(kind) { return kind === 'remoteBranch' ? ICO_CLOUD : kind === 'tag' ? ICO_TAG : ICO_BRANCH; }
 function laneColor(i) { return PALETTE[((i % PALETTE.length) + PALETTE.length) % PALETTE.length]; }
+// 实心胶囊前景色：按底色相对亮度择深/白字（WCAG 阈值 0.6），保证任意泳道底色上文字均可读。解析失败回落白字。
+function onColor(bg) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(bg).trim());
+  if (!m) return '#ffffff';
+  const n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? '#1e1e1e' : '#ffffff';
+}
 function colX(c) { return c * LANE_W + LANE_W / 2; }
 /** 本行实际绘制的最右列号（node + 各边 from/to 的最大值）——行宽据此自适应，消除「全局 maxLanes 撑宽」的留白。 */
 function rowMaxCol(row) { const L = row.layout; let m = L.node.col; for (const e of L.incoming) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } for (const e of L.outgoing) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } for (const e of L.passThrough) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } return m; }
@@ -611,26 +627,50 @@ function rowSvg(row) {
   const cy = ROW_H / 2;
   const W = (rowMaxCol(row) + 1) * LANE_W + GUTTER;
   const p = ['<svg class="graph" width="', W, '" height="', ROW_H, '" viewBox="0 0 ', W, ' ', ROW_H, '" xmlns="http://www.w3.org/2000/svg">'];
-  const seg = (e) => 'stroke="' + laneColor(e.colorIdx) + '" stroke-width="1.6" stroke-linecap="round"';
-  for (const e of L.passThrough) p.push('<line x1="', colX(e.fromCol), '" y1="0" x2="', colX(e.toCol), '" y2="', ROW_H, '" ', seg(e), '/>');
-  for (const e of L.incoming) p.push('<line x1="', colX(e.fromCol), '" y1="0" x2="', colX(e.toCol), '" y2="', cy, '" ', seg(e), '/>');
+  // 泳道连线用三次贝塞尔平滑过渡（对齐官方 GRAPH 视图）：控制点取 y 中点、各自锚原 x；
+  // fromCol===toCol 时自动退化为直线（直行/贯穿/dangling 竖段无需特判）。fill="none" 为 path 必需，避免闭合填充。
+  const seg = (e) => 'fill="none" stroke="' + laneColor(e.colorIdx) + '" stroke-width="1.6" stroke-linecap="round"';
+  for (const e of L.passThrough) p.push('<path d="', edgePath(colX(e.fromCol), 0, colX(e.toCol), ROW_H), '" ', seg(e), '/>');
+  for (const e of L.incoming) p.push('<path d="', edgePath(colX(e.fromCol), 0, colX(e.toCol), cy), '" ', seg(e), '/>');
   for (const e of L.outgoing) {
     const y2 = e.kind === 'dangling' ? ROW_H * 0.78 : ROW_H;
     const op = e.kind === 'dangling' ? ' opacity="0.45"' : '';
-    p.push('<line x1="', colX(e.fromCol), '" y1="', cy, '" x2="', colX(e.toCol), '" y2="', y2, '"', op, ' ', seg(e), '/>');
+    p.push('<path d="', edgePath(colX(e.fromCol), cy, colX(e.toCol), y2), '"', op, ' ', seg(e), '/>');
   }
-  p.push('<circle class="node" cx="', colX(L.node.col), '" cy="', cy, '" r="', NODE_R, '" fill="', laneColor(L.node.colorIdx), '"/>');
+  // 节点：当前 HEAD 行绘「空心环 + 内点」（双环高亮，对齐官方），普通行绘实心点。环 fill=none 让贯穿竖线透过可见。
+  const nx = colX(L.node.col), col = laneColor(L.node.colorIdx);
+  if (isHeadRow(row)) {
+    // 环/内点不挂 .node 类：避免通用 .node { stroke: sideBar-background } 覆盖内联 lane 色 stroke（SVG presentation 属性优先级低于 CSS）。
+    p.push('<circle class="node-ring" cx="', nx, '" cy="', cy, '" r="', NODE_R + 1.5, '" fill="none" stroke="', col, '" stroke-width="1.6"/>');
+    p.push('<circle class="node-dot" cx="', nx, '" cy="', cy, '" r="', NODE_R - 1.2, '" fill="', col, '"/>');
+  } else {
+    p.push('<circle class="node" cx="', nx, '" cy="', cy, '" r="', NODE_R, '" fill="', col, '"/>');
+  }
   p.push('</svg>');
   return p.join('');
+}
+/** S 形三次贝塞尔：控制点在 y 中点、各自锚原 x。fromCol===toCol 时退化为竖直直线。 */
+function edgePath(x1, y1, x2, y2) {
+  const my = (y1 + y2) / 2;
+  return 'M' + x1 + ' ' + y1 + ' C' + x1 + ' ' + my + ' ' + x2 + ' ' + my + ' ' + x2 + ' ' + y2;
+}
+/** 当前 HEAD 行判定：chips 中有 detached HEAD（kind==='head'）或 HEAD 指向的本地分支（isHeadTarget）。 */
+function isHeadRow(row) {
+  const cs = row.chips || [];
+  for (const c of cs) { if (c.kind === 'head' || c.isHeadTarget) return true; }
+  return false;
 }
 
 function chipsHtml(row) {
   if (!row.chips || row.chips.length === 0) return '';
+  // 对齐官方 GRAPH：胶囊实心底色跟随本行泳道色（node.colorIdx），类型靠图标（分支/云/tag）区分而非颜色；
+  // 文字色按底色亮度自适应，保证可读。不加原生 title：引用明细统一由 #commit-tip 浮层展示。
+  const bg = laneColor(row.layout.node.colorIdx);
+  const fg = onColor(bg);
   const parts = ['<span class="chips">'];
   for (const c of row.chips) {
     const cls = 'chip ' + c.kind + (c.isHeadTarget ? ' head-target' : '');
-    // 不加原生 title：引用明细统一由自定义 #commit-tip 浮层展示，避免原生+自定义双重气泡。
-    parts.push('<span class="', cls, '">', esc(c.name), '</span>');
+    parts.push('<span class="', cls, '" style="background:', bg, ';color:', fg, '">', chipIcon(c.kind), '<span class="chip-nm">', esc(c.name), '</span></span>');
   }
   parts.push('</span>');
   return parts.join('');
@@ -660,9 +700,10 @@ function ciSlotHtml(row) {
 function rowHtml(row, idx) {
   const sel = row.hash === selectedHash ? ' selected' : '';
   const merge = row.isMerge ? '<span class="merge" title="Merge commit">⇠</span>' : '';
+  // 列顺序对齐官方 GRAPH：泳道图 → message → 引用胶囊 → author → date → CI。chips 作为 message 右侧后缀。
   return '<div class="row' + sel + '" data-i="' + idx + '" data-hash="' + esc(row.hash) + '" role="treeitem" aria-selected="' + (sel !== '') + '">'
     + rowSvg(row)
-    + '<span class="subject">' + chipsHtml(row) + '<span class="msg">' + esc(row.subject) + '</span>' + merge + '</span>'
+    + '<span class="subject"><span class="msg">' + esc(row.subject) + '</span>' + merge + chipsHtml(row) + '</span>'
     + '<span class="author">' + esc(row.authorName) + '</span>'
     + '<span class="date">' + fmtDate(row.authorDate) + '</span>'
     + ciSlotHtml(row)
@@ -808,17 +849,23 @@ function buildTip(ci) {
   if (ci.url) parts.push('<div class="tip-foot"><a data-url="', esc(ci.url), '" role="link" tabindex="0">View on GitHub</a></div>');
   ciTipEl.innerHTML = parts.join('');
 }
-function positionTip(rect) {
-  ciTipEl.style.display = 'flex';
-  const th = ciTipEl.offsetHeight;
-  const vh = window.innerHeight, pad = 6;
-  // 横向：浮到侧边栏右侧（编辑器区内），不再压住 LOG 列表本身；webview 的 position:fixed 可越界渲染到编辑器。
-  ciTipEl.style.left = (window.innerWidth + 8) + 'px';
-  // 纵向：与所悬图标顶部对齐，超出视口下沿则上移。
+// 浮层定位（CI / 提交详情共用）：webview 是沙箱 iframe，position:fixed 相对 iframe 自身视口，
+// 越界坐标（如 innerWidth+8）会被 iframe 裁剪不可见。故一律锚在触发元素右侧，越右翻左，仍越界则收进视口。
+function positionFloat(el, rect) {
+  el.style.display = 'flex';
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight, pad = 6, gap = 8;
+  // 横向：默认贴触发元素右侧；越右沿翻到左侧；仍越界则收进视口。
+  let left = rect.right + gap;
+  if (left + w > vw - pad) left = rect.left - gap - w;
+  if (left < pad) left = Math.max(pad, vw - pad - w);
+  el.style.left = left + 'px';
+  // 纵向：与触发元素顶部对齐，超出视口下沿则上移。
   let top = rect.top;
-  if (top + th > vh - pad) top = Math.max(pad, vh - pad - th);
-  ciTipEl.style.top = top + 'px';
+  if (top + h > vh - pad) top = Math.max(pad, vh - pad - h);
+  el.style.top = top + 'px';
 }
+function positionTip(rect) { positionFloat(ciTipEl, rect); }
 function scheduleShow(hash, iconEl) {
   clearTimeout(tipHideT);
   if (tipHash === hash && ciTipEl.classList.contains('show')) return;
@@ -1001,11 +1048,13 @@ function renderDetails(hash, files, tree) {
 function buildCommitTip(row) {
   const parts = ['<div class="ct-scroll">'];
   const refGroups = [['head', 'HEAD'], ['localBranch', 'Branches'], ['remoteBranch', 'Remotes'], ['tag', 'Tags']];
+  const tipBg = laneColor(row.layout.node.colorIdx), tipFg = onColor(tipBg);
   for (const g of refGroups) {
     const kind = g[0];
     const chips = (row.chips || []).filter(function (c) { return c.kind === kind; });
     if (chips.length === 0) continue;
-    const inner = chips.map(function (c) { return '<span class="chip ' + kind + (c.isHeadTarget ? ' head-target' : '') + '">' + esc(c.name) + '</span>'; }).join('');
+    // 浮层内胶囊与行内保持一致：实心 pill、底色跟随泳道色、图标前缀。
+    const inner = chips.map(function (c) { return '<span class="chip ' + kind + (c.isHeadTarget ? ' head-target' : '') + '" style="background:' + tipBg + ';color:' + tipFg + '">' + chipIcon(kind) + '<span class="chip-nm">' + esc(c.name) + '</span></span>'; }).join('');
     parts.push('<div class="ct-sec"><span class="ct-k">' + g[1] + '</span><span class="ct-v ct-refs">' + inner + '</span></div>');
   }
   let msg = '<div class="ct-msg"><span class="ct-subj">' + esc(row.subject) + '</span>';
@@ -1028,17 +1077,7 @@ function buildCommitTip(row) {
   parts.push('</div>');
   commitTipEl.innerHTML = parts.join('');
 }
-function positionCommitTip(rect) {
-  commitTipEl.style.display = 'flex';
-  const th = commitTipEl.offsetHeight;
-  const vh = window.innerHeight, pad = 6;
-  // 横向：浮到侧边栏右侧（编辑器区内），不再压住 LOG 列表本身；webview 的 position:fixed 可越界渲染到编辑器。
-  commitTipEl.style.left = (window.innerWidth + 8) + 'px';
-  // 纵向：与所悬行顶部对齐，超出视口下沿则上移。
-  let top = rect.top;
-  if (top + th > vh - pad) top = Math.max(pad, vh - pad - th);
-  commitTipEl.style.top = top + 'px';
-}
+function positionCommitTip(rect) { positionFloat(commitTipEl, rect); }
 function scheduleShowCommit(hash, rowEl) {
   clearTimeout(ctHideT);
   if (ctHash === hash && commitTipEl.classList.contains('show')) return;

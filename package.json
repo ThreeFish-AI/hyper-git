@@ -66,7 +66,7 @@
 				},
 				{
 					"id": "hyperGit.log",
-					"name": "Log",
+					"name": "Graph",
 					"type": "webview",
 					"visibility": "visible"
 				},
@@ -172,7 +172,7 @@
 			},
 			{
 				"command": "hyperGit.refreshLog",
-				"title": "Refresh Log",
+				"title": "Refresh Graph",
 				"category": "Hyper Git",
 				"icon": "$(refresh)"
 			},
@@ -190,7 +190,7 @@
 			},
 			{
 				"command": "hyperGit.logFilter",
-				"title": "Filter Log…",
+				"title": "Filter Graph…",
 				"category": "Hyper Git",
 				"icon": "$(filter)"
 			},
@@ -206,7 +206,7 @@
 			},
 			{
 				"command": "hyperGit.logClearFilter",
-				"title": "Clear Log Filter",
+				"title": "Clear Graph Filter",
 				"category": "Hyper Git",
 				"icon": "$(clear-all)"
 			},
@@ -1190,7 +1190,7 @@
 				"hyperGit.log.ci.enabled": {
 					"type": "boolean",
 					"default": true,
-					"markdownDescription": "Show the final CI status on each commit in the Log view (GitHub Actions + Commit Statuses). Green check = passed, red cross = failed; hover to see each check and any failure reasons. Requires a GitHub remote."
+					"markdownDescription": "Show the final CI status on each commit in the Graph view (GitHub Actions + Commit Statuses). Green check = passed, red cross = failed; hover to see each check and any failure reasons. Requires a GitHub remote."
 				},
 				"hyperGit.log.ci.remote": {
 					"type": "string",
