@@ -16,6 +16,7 @@
 
 ## 项目文档（docs/）
 - [文档中心](../docs/README.md) — 文档与调研资产总索引。
+- [README（简体中文）](../docs/i18n/zh-CN/README.md) — 根 README 的中文版本（根路径为英文版，i18n 目录沉淀中文）。
 - [Log 视图 CI 状态](../docs/features/log-ci-status.md) — 按提交显示 GitHub CI 最终状态（绿勾/红叉 + Tooltip 明细）：认证、限流、懒加载、边界与配置。
 - [Commit 视图整合](../docs/features/commit-view-consolidation.md) — 移除 CHANGES 视图，其文件操作/changelist 管理/Git 工具栏/未提交角标零回归平移入 Commit 视图。
 - [变更文件目录树](../docs/features/file-list-group-by-directory.md) — Commit / Log 文件列表「平铺 ⇄ 按目录分组」切换：host 侧 `buildFileTree` 构树下发、compact 折叠、目录三态。
@@ -31,7 +32,7 @@
 
 - `engine/` — 纯领域逻辑（零 vscode 依赖，Vitest 可测）：`model/`、`scm-mapping/`、`commit/pipeline.ts`、`diff/`(M4)。
 - `adapter/` — 唯一接触 vscode API：`GitRepositoryAdapter`、`ChangelistRegistry`、`tree/`、`webview/`、`diff/`、`storage/`（M1+）。
-- `agent/` — AI 接缝（M5 实现）：`ILlmProvider`、`IPreCommitInspector`、`IChangelistGrouper`、`IConflictResolver`、`IChatToolRegistrar`。
+- `agent/` — AI 接缝（当前 5 接口，均 Null 实现，完整逻辑延后至 M5）：`ILlmProvider`、`ICommitMessageProvider`、`IPreCommitInspector`、`IChangelistGrouper`、`IConflictResolver`（另有规划中的第 6 接缝 `IChatToolRegistrar`，详见[调研报告](../research/05-ai-agent-seams.md)）。
 - `shared/protocol.ts` — Webview ↔ Host 消息契约【单一事实源】。
 - `infra/` — 日志（OutputChannel）/ 错误处理 / 事件总线 / 配置。
 
