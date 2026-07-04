@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # @types/vscode 须与 package.json 的 engines.vscode 手动联动（vsce package 强制要求
+      # @types/vscode 的 major.minor ≤ engines.vscode）。Dependabot 单方面 bump 会破坏该约束
+      # 并令 CI 的 vsce package 失败，故忽略其升级——抬高最低 VS Code 版本属产品决策，需人工执行。
+      - dependency-name: '@types/vscode'
   - package-ecosystem: github-actions
     directory: /
     schedule:
