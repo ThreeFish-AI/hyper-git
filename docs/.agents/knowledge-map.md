@@ -32,7 +32,7 @@
 
 - `engine/` — 纯领域逻辑（零 vscode 依赖，Vitest 可测）：`model/`、`scm-mapping/`、`commit/pipeline.ts`、`diff/`(M4)。
 - `adapter/` — 唯一接触 vscode API：`GitRepositoryAdapter`、`ChangelistRegistry`、`tree/`、`webview/`、`diff/`、`storage/`（M1+）。
-- `agent/` — AI 接缝（M5 实现）：`ILlmProvider`、`IPreCommitInspector`、`IChangelistGrouper`、`IConflictResolver`、`IChatToolRegistrar`。
+- `agent/` — AI 接缝（当前 5 接口，均 Null 实现，完整逻辑延后至 M5）：`ILlmProvider`、`ICommitMessageProvider`、`IPreCommitInspector`、`IChangelistGrouper`、`IConflictResolver`（另有规划中的第 6 接缝 `IChatToolRegistrar`，详见[调研报告](../research/05-ai-agent-seams.md)）。
 - `shared/protocol.ts` — Webview ↔ Host 消息契约【单一事实源】。
 - `infra/` — 日志（OutputChannel）/ 错误处理 / 事件总线 / 配置。
 
