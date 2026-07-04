@@ -16,6 +16,7 @@
 
 ## 项目文档（docs/）
 - [文档中心](../docs/README.md) — 文档与调研资产总索引。
+- [README（简体中文）](../docs/i18n/zh-CN/README.md) — 根 README 的中文版本（根路径为英文版，i18n 目录沉淀中文）。
 - [Log 视图 CI 状态](../docs/features/log-ci-status.md) — 按提交显示 GitHub CI 最终状态（绿勾/红叉 + Tooltip 明细）：认证、限流、懒加载、边界与配置。
 - [Commit 视图整合](../docs/features/commit-view-consolidation.md) — 移除 CHANGES 视图，其文件操作/changelist 管理/Git 工具栏/未提交角标零回归平移入 Commit 视图。
 - [变更文件目录树](../docs/features/file-list-group-by-directory.md) — Commit / Log 文件列表「平铺 ⇄ 按目录分组」切换：host 侧 `buildFileTree` 构树下发、compact 折叠、目录三态。

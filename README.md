@@ -4,7 +4,7 @@
 
 <h1 align="center">Hyper Git</h1>
 
-<p align="center">为 VS Code 带来统一的 <b>Git 变更管理</b> 与 <b>提交工作流</b>——多变更分组、自绘提交面板、可视化提交图、Shelf、行级提交，并为未来 git 管理的 AI Agent 自主代理能力预留架构接缝。</p>
+<p align="center">A unified <b>Git change-management</b> and <b>commit workflow</b> for VS Code — multi-changelist grouping, a hand-built commit panel, a hand-rendered commit graph, Shelf, and line-level commits, with architectural seams reserved for future AI-driven Git agents.</p>
 
 <p align="center">
   <a href="https://github.com/ThreeFish-AI/hyper-git/actions/workflows/ci.yml"><img src="https://github.com/ThreeFish-AI/hyper-git/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
@@ -12,78 +12,87 @@
   <img src="https://img.shields.io/badge/VS%20Code-%E2%89%A5%201.85-007ACC.svg" alt="VS Code >= 1.85" />
 </p>
 
-## 核心能力
+<p align="center">
+  <b>English</b> · <a href="./docs/i18n/zh-CN/README.md">简体中文</a>
+</p>
 
-- **多 Changelist Changes 视图**：将改动分组到命名列表，设活动列表为提交目标，新建/重命名/删除/移动，`workspaceState` 持久化（重启恢复）；状态色复用 `gitDecoration.*` 主题色。
-- **Commit 提交窗口**：自绘提交面板 + Conventional Commits 实时校验 + Amend / Sign-off / 跳过 Hook + 提交 / 提交并推送；勾选集即提交权威范围；最近消息复用。
-- **Log 提交图（自绘 DAG）**：彩色泳道、分叉·合并连线、HEAD/分支/标签徽标，虚拟滚动增量加载；7 个可组合过滤器（作者/路径/grep/正则/合并模式/日期/清除）；per-commit 操作（Reset、新建分支·标签、Cherry-Pick、Revert、查看包含分支）。
-- **Branches 分支管理**：收藏/本地/远程/标签四段分组 + ahead·behind·upstream 跟踪；新建/检出/删除/重命名/合并/变基/比较/收藏；**多选批量**删除、复制引用、收藏（已合并/未合并诚实分栏确认）。
-- **Stash & Shelf**：Stash 全操作（含 keep-index / clear / 从 Stash 建分支）；独立 **Shelf**（基于 patch、独立于 stash，含 3-way 合并 Unshelve）。
-- **Worktrees**：全生命周期管理——新建（新分支/检出/detached）、在新窗口打开、锁定/解锁、移动、删除、清理失效。
-- **行级与 Hunk 提交**：编辑器内 CodeLens「提交此 Hunk」、部分暂存/取消暂存、光标处暂存、Hunk 归属 Changelist。
-- **远程与冲突**：Pull/Push/Fetch + Push…/Update…/Merge… 对话框（force-with-lease / rebase / squash 等）+ 自绘 **3-way Merge Editor** 与冲突兜底引导。
-- **历史编辑**：Cherry-Pick、Revert、Reset、交互式 Rebase、Undo/Drop/Fixup/Reword。
-- **其他**：Blame 行内注解、Patch 导出/应用、Reflog、3-way Diff 概览、Discard、Diff（HEAD ↔ Working）。
+<p align="center"><sub>6 views · 97 commands · 6 settings · 324 unit tests</sub></p>
 
-## 架构（路径 B：消费 + 自绘）
+## Features
 
-- **消费** 内置 `vscode.git` 导出的稳定 `Repository` API 作为 git 底座，不重造 git 状态机。
-- **受控 CLI 通道**：稳定 API 未覆盖的能力（cherry-pick / revert / reset / 分支重命名 / hunk 暂存 / stash 列表 / graph 拓扑 / shelf 等）经 `GitRepositoryService.execGit` 复用同一 git 二进制（`api.git.path`）实现。
-- **自绘视图** 承载完整的变更管理 UI；纯逻辑沉淀于 `engine/`（零 vscode 依赖、可单测）。
-- **AI 接缝**：预留 `ILlmProvider` / `IPreCommitInspector` 等 5 个接口（设计参考 JetBrains `CheckinHandler` 提交生命周期），实现延后至 M5。
+- **Multi-Changelist Changes view**: group edits into named lists, mark one as the active commit target, create / rename / delete / move lists, persisted in `workspaceState` (restored across restarts); status colors reuse the `gitDecoration.*` theme tokens.
+- **Commit panel**: a hand-built commit view with real-time Conventional Commits validation, Amend / Sign-off / skip hooks, and Commit / Commit & Push; the checkbox selection is the authoritative commit scope, and recent messages are reusable.
+- **Log commit graph (hand-rendered DAG)**: colored swimlanes, branch/merge edges, HEAD/branch/tag badges, virtualized incremental loading; 7 composable filters (author / path / grep / regex / merge-mode / date / clear); per-commit actions (Reset, new branch·tag, Cherry-Pick, Revert, list containing branches).
+- **Branches management**: favorites / local / remote / tags grouped into four sections with ahead·behind·upstream tracking; create / checkout / delete / rename / merge / rebase / compare / favorite; **multi-select batch** delete, copy ref, and favorite (with an honest merged/unmerged split confirmation).
+- **Stash & Shelf**: full stash operations (including keep-index / clear / create branch from stash); a standalone **Shelf** (patch-based, independent of stash, with 3-way merge Unshelve).
+- **Worktrees**: full-lifecycle management — create (new branch / checkout / detached), open in a new window, lock / unlock, move, remove, and prune stale entries.
+- **Line-level & hunk commits**: in-editor "Commit this Hunk" CodeLens, partial stage / unstage, stage at cursor, and hunk-to-changelist attribution.
+- **Remote & conflicts**: Pull / Push / Fetch plus Push… / Update… / Merge… dialogs (force-with-lease / rebase / squash, etc.) and a hand-built **3-way Merge Editor** with conflict-resolution fallbacks.
+- **History editing**: Cherry-Pick, Revert, Reset, interactive Rebase, Undo / Drop / Fixup / Reword.
+- **More**: inline Blame annotations, patch export / apply, Reflog, 3-way diff overview, Discard, and Diff (HEAD ↔ Working).
+
+## Architecture (Path B: Consume + Hand-render)
+
+- **Consumes** the stable `Repository` API exported by the built-in `vscode.git` extension as its Git foundation, rather than rebuilding a Git state machine.
+- **Controlled CLI channel**: capabilities the stable API does not cover (cherry-pick / revert / reset / branch rename / hunk staging / stash listing / graph topology / shelf, etc.) run through `GitRepositoryService.execGit`, reusing the same Git binary (`api.git.path`).
+- **Hand-rendered views** carry the full change-management UI (webviews live under `adapter/webview/`); pure logic is distilled into `engine/` (zero `vscode` dependency, unit-testable).
+- **AI seams**: 5 interfaces (`ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver`) are reserved (design inspired by JetBrains' `CheckinHandler` commit lifecycle), currently shipped as Null implementations; the full implementation is deferred to M5.
 
 <p align="center">
   <img src="media/framework.png" alt="Framework"/>
 </p>
 
-## 安装
+## Install
 
-- **手动（当前推荐）**：从 [Releases](https://github.com/ThreeFish-AI/hyper-git/releases) 下载 `hyper-git-agentic-git-x.x.x.vsix` → 命令面板 `Extensions: Install from VSIX`。
-- **OpenVSX**（Cursor / Windsurf / Gitpod / VSCodium）：搜索 `Hyper Git - Agentic Git`。
-- **VS Code Marketplace**：搜索 `Hyper Git - Agentic Git`（发布上线后可用）。
-- **要求**：VS Code ≥ 1.85.0 + 启用内置 Git 扩展（`vscode.git`，默认随附）。仅支持本地 git 仓库，不支持虚拟 / Web 工作区。
+- **Manual (recommended for now)**: download `hyper-git-agentic-git-x.x.x.vsix` from [Releases](https://github.com/ThreeFish-AI/hyper-git/releases) → run `Extensions: Install from VSIX` in the Command Palette.
+- **OpenVSX** (Cursor / Windsurf / Gitpod / VSCodium): search for `Hyper Git - Agentic Git`.
+- **VS Code Marketplace**: search for `Hyper Git - Agentic Git` (available once published).
+- **Requirements**: VS Code ≥ 1.85.0 with the built-in Git extension enabled (`vscode.git`, bundled by default). Local Git repositories only — virtual / Web workspaces are not supported.
 
-## 已知限制
+## Known Limitations
 
-- Commit 窗口的 Co-authored-by / Author 覆盖（`--author`）/ 撤销最近提交的**按钮 UI 接线**（engine `trailer` 已就绪，仅缺 webview 交互）。
-- Partial 多文件选择 UX、行级 split chunks（按选定行拆分提交）。
-- 目录 / folder diff（虚拟文档）、Submodules 管理。
-- M5 AI Agent（5 个接缝已预埋 Null 实现，本版未启动）。
+- Button-UI wiring for the commit panel's Co-authored-by / Author override (`--author`) / undo-latest-commit (the engine `trailer` is ready; only the webview interaction is missing).
+- Partial multi-file selection UX and line-level split chunks (splitting a commit by selected lines).
+- Directory / folder diff (virtual documents) and Submodules management.
+- The M5 AI agent (all 5 seams are pre-wired with Null implementations; not started in this release).
 
-详见[工程实施方案](./docs/architecture/engineering-plan.md)、[实施状态总览](./docs/milestones/implementation-status.md)与[知识索引](./docs/.agents/knowledge-map.md)。
+See the [Engineering Plan](./docs/architecture/engineering-plan.md), the [Implementation Status overview](./docs/milestones/implementation-status.md), and the [Knowledge Map](./docs/.agents/knowledge-map.md) for details.
 
-## 路线图
+## Roadmap
 
-| 里程碑 | 主题                                                | 状态 |
-| ------ | --------------------------------------------------- | ---- |
-| M0     | 脚手架 + CI                                         | ✅    |
-| M1     | Git Adapter + Changes TreeView（多 Changelist）     | ✅    |
-| M2     | Commit 提交窗口（模板 / Amend / CC 校验 / Hook 链） | ✅    |
-| M3     | Log（Graph DAG） + Branches + Diff/Blame            | ✅    |
-| M4     | Stash / Shelf / 行级提交 / Worktrees                | ✅    |
-| M5     | AI Agent（接缝已预留，实现待启动）                  | ⏳    |
+| Milestone | Theme                                                        | Status |
+| --------- | ------------------------------------------------------------ | ------ |
+| M0        | Scaffolding + CI                                             | ✅     |
+| M1        | Git adapter + Changes TreeView (multi-changelist)            | ✅     |
+| M2        | Commit panel (template / Amend / CC validation / hook chain) | ✅     |
+| M3        | Log (Graph DAG) + Branches + Diff/Blame                      | ✅     |
+| M4        | Stash / Shelf / line-level commits / Worktrees               | ✅     |
+| M5        | AI agent (seams reserved, implementation pending)            | ⏳     |
 
-## 开发
+## Development
 
 ```bash
-pnpm install                  # 安装依赖
-pnpm run compile              # 类型检查 + lint + 构建
-pnpm run watch                # 监听构建（F5 启动 Extension Host 调试）
-pnpm run test:unit            # 单元测试（engine 纯逻辑，Vitest，280 例）
-pnpm run test:integration     # 集成测试（@vscode/test-electron）
-pnpm run package              # 生产构建
-pnpm dlx @vscode/vsce package # 打包 .vsix
-
-### use vsce
-vsce package
-# hyper-git-agentic-git-x.x.x.vsix generated
-$ vsce publish
-# <publisher id>.hyper-git-agentic-git-x.x.x published to VS Code Marketplace
+pnpm install                  # install dependencies
+pnpm run compile              # type-check + lint + build
+pnpm run watch                # watch build (press F5 to launch the Extension Host debugger)
+pnpm run test:unit            # unit tests (pure engine logic, Vitest, 324 cases)
+pnpm run test:integration     # integration tests (@vscode/test-electron)
+pnpm run package              # production build
+pnpm dlx @vscode/vsce package # package the .vsix
 ```
 
-- **分层**：`engine/`（纯逻辑）→ `adapter/`（唯一接触 vscode API）→ `ui/`；`agent/` 以接口注入 `engine`，不反向依赖 UI；`shared/protocol.ts` 为 Webview ↔ Host 契约单一事实源。
-- **发布**：`v*` 标签触发 CI 产出 GitHub Release（附 `.vsix`，正文取自 [`docs/releases/`](./docs/releases/README.md)）+ OpenVSX；VS Code Marketplace 由 `ENABLE_MARKETPLACE_PUBLISH` 变量门控。
-- 包管理与脚本统一使用 `pnpm`（遵循 [AGENTS.md](./AGENTS.md) 工程规范）。完整文档见[文档中心](./docs/README.md)。
+Packaging and publishing with vsce (`@vscode/vsce`):
+
+```bash
+pnpm dlx @vscode/vsce package
+# hyper-git-agentic-git-x.x.x.vsix generated
+pnpm dlx @vscode/vsce publish
+# ThreeFish-AI.hyper-git-agentic-git-x.x.x published to VS Code Marketplace
+```
+
+- **Layering**: `engine/` (pure logic) → `adapter/` (the sole layer touching the vscode API, including the hand-rendered `adapter/webview/` UI); `agent/` is injected into `engine/` via interfaces and never depends on the UI; `shared/protocol.ts` is the single source of truth for the Webview ↔ Host contract.
+- **Release**: a `v*` tag triggers CI to produce a GitHub Release (with the `.vsix` attached; the body is drawn from [`docs/releases/`](./docs/releases/README.md)) plus OpenVSX; VS Code Marketplace publishing is gated by the `ENABLE_MARKETPLACE_PUBLISH` variable.
+- Package management and scripts standardize on `pnpm` (per the [AGENTS.md](./AGENTS.md) engineering conventions). Version history is tracked in the [Changelog](./CHANGELOG.md). See the [documentation hub](./docs/README.md) for the full docs.
 
 ---
 
