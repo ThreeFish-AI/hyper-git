@@ -3,6 +3,8 @@
 > 交付目标:把"提供统一 Git 变更管理与提交工作流"的 VS Code 扩展,从源码可靠、安全、自动化地交付到所有目标编辑器用户(原生 VS Code、Cursor、Windsurf、Gitpod、VSCodium/Code-OSS)。
 > 所有事实论断均附 GitHub 路径或官方文档 URL;不确定项标注"待核实"。
 
+> **决策更新(2026-07-04)**:本项目已将发布策略由「双市场(Marketplace + OpenVSX)」**收敛为 VS Code Marketplace 单市场**——移除 CI 的 OpenVSX 发布步骤与 `OVSX_PAT` 依赖(实践中 OpenVSX 命名空间与凭证未落地,且为降低维护面)。下文 §1.2、§2、§3、§5 及「下一步」中一切涉及 OpenVSX / ovsx 的内容,均保留为当时的循证背景(已被本决策取代);当前发布口径以 **§2.3(已修订)** 为准。
+
 ---
 
 ## 1. 发布前置清单(Manifest + Publisher + 凭证)
@@ -69,15 +71,15 @@
 - **Cursor 使用 Open VSX registry,而非 VS Code Marketplace**。来源:[Cursor 论坛官方回复](https://forum.cursor.com/t/cursor-marketplace-installs-offers-outdated-version-of-open-vsx-extension-despite-latest-version-being-available-upstream/159718)、[安全研究 mazinahmed.net](https://mazinahmed.net/blog/publishing-malicious-vscode-extensions/)(明确指出 OpenVSX 驱动 Cursor/Windsurf/Kiro 等 AI IDE)、[devclass 报道](https://www.devclass.com/development/2025/04/08/vs-code-extension-marketplace-wars-cursor-users-hit-roadblocks/1629343)。
 - 后果:**只**发 Marketplace 时,Cursor/Windsurf 用户**装不到**(除非手动 `.vsix`)。
 
-### 2.3 决策:**双市场同时发布**
+### 2.3 决策(2026-07-04 修订):**VS Code Marketplace 单市场发布**
 
-理由(契合本项目"未来引入 AI Agent 自主代理能力"的受众):
-1. **AI 受众主战场在 OpenVSX**:Cursor/Windsurf 用户是 AI 提交/AI 代码审查的核心早期采用者,却只能从 OpenVSX 安装;
-2. **Marketplace 是事实主流**:原生 VS Code 基数最大,pre-release/平台包/verified publisher 等特性更完善;
-3. **边际成本低**:`ovsx` 与 `vsce` CLI 几乎同构,同一 VSIX 可直接 `ovsx publish`,CI 仅追加一个 step;
-4. **抢注风险**:OpenVSX namespace 默认非排他,**务必 `create-namespace` 后立即 claim ownership**([cli/README.md](https://github.com/eclipse/openvsx/blob/master/cli/README.md))。
+> 原方案为「双市场同时发布」(理由见上 §2.1/§2.2 循证背景:AI 受众主战场在 OpenVSX、边际成本低)。实践中因 OpenVSX 命名空间与 `OVSX_PAT` 凭证未落地、且为收敛维护面,**修订为仅发布 VS Code Marketplace**。
 
-> 已有成熟 Action 一键双发:`HaaLeo/publish-vs-code-extension`(支持 vsce + ovsx,见 [GitHub Marketplace Action](https://github.com/marketplace/actions/publish-vs-code-extension))——符合 AGENTS.md"复用驱动,优先组合而非重复造轮子"。
+当前口径:
+1. **单市场**:仅经 `vsce publish` 发布到 VS Code Marketplace(原生 VS Code 用户主战场;`rc` tag 走 `--pre-release` 预发布通道)。
+2. **兜底安装**:每个 `v*` tag 均产出 GitHub Release 并附 `.vsix`,Cursor/Windsurf/VSCodium 等用户可下载后 `Install from VSIX`。
+3. **凭证**:仅需 `VSCE_PAT`(Azure DevOps PAT,scope Marketplace → Manage);由仓库变量 `ENABLE_MARKETPLACE_PUBLISH` 门控。
+4. **未来若重启 OpenVSX**:需先在 open-vsx.org 创建并 claim `ThreeFish-AI` 命名空间、配置有效 `OVSX_PAT`,再于 `publish` job 增回 `ovsx publish` 步骤(§2.1/§2.2 背景分析仍适用)。
 
 ---
 
@@ -302,7 +304,7 @@ OpenVSX 删除策略相对宽松,但为双市场一致,统一遵循"出新版本
 ## 下一步最佳行动建议(Next Best Action)
 
 1. **先落地 §3.2 `ci.yml` 的 test+package+artifact 三 job**:验证 3 平台通过率与 `xvfb` 集成,暂不接 publish(零风险)。
-2. **同步创建 Publisher + OpenVSX namespace**:立即 `ovsx create-namespace` 并 **claim ownership**,防止命名空间抢注。
+2. **同步创建 Marketplace Publisher**:在 [Marketplace publisher 管理页](https://marketplace.visualstudio.com/manage/publishers/) 创建 publisher `ThreeFish-AI` 并配置 `VSCE_PAT`(Azure DevOps PAT,scope Marketplace → Manage)。
 3. **PAT 治理决策点**:评估是否一步到位上 Entra 托管标识(消除 PAT),还是先用 secret + 短过期 PAT 过渡——决定 publish job 认证实现。
 4. **pre-release 路线**:AI Agent 自主代理属高风险新特性,建议首版即建立 `odd minor` pre-release 通道(如 `0.3.x`)吸收早期 Cursor/Windsurf 反馈,稳定后升 `0.4.x` release。
 
