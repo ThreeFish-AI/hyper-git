@@ -94,4 +94,12 @@
 - **后续防范**：① VS Code 预发布模型下，**打包与发布两端的 `--pre-release` 必须成对出现**；凡「先 package 成 artifact、后 publish 复用同一枚 VSIX」的流水线，预发布判定要在 package 端就落地，不能只在 publish 端加 flag。② 预发布版本号仍须纯 `major.minor.patch`（Marketplace 不接受 `-rc.N` semver 后缀），预发布语义由 `--pre-release` 标志 + tag 命名承载；`0.0.10` 作预发布后正式版须用更高版本（如 `0.0.11`），同一版本号不可既预发布又正式发布。③ OpenVSX 步骤的 `continue-on-error` 只隔离其自身失败——前序 Marketplace 步骤失败仍会使其 skipped；排障时勿因「OpenVSX 未报错」误判其已发布，须查其步骤实际状态与日志。④ Marketplace 发布链路的双凭证不可混淆：`VSCE_PAT`（Azure DevOps PAT，scope Marketplace→Manage）与 `OVSX_PAT`（open-vsx.org token）是不同服务的两个不同 token，且 Marketplace 发布还受仓库变量 `ENABLE_MARKETPLACE_PUBLISH` 门控。
 - **同类问题影响**：所有「package 出 artifact → publish 复用」且需发布预发布通道的 VS Code 扩展 CI；凡打包端与发布端 flag 判定不对称（`--pre-release`、平台化 `--target` 等同理）的流水线均会踩。
 
+## #12 侧边栏视图无法解除最小展开高度（VS Code 核心硬编码 120px + #123715 已 not planned）
+
+- **表因**：用户反馈 Worktrees 视图展开后无法继续缩小（截图中仍占大片空白），要求「所有视图可拖到任意高度、取消最小高度限制」。
+- **根因**：侧边栏每个视图面板（`Pane`）的最小体高由 VS Code 核心**硬编码 = 120px**（竖直方向；构造函数 `this._minimumBodySize = ... orientation === HORIZONTAL ? 200 : 120`，见 `src/vs/base/browser/ui/splitview/paneview.ts`），加 22px 标题栏，展开态最小 ≈ **142px**，该值经 `minimumSize` 直接驱动 SplitView 拖拽分隔条下限。`WebviewViewPane extends ViewPane` **未覆写** `minimumBodySize`，故本扩展 2 个 webview（Commit/Graph）与 4 个 tree（Branches/Stash/Shelf/Worktrees）视图**共用同一 142px 下限**。允许扩展为活动栏容器内视图指定固定/最小/最大高度的官方特性请求 [microsoft/vscode#123715](https://github.com/microsoft/vscode/issues/123715) 已被**关闭为 not planned / out-of-scope**，从未新增任何 API 或 `package.json` 贡献点。扩展运行于独立进程，拿不到工作台面板对象，`minimumBodySize` setter 仅核心 `ViewPaneContainer` 调用；注入 CSS 亦无效（`.pane-body{min-height:0}` 改不动 JS 层用于夹取拖拽下限的 `minimumSize`）。
+- **处理方式**：该限制**无法经扩展解除**，采用受支持的折中缓解——在 `package.json` `contributes.views` 调初始布局默认值：次要视图 Stash/Shelf/Worktrees 设 `visibility:"collapsed"`（默认仅 22px 标题栏、点击即展开），全部视图加 `initialSize`（Commit 3 / Graph 3 / Branches 2 / 其余 1，类 CSS flex 的高度权重）。两字段经 `src/vs/workbench/api/browser/viewsExtensionPoint.ts` 的 `viewDescriptor` schema 确认可用；`initialSize` **仅当「同一扩展同时拥有视图与视图容器」时生效**（本扩展拥有 `hyper-git` 容器与全部视图，条件满足）。
+- **后续防范**：① VS Code 侧边栏视图存在约 **142px 硬性最小展开高度**，无法经扩展降低——遇「任意高度 / 无最小高度」类诉求应直接引 #123715（not planned）说明平台边界，**勿承诺实现**；判断「webview 内容 CSS `min-height`」与「外层面板最小高度」是两回事。② `visibility` / `initialSize` **只影响初始状态**（「用户手动折叠/移动/隐藏过后即不再生效」）——老用户需命令面板「View: Reset View Locations」或右键容器图标「Reset Location」才采用新默认；实机验证须用**干净 profile 或先重置**以规避持久化布局。③ 想让展开视图更紧凑，只能靠「减少常驻视图数（默认折叠）+ 权重」，而非解除下限。
+- **同类问题影响**：所有向活动栏/侧边栏容器贡献 TreeView/WebviewView 且希望自定义或取消视图高度的扩展；凡把「webview 内容 `min-height` CSS」误认为能改变外层面板最小高度的实现。
+
 
