@@ -920,14 +920,14 @@ document.addEventListener('mousemove', function (e) { cursorX = e.clientX; curso
 function positionAtCursor(el) {
   el.style.display = 'flex';
   const w = el.offsetWidth, h = el.offsetHeight;
-  const vw = window.innerWidth, vh = window.innerHeight, pad = 6, gap = 14;
-  // 横向：默认在光标右侧；越右沿翻到左侧；仍越界则收进视口。
+  const vw = window.innerWidth, vh = window.innerHeight, pad = 6, gap = 8;
+  // 横向：默认贴光标右侧；越右沿则翻到光标左侧（右沿紧邻光标）；仍越界收进视口。
   let left = cursorX + gap;
   if (left + w > vw - pad) left = cursorX - gap - w;
   if (left < pad) left = Math.max(pad, vw - pad - w);
-  // 纵向：默认在光标下方；越下沿翻到上方；钳制视口。
+  // 纵向：默认贴光标下方；越下沿则翻到光标上方（底边紧邻光标）；钳制视口。
   let top = cursorY + gap;
-  if (top + h > vh - pad) top = cursorY - gap - h;
+  if (top + h > vh - pad) top = Math.max(pad, cursorY - gap - h);
   if (top < pad) top = pad;
   el.style.left = left + 'px';
   el.style.top = top + 'px';
