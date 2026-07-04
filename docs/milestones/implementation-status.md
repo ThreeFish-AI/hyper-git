@@ -20,7 +20,7 @@
 
 | 里程碑 | 版本 | PR | 交付 | 验收 |
 |---|---|---|---|---|
-| M0 脚手架+CI | 0.1.0 | [#1](https://github.com/ThreeFish-AI/hyper-git/pull/1) | pnpm+esbuild+TS strict+ESLint9+Vitest+test-electron；正交分层骨架；CI 三平台矩阵+双市场发布；engine 纯逻辑 + AI 接缝预留 | check-types/lint/package/test 全绿 |
+| M0 脚手架+CI | 0.1.0 | [#1](https://github.com/ThreeFish-AI/hyper-git/pull/1) | pnpm+esbuild+TS strict+ESLint9+Vitest+test-electron；正交分层骨架；CI 三平台矩阵+Marketplace 发布；engine 纯逻辑 + AI 接缝预留 | check-types/lint/package/test 全绿 |
 | 调研资产持久化 | — | [#2](https://github.com/ThreeFish-AI/hyper-git/pull/2) | docs/（IDEA 56 功能矩阵、工程方案、四路调研报告） | — |
 | M1 Git Adapter+多 changelist | 0.2.0 | [#3](https://github.com/ThreeFish-AI/hyper-git/pull/3) | GitRepositoryService、ChangelistRegistry（CRUD+持久化）、Changes TreeView（状态色+diff） | 集成：真实仓库变更渲染 |
 | M2 Commit 窗口 | 0.3.0 | [#4](https://github.com/ThreeFish-AI/hyper-git/pull/4) | Commit WebviewView（勾选+多行编辑器+Amend/signoff/skipHooks+CC 实时校验）、CommitPipeline（Checkin hook 链）、5 AI 接缝 Null 注入 | 集成：真实 git 提交闭环 |
@@ -100,10 +100,10 @@
 
 - **单元测试（Vitest，< 1s）**：engine/ 纯逻辑（scm-mapping、changelist-grouper、commit-pipeline、conventional-linter、git-status-map、conventional-check）+ CommitService.executeCommit（mock Repository，7 分支）。共 45 项。
 - **集成测试（@vscode/test-electron）**：扩展激活 + 全部命令注册（M1-M4）；真实 git 提交闭环（fixture 仓库 add+commit+git log 校验）；amend 改写 HEAD。共 3 项。
-- **CI（GitHub Actions）**：lint→build→test 矩阵（ubuntu/mac/win + Linux xvfb）→package vsix→artifact；`tag v*` → 双市场发布（Marketplace + OpenVSX，需 secrets）。
+- **CI（GitHub Actions）**：lint→build→test 矩阵（ubuntu/mac/win + Linux xvfb）→package vsix→artifact；`tag v*` → Marketplace 发布（需 VSCE_PAT secret，`ENABLE_MARKETPLACE_PUBLISH` 门控）。
 
 ## 7. 发布状态
 
-- **当前版本**：0.0.6（首个 MVP 正式版，对外首发；以「Hyper Git - Agentic Git」之名上架 Marketplace / OpenVSX）。
+- **当前版本**：0.0.6（首个 MVP 正式版，对外首发；以「Hyper Git - Agentic Git」之名上架 Marketplace）。
 - **首发历程**：经若干内部迭代与 `v0.0.1-rc.*` 预发布打磨后，以 `v0.0.5` 完成内部首发；因 Marketplace 上「Hyper Git」名称被误删不可用，遂将扩展更名为 **Hyper Git - Agentic Git**（`package.json` `name=hyper-git-agentic-git`），以 `v0.0.6`（git tag `v0.0.6`）重新上架。Marketplace 仅支持 `major.minor.patch`，预发布语义由 `--pre-release` 标记 + tag 体现。
-- **发布前置**：publisher 账号（`threefish-ai`）、VSCE_PAT / OVSX_PAT secrets、PNG 图标。
+- **发布前置**：publisher 账号（`ThreeFish-AI`）、VSCE_PAT secret、PNG 图标。
