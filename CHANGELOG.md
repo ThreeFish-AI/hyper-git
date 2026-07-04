@@ -4,6 +4,23 @@
 
 > 面向用户的发布说明（含完整特性叙述与安装指引）见 [`docs/releases/`](./docs/releases/README.md)。
 
+## [0.0.10-rc.1] - 2026-07-04 — Graph 视图对齐官方 · 浮层与角标修复 · 发布链路验证
+
+面向 0.0.10 的首个预发布（RC）。在 v0.0.9 基础上将提交图视图更名为 **Graph** 并视觉对齐 VS Code 官方 Source Control GRAPH 视图，修复提交/CI 悬浮浮层被侧边栏 iframe 裁剪失效、活动栏未提交数角标更新不及时两处缺陷，并完成 README 真实性校准与中英双语重构。本版亦作为 **VS Code Marketplace 发布链路打通**的验证版（首次以官方预发布模型 `--pre-release` 发布 `0.0.10`）。完整用户视角叙述见 [Release Note v0.0.10-rc.1](./docs/releases/v0.0.10-rc.1.md)。
+
+### Changed
+- **Log 视图更名为 Graph 并对齐官方 Source Control GRAPH**：泳道连线由直线改三次贝塞尔平滑曲线（同列自动退化直线）；当前 HEAD 行渲染为空心环 + 内点（双环高亮）；引用胶囊移至 message 右侧后缀、底色跟随本行泳道色、改全圆角实心 pill + 分支/云/tag 内联 SVG 图标前缀；工具栏 seg 按钮间距 / 圆角 / hover 态贴近官方。视图名与 Refresh / Filter / Clear Graph Filter 命令标题、CI 配置描述、aria-label 统一为 Graph（`viewType hyperGit.log`、`log/*` 消息前缀等内部标识符不动，不改底层数据 / 协议 / 布局算法 / CI 逻辑）。(#53)
+
+### Fixed
+- **提交 / CI 悬浮浮层被侧边栏 iframe 裁剪失效**：#48 的浮层定位将横向定位改为 `left = window.innerWidth + 8`，误以为 webview `position:fixed` 可越界渲染到编辑器；实则侧边栏 WebviewView 是沙箱 iframe，坐标系为自身视口，该值落到右边界外被裁剪不可见。抽出共用 `positionFloat`（锚触发元素右侧 → 越界翻左 → 再越界收进视口），彻底修复 CI 与提交两处浮层。(#53)
+- **活动栏未提交变更数角标更新不及时**：角标原挂 Commit `WebviewView`，VS Code 在 `resolveWebviewView`（用户打开过面板）前无法显示 webview 角标（vscode#164974 / #146330），致面板未打开时新变更不点亮、提交 / 撤销后不清除。改由隐藏 TreeView（`hyperGit.changesBadge`，`when:false`）承载，`activate` 即实例化、无论面板是否打开都可靠聚合到容器图标；新增 engine 纯函数 [`change-count`](./src/engine/scm-mapping/change-count.ts)（`toRelKey` / `countUniqueChanges`）与 `GitRepositoryService.getChangeCount()` 作单一事实源（`getChanges` 复用同一去重逻辑），角标走独立 40ms 微防抖快路径、与 150ms 重刷新解耦；移除 Commit webview 死代码（`updateBadge` / `pendingBadge`）杜绝容器 2× 计数，并补 change-count 单元测试锁定计数不变式。(#52)
+
+### Docs
+- **README 真实性校准 + 中英双语重构**：经 3 路只读核验 + 单测实跑取证修正——移除不存在的 `ui/` 层（改述 `engine/` → `adapter/`）、单元测试计数 280 → **324**、行级提交 CodeLens 标签校准为 "Commit this Hunk"、publisher 占位符落实为真实 `ThreeFish-AI`；根 `README.md` 改写为地道英文版，中文版迁入 [`docs/i18n/zh-CN/README.md`](./docs/i18n/zh-CN/README.md) 并互加语言切换、补入 CHANGELOG 链接。同步校正文档中心「最新」发布指针与知识索引 agent 接缝清单。(#51)
+- 补充 `vsce` 发布用法说明并重构 README 底部 footer，修复链接渲染与协议措辞。
+
+> 规模实证（README 校准后）：**6 视图 / 97 命令 / 6 配置项 / 324 单元测试**（32 文件全绿）+ 集成测试，CI 三平台（Ubuntu / macOS / Windows）矩阵全程 GREEN。
+
 ## [0.0.9] - 2026-07-04 — 视图整合 · UI 系统化 · 分支与 CI 增强
 
 自上一个正式版 0.0.6 以来的首个公开版本，聚合 0.0.7 / 0.0.8 / 0.0.9 三轮迭代：提交/日志视图内聚重构、UI/UX 全局系统化、分支与 CI 能力增强，以及一批工程修复。完整用户视角叙述见 [Release Note v0.0.9](./docs/releases/v0.0.9.md)。
