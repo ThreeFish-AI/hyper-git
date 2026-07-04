@@ -428,20 +428,15 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 .row svg.graph .node-dot { stroke: var(--vscode-sideBar-background); stroke-width: 1; }
 .row.selected svg.graph .node { stroke: var(--vscode-focusBorder); stroke-width: 2.2; }
 .row.selected svg.graph .node-ring { stroke: var(--vscode-focusBorder); stroke-width: 2; }
-.subject { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
-.msg { overflow: hidden; text-overflow: ellipsis; }
-.merge { opacity: 0.6; font-size: 10px; padding: 0 2px; }
-/* 引用胶囊：实心半透明底 + 同色描边 + 图标前缀（对齐官方 GRAPH 视图）。半透明底用固定 rgba 稳对比度，文字/描边走主题 --vscode-charts-* 令牌。 */
-.chips { display: inline-flex; gap: 4px; flex: 0 1 auto; min-width: 0; overflow: hidden; }
-.chip { display: inline-flex; align-items: center; gap: 3px; height: 15px; line-height: 15px; font-size: 10px; padding: 0 6px 0 5px; border-radius: 3px; border: 1px solid transparent; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.subject { flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; align-items: center; gap: 6px; }
+.msg { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.merge { flex: 0 0 auto; opacity: 0.6; font-size: 10px; padding: 0 2px; }
+/* 引用胶囊：实心圆角 pill + 图标前缀，底色跟随本行泳道色（内联 style 注入），类型靠图标区分（对齐官方 GRAPH 视图）。 */
+.chips { display: inline-flex; gap: 4px; flex: 0 0 auto; min-width: 0; overflow: hidden; }
+.chip { display: inline-flex; align-items: center; gap: 3px; height: 16px; line-height: 16px; font-size: 10px; font-weight: 600; padding: 0 7px 0 6px; border-radius: 8px; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .chip .chip-ico { flex: 0 0 auto; width: 11px; height: 11px; display: inline-flex; }
 .chip .chip-ico svg { width: 11px; height: 11px; display: block; }
 .chip .chip-nm { overflow: hidden; text-overflow: ellipsis; }
-.chip.localBranch { background: rgba(55,148,255,.16); color: var(--vscode-charts-blue, #3794ff); border-color: rgba(55,148,255,.42); }
-.chip.remoteBranch { background: rgba(177,128,215,.16); color: var(--vscode-charts-purple, #b180d7); border-color: rgba(177,128,215,.40); }
-.chip.tag { background: rgba(210,153,34,.16); color: var(--vscode-charts-yellow, #d29922); border-color: rgba(210,153,34,.42); }
-.chip.head-target { font-weight: 700; }
-.chip.head, .chip.localBranch.head-target { background: var(--vscode-charts-blue, #3794ff); color: #fff; border-color: transparent; font-weight: 600; }
 .author { flex: 0 0 auto; font-size: 11px; opacity: 0.7; max-width: 110px; overflow: hidden; text-overflow: ellipsis; padding-left: 8px; }
 .date { flex: 0 0 auto; font-size: 11px; opacity: 0.55; padding-left: 8px; }
 #viewport.narrow .author, #viewport.narrow .date { display: none; }
@@ -603,6 +598,14 @@ const ICO_CLOUD = '<svg class="chip-ico" viewBox="0 0 16 16" width="11" height="
 const ICO_TAG = '<svg class="chip-ico" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M2 2.75A.75.75 0 0 1 2.75 2h5.19c.33 0 .65.13.88.37l4.81 4.8a1.25 1.25 0 0 1 0 1.77l-4.69 4.69a1.25 1.25 0 0 1-1.77 0l-4.8-4.81A1.25 1.25 0 0 1 2 7.94V2.75zm1.5.75v4.44l4.69 4.69 4.44-4.44L7.94 3.5H3.5zm1.75 1a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5z"/></svg>';
 function chipIcon(kind) { return kind === 'remoteBranch' ? ICO_CLOUD : kind === 'tag' ? ICO_TAG : ICO_BRANCH; }
 function laneColor(i) { return PALETTE[((i % PALETTE.length) + PALETTE.length) % PALETTE.length]; }
+// 实心胶囊前景色：按底色相对亮度择深/白字（WCAG 阈值 0.6），保证任意泳道底色上文字均可读。解析失败回落白字。
+function onColor(bg) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(bg).trim());
+  if (!m) return '#ffffff';
+  const n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? '#1e1e1e' : '#ffffff';
+}
 function colX(c) { return c * LANE_W + LANE_W / 2; }
 /** 本行实际绘制的最右列号（node + 各边 from/to 的最大值）——行宽据此自适应，消除「全局 maxLanes 撑宽」的留白。 */
 function rowMaxCol(row) { const L = row.layout; let m = L.node.col; for (const e of L.incoming) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } for (const e of L.outgoing) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } for (const e of L.passThrough) { if (e.fromCol > m) m = e.fromCol; if (e.toCol > m) m = e.toCol; } return m; }
@@ -660,12 +663,14 @@ function isHeadRow(row) {
 
 function chipsHtml(row) {
   if (!row.chips || row.chips.length === 0) return '';
+  // 对齐官方 GRAPH：胶囊实心底色跟随本行泳道色（node.colorIdx），类型靠图标（分支/云/tag）区分而非颜色；
+  // 文字色按底色亮度自适应，保证可读。不加原生 title：引用明细统一由 #commit-tip 浮层展示。
+  const bg = laneColor(row.layout.node.colorIdx);
+  const fg = onColor(bg);
   const parts = ['<span class="chips">'];
   for (const c of row.chips) {
     const cls = 'chip ' + c.kind + (c.isHeadTarget ? ' head-target' : '');
-    // 不加原生 title：引用明细统一由自定义 #commit-tip 浮层展示，避免原生+自定义双重气泡。
-    // 图标前缀（分支/云/tag）对齐官方 GRAPH 视图的引用胶囊。
-    parts.push('<span class="', cls, '">', chipIcon(c.kind), '<span class="chip-nm">', esc(c.name), '</span></span>');
+    parts.push('<span class="', cls, '" style="background:', bg, ';color:', fg, '">', chipIcon(c.kind), '<span class="chip-nm">', esc(c.name), '</span></span>');
   }
   parts.push('</span>');
   return parts.join('');
@@ -695,9 +700,10 @@ function ciSlotHtml(row) {
 function rowHtml(row, idx) {
   const sel = row.hash === selectedHash ? ' selected' : '';
   const merge = row.isMerge ? '<span class="merge" title="Merge commit">⇠</span>' : '';
+  // 列顺序对齐官方 GRAPH：泳道图 → message → 引用胶囊 → author → date → CI。chips 作为 message 右侧后缀。
   return '<div class="row' + sel + '" data-i="' + idx + '" data-hash="' + esc(row.hash) + '" role="treeitem" aria-selected="' + (sel !== '') + '">'
     + rowSvg(row)
-    + '<span class="subject">' + chipsHtml(row) + '<span class="msg">' + esc(row.subject) + '</span>' + merge + '</span>'
+    + '<span class="subject"><span class="msg">' + esc(row.subject) + '</span>' + merge + chipsHtml(row) + '</span>'
     + '<span class="author">' + esc(row.authorName) + '</span>'
     + '<span class="date">' + fmtDate(row.authorDate) + '</span>'
     + ciSlotHtml(row)
@@ -1042,11 +1048,13 @@ function renderDetails(hash, files, tree) {
 function buildCommitTip(row) {
   const parts = ['<div class="ct-scroll">'];
   const refGroups = [['head', 'HEAD'], ['localBranch', 'Branches'], ['remoteBranch', 'Remotes'], ['tag', 'Tags']];
+  const tipBg = laneColor(row.layout.node.colorIdx), tipFg = onColor(tipBg);
   for (const g of refGroups) {
     const kind = g[0];
     const chips = (row.chips || []).filter(function (c) { return c.kind === kind; });
     if (chips.length === 0) continue;
-    const inner = chips.map(function (c) { return '<span class="chip ' + kind + (c.isHeadTarget ? ' head-target' : '') + '">' + chipIcon(kind) + '<span class="chip-nm">' + esc(c.name) + '</span></span>'; }).join('');
+    // 浮层内胶囊与行内保持一致：实心 pill、底色跟随泳道色、图标前缀。
+    const inner = chips.map(function (c) { return '<span class="chip ' + kind + (c.isHeadTarget ? ' head-target' : '') + '" style="background:' + tipBg + ';color:' + tipFg + '">' + chipIcon(kind) + '<span class="chip-nm">' + esc(c.name) + '</span></span>'; }).join('');
     parts.push('<div class="ct-sec"><span class="ct-k">' + g[1] + '</span><span class="ct-v ct-refs">' + inner + '</span></div>');
   }
   let msg = '<div class="ct-msg"><span class="ct-subj">' + esc(row.subject) + '</span>';
