@@ -246,6 +246,11 @@ export class GitHubCiService implements vscode.Disposable {
 		return authProviderId(remote);
 	}
 
+	/** 对外暴露当前仓库的 GitHub 坐标（复用内部 repoRoot 缓存），供 Commit 详情面板生成提交页 URL。 */
+	getGitHubRemote(): GitHubRemote | null {
+		return this.resolveRemote();
+	}
+
 	/** 解析当前仓库远程为 GitHub 坐标（按 repoRoot 缓存；优先配置名 → origin → 首个可解析）。 */
 	private resolveRemote(): GitHubRemote | null {
 		const repoRoot = this.service.repoRoot ?? '';

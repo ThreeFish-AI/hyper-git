@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseNameStatus, statusLabel } from '../../src/engine/log/commit-files';
+import { parseNameStatus, statusLabel, parseShortStat } from '../../src/engine/log/commit-files';
 
 describe('commit-files parseNameStatus', () => {
 	it('解析 A/M/D 普通变更', () => {
@@ -46,5 +46,40 @@ describe('statusLabel', () => {
 	it('A/M/D 原样', () => {
 		expect(statusLabel('A')).toBe('A');
 		expect(statusLabel('M')).toBe('M');
+	});
+});
+
+describe('commit-files parseShortStat', () => {
+	it('解析完整三段', () => {
+		expect(parseShortStat(' 3 files changed, 32 insertions(+), 8 deletions(-)')).toEqual({
+			files: 3,
+			insertions: 32,
+			deletions: 8,
+		});
+	});
+
+	it('单文件（file 单数）+ 仅新增', () => {
+		expect(parseShortStat(' 1 file changed, 5 insertions(+)')).toEqual({ files: 1, insertions: 5, deletions: 0 });
+	});
+
+	it('仅删除', () => {
+		expect(parseShortStat(' 2 files changed, 4 deletions(-)')).toEqual({ files: 2, insertions: 0, deletions: 4 });
+	});
+
+	it('单数 insertion/deletion', () => {
+		expect(parseShortStat(' 1 file changed, 1 insertion(+), 1 deletion(-)')).toEqual({
+			files: 1,
+			insertions: 1,
+			deletions: 1,
+		});
+	});
+
+	it('空输入（合并/根提交无改动）返回全 0', () => {
+		expect(parseShortStat('')).toEqual({ files: 0, insertions: 0, deletions: 0 });
+	});
+
+	it('忽略 diff-tree 前缀行，取最后一条 changed 行', () => {
+		const out = 'abc123def456\n 3 files changed, 32 insertions(+), 8 deletions(-)';
+		expect(parseShortStat(out)).toEqual({ files: 3, insertions: 32, deletions: 8 });
 	});
 });

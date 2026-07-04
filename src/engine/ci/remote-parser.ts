@@ -90,3 +90,11 @@ export function graphqlEndpoint(remote: GitHubRemote): string {
 export function authProviderId(remote: GitHubRemote): 'github' | 'github-enterprise' {
 	return remote.isGitHubDotCom ? 'github' : 'github-enterprise';
 }
+
+/**
+ * 提交的 GitHub Web 页面 URL：`https://<host>/<owner>/<repo>/commit/<hash>`。
+ * 用 web 域（**非** api 子域），供「Open on GitHub」在浏览器打开。github.com 与 GHE 同构。
+ */
+export function commitWebUrl(remote: GitHubRemote, hash: string): string {
+	return `https://${remote.host}/${remote.owner}/${remote.repo}/commit/${hash}`;
+}
