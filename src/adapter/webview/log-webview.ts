@@ -934,7 +934,7 @@ function positionAtRect(el, rect) {
   el.style.left = left + 'px';
   el.style.top = top + 'px';
 }
-function positionTip() { positionAtCursor(ciTipEl); }
+function positionTip(rect) { rect ? positionAtRect(ciTipEl, rect) : positionAtCursor(ciTipEl); }
 function scheduleShow(hash, iconEl) {
   clearTimeout(tipHideT);
   if (tipHash === hash && ciTipEl.classList.contains('show')) return;
@@ -1009,7 +1009,7 @@ rowsEl.addEventListener('keydown', function (e) {
     if (!ci || ci.state === 'unknown') return;
     tipHash = icon.getAttribute('data-ci');
     buildTip(ci);
-    positionTip();
+    positionTip(icon.getBoundingClientRect()); // 键盘触发：无光标，锚图标 rect。
     ciTipEl.classList.add('show');
     const first = ciTipEl.querySelector('[data-url]'); if (first) first.focus();
   }
