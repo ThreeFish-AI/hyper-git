@@ -26,7 +26,7 @@ function firstNull(arr: ReadonlyArray<string | null>): number {
 }
 
 /**
- * 计算提交图布局。`commits` 须按 `--topo-order`（newest-first）排序。
+ * 计算提交图布局。`commits` 须按「newest-first 且子在父之上」排序（取数用 `--author-date-order`）。
  * 复杂度 O(n·L)，L = 瞬时并发 lane 数（现实 <10），1000 commit < 5ms。
  */
 export function computeGraphLayout(commits: readonly GraphCommit[]): readonly GraphLayoutRow[] {
