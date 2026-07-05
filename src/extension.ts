@@ -99,9 +99,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const blame = new BlameAnnotationController(service);
 	const shelfService = new ShelfService(service, context.globalStorageUri.fsPath);
 	const shelfTree = new ShelfTreeProvider(shelfService);
-	// 活动栏未提交数角标承载：隐藏 TreeView（package.json 中 when:false，永不渲染）。createTreeView 于
-	// activate 即实例化视图对象，其 badge 无论面板是否打开都可靠聚合到容器图标——规避 WebviewView.badge
-	// 在 resolveWebviewView（用户至少打开过一次视图）前无法显示的已知限制（microsoft/vscode#164974、#146330）。
+	// 未提交数角标承载：隐藏 TreeView（package.json 中 when:false，永不渲染）。createTreeView 于 activate
+	// 即实例化视图对象，其 badge 聚合到容器图标/页签——规避 WebviewView.badge 在 resolveWebviewView（用户
+	// 至少打开过一次视图）前无法显示的已知限制（microsoft/vscode#164974、#146330）。v0.0.13 起容器由活动栏
+	// 迁至底部 Panel（issue #13）：角标仅在 Panel 展开时可见，活动栏「始终可见」特性失效（用户已接受 trade-off）。
 	// 复用占位 EmptyTreeProvider（空树）。
 	const badgeView = vscode.window.createTreeView('hyperGit.changesBadge', {
 		treeDataProvider: new EmptyTreeProvider(),
@@ -150,15 +151,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		registerInlineCommitCommand(service, inlineLens),
 	);
 
-	// 活动栏未提交数角标：承载于隐藏的 changesBadge TreeView（见其创建处说明）。
+	// 未提交数角标：承载于隐藏的 changesBadge TreeView（见其创建处说明）。
 	// 计数复用 service.getChangeCount()（index+工作区+未跟踪去重），为 0 时清空，对齐原生 SCM 行为。
+	// v0.0.13：容器迁至 Panel 后，角标仅在 Panel 展开时聚合显示（issue #13）。
 	const updateBadge = (): void => {
 		const n = service.getChangeCount();
 		badgeView.badge = n > 0 ? { value: n, tooltip: `${n} uncommitted change(s)` } : undefined;
 	};
 
-	// 角标走独立快路径（~40ms 微防抖）：面板即便未打开也近实时更新，并合并 add -A/checkout 等事件风暴，
-	// 与下方重刷新（150ms）解耦，避免被 log/branches 等高频重拉阻塞。
+	// 角标走独立快路径（~40ms 微防抖）：即便视图未 resolve / Panel 未激活也近实时更新计数（Panel 展开即呈现），
+	// 并合并 add -A/checkout 等事件风暴，与下方重刷新（150ms）解耦，避免被 log/branches 等高频重拉阻塞。
 	let badgeTimer: ReturnType<typeof setTimeout> | undefined;
 	const scheduleBadge = (): void => {
 		clearTimeout(badgeTimer);

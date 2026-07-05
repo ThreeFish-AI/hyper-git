@@ -102,4 +102,16 @@
 - **后续防范**：① VS Code 侧边栏视图存在约 **142px 硬性最小展开高度**，无法经扩展降低——遇「任意高度 / 无最小高度」类诉求应直接引 #123715（not planned）说明平台边界，**勿承诺实现**；判断「webview 内容 CSS `min-height`」与「外层面板最小高度」是两回事。② `visibility` / `initialSize` **只影响初始状态**（「用户手动折叠/移动/隐藏过后即不再生效」）——老用户需命令面板「View: Reset View Locations」或右键容器图标「Reset Location」才采用新默认；实机验证须用**干净 profile 或先重置**以规避持久化布局。③ 想让展开视图更紧凑，只能靠「减少常驻视图数（默认折叠）+ 权重」，而非解除下限。
 - **同类问题影响**：所有向活动栏/侧边栏容器贡献 TreeView/WebviewView 且希望自定义或取消视图高度的扩展；凡把「webview 内容 `min-height` CSS」误认为能改变外层面板最小高度的实现。
 
+## #13 视图容器由活动栏迁移至底部 Panel（dock 决定 badge 可见性上限 + 页签顺序不可控）
+
+- **表因**：用户要求将 Hyper Git 视图容器从默认的活动栏（Activity Bar / Primary Side Bar）迁移到底部面板（Panel），并希望排在 Terminal 页签之后。
+- **根因**：`contributes.viewsContainers` 的 `activitybar` 与 `panel` 是 dock 选择键，VS Code 通过容器 id 关联 `viewsContainers` 与 `views`，**容器挂在哪个 dock 与 views 归属、API 调用、图标规范完全解耦**——故迁移仅需将 `package.json` 中 `"activitybar"` 改为 `"panel"`，容器 id `hyper-git` 与全部 7 个视图、`.ts` 源码、`media/hyper-git-icon.svg`（24×24 单色 `currentColor`）均无需改动（`engines.vscode: ^1.85.0` ≫ panel 容器所需 1.56+）。
+- **处理方式**：单行改动 `viewsContainers.activitybar` → `viewsContainers.panel`，并 bump `0.0.12` → `0.0.13`。用户经评估后**明确接受 trade-off**（见下），不引入双容器或状态栏计数器。
+- **后续防范**：
+  1. **Panel 容器相对内置页签顺序不可控**：VS Code **不提供**任何 contribution point 控制 panel 容器相对内置页签（Terminal/Output/Problems/Debug）的顺序；默认行为是新装扩展的容器**追加在内置页签之后**，用户可拖拽并持久化。遇「精确紧邻某内置页签」类诉求应直接说明平台边界，**勿承诺实现**。
+  2. **dock 迁移改变 `initialSize` 语义**：`initialSize` 是容器主轴方向的权重（类 flex-grow）；侧边栏主轴=垂直（高度权重），Panel 默认主轴=水平（宽度权重）。值本身无需改，但语义随用户布局方向变化；遇视图过挤应调权重而非解除下限（与 #12 同一硬编码边界）。
+  3. **dock 决定 badge 可见性上限**（关键）：activitybar 容器图标支持「未聚焦也聚合显示」的一等 badge（#10 据此实现「面板未打开也持续显示」）；**panel 容器页签 badge 的可见性受 Panel 展开/收起态约束**。`when:false` TreeView 在 panel dock 下的聚合可见性需 EDH 实测（跨 VS Code 版本）。本案用户**明确接受**此 trade-off——未提交计数仅在 Panel 展开时可见，不触发双容器回退；若后续需恢复「始终可见」计数，应走双容器（panel 主 + activitybar badge 专用）或状态栏计数器方案。
+  4. **dock 迁移属用户可见布局变更**：VS Code 会记忆旧 dock 位置，老用户升级后需「View: Reset View Locations」或右键容器页签「Reset Location」才采用新默认（与 #12 同款平台行为，实机验证须用干净 profile）。
+- **同类问题影响**：所有在 activitybar/panel 间迁移自定义视图容器的扩展；凡依赖容器图标 badge「始终可见」语义的扩展；以及把「dock 迁移」误当作纯内部重构而忽视 badge 可见性回退的实现。
+
 

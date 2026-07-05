@@ -6,6 +6,20 @@
 
 ## [Unreleased]
 
+## [0.0.13] - 2026-07-05 — 视图容器由活动栏迁移至底部面板（Terminal 之后）
+
+将 Hyper Git 视图容器从活动栏（Activity Bar / Primary Side Bar）迁移至底部面板（Panel），默认排在 Terminal 页签之后，提供与官方 Terminal / Output / Problems 一致的底部停靠体验。完整用户视角叙述见 [Release Note v0.0.13](./docs/releases/v0.0.13.md)。
+
+### Changed
+- **视图容器 dock 迁移**：`package.json` 的 `viewsContainers` 由 `activitybar` 改为 `panel`，容器 id `hyper-git` 与全部 7 个视图（Commit / Graph / Branches / Stash / Shelf / Worktrees / changesBadge）不变；`.ts` 源码与图标无需改动（dock 类型与 views 归属、API 调用、图标规范完全解耦）。`initialSize` 语义随之由侧边栏高度权重变为 Panel 主轴权重，值本身不改。
+
+### Known Limitations
+- **活动栏「始终可见」未提交角标消失**：迁移后活动栏不再有 Hyper Git 入口图标，[issue #10](./docs/.agents/issue.md) 修复的「面板未打开也持续显示」活动栏计数角标随之失效；未提交计数仅在 Panel 展开时可见（VS Code 平台行为）。详见 [issue #13](./docs/.agents/issue.md)。
+- **老用户需重置视图布局**：VS Code 会记忆旧的 activitybar 位置，升级后需命令面板执行「View: Reset View Locations」或右键容器页签「Reset Location」才采用新默认（[issue #12](./docs/.agents/issue.md) 同款平台行为）。
+
+### Docs
+- 新增 [Release Note v0.0.13](./docs/releases/v0.0.13.md)；[issue #13](./docs/.agents/issue.md) 记录 dock 迁移决策与 badge 权衡。
+
 ## [0.0.12] - 2026-07-04 — 提交详情光标跟随悬浮卡 · Tooltip 交互修复 · 布局优化 · 依赖升级基线
 
 在 v0.0.11 基础上，将 Graph 提交详情悬浮卡重做为**随光标浮现、逐项对齐 VS Code 官方 Source Control GRAPH** 的形态（其间曾尝试迁移至右侧编辑器区面板，最终撤回、改回光标跟随浮层），并配套修复 CI / 提交两类 Tooltip 的定位、互斥、键盘触发与引用胶囊截断等一系列交互回归；同时优化侧边栏视图默认布局，并合入 TypeScript 6 / vitest 4 / vite 8 等依赖升级基线。完整用户视角叙述见 [Release Note v0.0.12](./docs/releases/v0.0.12.md)。
