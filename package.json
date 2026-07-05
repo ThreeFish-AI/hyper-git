@@ -7,7 +7,7 @@
 		"theme": "dark"
 	},
 	"description": "Hyper Git brings IntelliJ IDEA's powerful Git & Commit modules to VS Code, enhanced with AI-powered autonomous agents for intelligent repository management. Experience Git in a higher dimension.",
-	"version": "0.0.12",
+	"version": "0.0.13",
 	"publisher": "ThreeFish-AI",
 	"license": "MIT",
 	"preview": true,
@@ -48,7 +48,7 @@
 	"main": "./dist/extension.js",
 	"contributes": {
 		"viewsContainers": {
-			"activitybar": [
+			"panel": [
 				{
 					"id": "hyper-git",
 					"title": "Hyper Git",
