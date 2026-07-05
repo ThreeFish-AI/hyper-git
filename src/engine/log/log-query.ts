@@ -4,7 +4,9 @@
  * 把 {@link LogFilter} + 范围 + 分页翻译为 `git log` 参数向量（含 {@link LOG_GRAPH_FORMAT}），
  * 供 host 侧 `service.execGit(['log', ...buildLogArgs(...)])` 单次取数。服务端维度（author/grep/path）
  * 走 git 参数；客户端维度（mergeMode/date/regex）由 host 经 {@link toClientFilter} + {@link applyClientFilters}
- * 处理。`--topo-order` 为硬性要求（lane 算法依赖拓扑序）；pathspec `-- <path>` 必须置于末尾。
+ * 处理。排序用 `--author-date-order`：① lane 算法依赖「子在父之上」不变量，本 flag 同样保证（与 `--topo-order` 一致）；
+ * ② 额外按作者日期倒序，跨支提交正确交错（`--topo-order` 会把旁支成块挤到末尾致日期回跳）；③ 排序键与视图日期列
+ * （`row.authorDate`）对齐，肉眼所见与排列顺序永远一致。pathspec `-- <path>` 必须置于末尾。
  */
 
 import type { LogFilter } from './log-filter';
@@ -33,10 +35,12 @@ export interface LogQueryOptions {
 
 /**
  * 构造 `git log` 参数向量（不含 `log` 字面量，host 拼接）。
- * 顺序：`--topo-order` → 范围 → 分页 → 服务端过滤 → `--format` → pathspec（末尾）。
+ * 顺序：`--author-date-order` → 范围 → 分页 → 服务端过滤 → `--format` → pathspec（末尾）。
  */
 export function buildLogArgs(filter: LogFilter | undefined, scope: LogScope, opts: LogQueryOptions): string[] {
-	const args: string[] = ['--topo-order'];
+	// 排序键须与视图日期列（row.authorDate）对齐；lane 算法仅依赖「子在父之上」不变量，
+	// --author-date-order 与 --topo-order 均满足，且额外按作者日期倒序、跨支正确交错（详见文件头）。
+	const args: string[] = ['--author-date-order'];
 	if (scope === 'checkpointer') {
 		// 原始完整视图：遍历 refs/ 全部引用，含 conductor 等工具的 checkpoint 快照与归档头。
 		args.push('--all');

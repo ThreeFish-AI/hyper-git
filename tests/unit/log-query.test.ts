@@ -5,8 +5,11 @@ import type { LogFilter } from '../../src/engine/log/log-filter';
 const noFilter: LogFilter = {};
 
 describe('buildLogArgs — 顺序与必选项', () => {
-	it('--topo-order 置首（lane 算法依赖拓扑序）', () => {
-		expect(buildLogArgs(noFilter, 'all', { maxCount: 300 })[0]).toBe('--topo-order');
+	it('--author-date-order 置首（lane 算法依赖「子在父之上」；作者日期倒序与视图日期列对齐、跨支正确交错）', () => {
+		const args = buildLogArgs(noFilter, 'all', { maxCount: 300 });
+		expect(args[0]).toBe('--author-date-order');
+		// 回归护栏：不得回退到 --topo-order（否则旁支提交会被成块挤到末尾，致日期列回跳）
+		expect(args).not.toContain('--topo-order');
 	});
 
 	it('scope=all 用 --branches --tags --remotes（排除工具注入的内部引用）；不含 --all', () => {
@@ -41,8 +44,9 @@ describe('buildLogArgs — 服务端过滤翻译', () => {
 
 	it('空 author/grep 不产生 flag', () => {
 		const args = buildLogArgs({ author: '   ', grep: '' }, 'all', { maxCount: 300 });
-		expect(args.some((a) => a.startsWith('--author'))).toBe(false);
-		expect(args.some((a) => a.startsWith('--grep'))).toBe(false);
+		// 用 `--author=` / `--grep=` 精确前缀，避免与既有的 `--author-date-order` 排序 flag 误判
+		expect(args.some((a) => a.startsWith('--author='))).toBe(false);
+		expect(args.some((a) => a.startsWith('--grep='))).toBe(false);
 	});
 
 	it('path 以 pathspec 形式置于参数末尾（--format 之后）', () => {
