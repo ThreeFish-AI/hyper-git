@@ -6,8 +6,10 @@
  * Graph 效果——不再依赖 `git log --graph` 的粗糙 ASCII（lane 由 git 分配、
  * 不可控、随列号抖动着色）。算法参考 gitamine 的 nil-slot 复用 [1] 与 git-graph 的分支区间装箱 [2]。
  *
- * 调用方须保证 commits 按 `--topo-order`（newest-first 且子在父之上）排序——lane 增量算法依赖
- * 「处理 commit 时其全部在窗口内的子已处理」这一不变量，否则 lane 会断裂。
+ * 调用方须保证 commits 按「newest-first 且子在父之上」排序（取数用 `--author-date-order`，见
+ * {@link ./log-query}）——lane 增量算法依赖「处理 commit 时其全部在窗口内的子已处理」这一不变量，
+ * 否则 lane 会断裂。注意：不变量真实要求仅为「子在父之上」（`--topo-order` / `--author-date-order`
+ * 均满足），非要求 topo-order 的「分支成块」特性——后者会把旁支提交整块挤到末尾，致日期列回跳。
  *
  * [1] P. Vigier, "Commit graph drawing algorithms," pvigier's blog, 2019.
  * [2] M. Lange, "git-graph: branch assignment & lane layout," 2025.

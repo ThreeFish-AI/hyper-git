@@ -85,7 +85,7 @@ interface GraphPage {
 /**
  * Log 视图（WebviewView）：可视化提交图（DAG）。
  *
- * 自计算 lane 布局（engine/log/graph-layout）→ 渲染彩色泳道；host 侧单次 `git log --topo-order`
+ * 自计算 lane 布局（engine/log/graph-layout）→ 渲染彩色泳道；host 侧单次 `git log --author-date-order`
  * 取数 + `for-each-ref` 取引用标签；webview 端虚拟化 SVG 行 + 文本列。保留全部既有交互：
  * 7 个过滤命令（经 {@link LogFilterControl}）、9 个 per-commit 操作（右键 → host 重调用）、
  * 选中提交查看变更文件、All/Current 范围切换、滚动增量加载、实时刷新。

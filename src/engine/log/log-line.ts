@@ -5,10 +5,11 @@
  * 替代旧 `git log --graph` ASCII 路径。配套 CLI（字段以 NUL `%x00` 分隔、记录以 RS `%x1e` 终止，
  * 二者均不会出现在 git 文本输出中，规避多行 subject 歧义）：
  *
- *   git log --topo-order [--all] --max-count=<N> [--skip=<cursor>] [--author --grep -- <path>]
+ *   git log --author-date-order [--all] --max-count=<N> [--skip=<cursor>] [--author --grep -- <path>]
  *          --format=<LOG_GRAPH_FORMAT>
  *
- * `--topo-order` 为硬性要求：lane 增量算法依赖「子在父之上」严格成立。
+ * `--author-date-order` 为硬性要求：lane 增量算法依赖「子在父之上」严格成立（本 flag 与 `--topo-order`
+ * 均满足该不变量，但另按作者日期倒序排列，避免 `--topo-order` 把旁支成块挤到末尾致日期列回跳）。
  */
 
 /**

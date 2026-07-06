@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [0.0.14] - 2026-07-06 — 修复 GRAPH 视图提交记录时间倒序
+
+修复 GRAPH 视图「All」范围下提交记录未按时间倒序排列的问题——取数参数由 `--topo-order` 改为 `--author-date-order`，令跨分支提交按作者日期正确交错、消除「日期回跳」。纯取数排序修复，不改数据协议、布局算法与任何视图交互。完整用户视角叙述见 [Release Note v0.0.14](./docs/releases/v0.0.14.md)。
+
+### Fixed
+- **GRAPH 视图提交记录日期回跳**：取数参数 `--topo-order` → `--author-date-order`。`--topo-order` 会把不同分支的提交「成块」输出，导致从较旧提交分叉但日期较新的旁支提交被整块挤到列表末尾，出现「前几行日期递减、中途回跳到最新日期」的反直觉乱序；`--author-date-order` 同样保证 lane 算法依赖的「子在父之上」不变量（`graph-layout` 仅依赖该拓扑约束、不依赖 topo-order 的「分支成块」特性），且按作者日期倒序跨支正确交错，并与视图日期列（`row.authorDate`）对齐（单一事实源）。同步更新 8 处 `topo-order` 注释澄清不变量真实要求、`log-query.test.ts` 断言与「不含 `--topo-order`」回归护栏。详见 [issue #14](./docs/.agents/issue.md)。(#82)
+
 ## [0.0.13] - 2026-07-05 — 视图容器由活动栏迁移至底部面板（Terminal 之后）
 
 将 Hyper Git 视图容器从活动栏（Activity Bar / Primary Side Bar）迁移至底部面板（Panel），默认排在 Terminal 页签之后，提供与官方 Terminal / Output / Problems 一致的底部停靠体验。完整用户视角叙述见 [Release Note v0.0.13](./docs/releases/v0.0.13.md)。

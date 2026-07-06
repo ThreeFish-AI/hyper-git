@@ -20,6 +20,10 @@
 
 ## Features
 
+<p align="center">
+  <img src="media/overview.png" alt="Overview"/>
+</p>
+
 - **Multi-Changelist Changes view**: group edits into named lists, mark one as the active commit target, create / rename / delete / move lists, persisted in `workspaceState` (restored across restarts); status colors reuse the `gitDecoration.*` theme tokens.
 - **Commit panel**: a hand-built commit view with real-time Conventional Commits validation, Amend / Sign-off / skip hooks, and Commit / Commit & Push; the checkbox selection is the authoritative commit scope, and recent messages are reusable.
 - **Log commit graph (hand-rendered DAG)**: colored swimlanes, branch/merge edges, HEAD/branch/tag badges, virtualized incremental loading; 7 composable filters (author / path / grep / regex / merge-mode / date / clear); per-commit actions (Reset, new branch·tag, Cherry-Pick, Revert, list containing branches).
@@ -61,12 +65,12 @@ See the [Engineering Plan](./docs/architecture/engineering-plan.md), the [Implem
 
 | Milestone | Theme                                                        | Status |
 | --------- | ------------------------------------------------------------ | ------ |
-| M0        | Scaffolding + CI                                             | ✅     |
-| M1        | Git adapter + Changes TreeView (multi-changelist)            | ✅     |
-| M2        | Commit panel (template / Amend / CC validation / hook chain) | ✅     |
-| M3        | Log (Graph DAG) + Branches + Diff/Blame                      | ✅     |
-| M4        | Stash / Shelf / line-level commits / Worktrees               | ✅     |
-| M5        | AI agent (seams reserved, implementation pending)            | ⏳     |
+| M0        | Scaffolding + CI                                             | ✅      |
+| M1        | Git adapter + Changes TreeView (multi-changelist)            | ✅      |
+| M2        | Commit panel (template / Amend / CC validation / hook chain) | ✅      |
+| M3        | Log (Graph DAG) + Branches + Diff/Blame                      | ✅      |
+| M4        | Stash / Shelf / line-level commits / Worktrees               | ✅      |
+| M5        | AI agent (seams reserved, implementation pending)            | ⏳      |
 
 ## Development
 
