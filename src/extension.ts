@@ -63,9 +63,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	if (!api) {
 		logger.warn('vscode.git API 不可用，视图保持空状态');
 		const empty = new EmptyTreeProvider();
-		context.subscriptions.push(
-			vscode.window.registerTreeDataProvider('hyperGit.worktrees', empty),
-		);
+		context.subscriptions.push(vscode.window.registerTreeDataProvider('hyperGit.worktrees', empty));
 		return;
 	}
 
@@ -86,7 +84,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	});
 	const commitView = new CommitWebviewProvider(service, registry, commit);
 	const logTree = new LogWebviewProvider(service, ciService);
-	const branchesTree = new BranchesTreeProvider(service, favorites);
+	const branchesTree = new BranchesTreeProvider(
+		service,
+		favorites,
+		context.workspaceState,
+		service.repoRoot ?? workspaceRoot,
+	);
 	// Branches 视图启用多选（canSelectMany 仅 createTreeView 支持，registerTreeDataProvider 不支持）；
 	// 多选后批量操作（删除分支/标签、复制引用、收藏）作用于整个选区。
 	const branchesView = vscode.window.createTreeView('hyperGit.branches', {
@@ -109,6 +112,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	});
 	const focusCommitView = (): void => {
 		void vscode.commands.executeCommand('hyperGit.commit.focus');
+	};
+
+	// Branches 「平铺 ⇄ 树」切换：context key 驱动工具栏两个按钮互斥显示（见 package.json when 子句），
+	// 初值取自 provider 的持久化状态；命令翻转分组态并同步 context key。
+	const setBranchesGroupingContext = (v: boolean): void => {
+		void vscode.commands.executeCommand('setContext', 'hyperGit.branchesGrouping', v);
+	};
+	setBranchesGroupingContext(branchesTree.grouping);
+	const applyBranchesGrouping = (v: boolean): void => {
+		branchesTree.setGrouping(v);
+		setBranchesGroupingContext(v);
 	};
 
 	context.subscriptions.push(
@@ -139,6 +153,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		...registerMergeCommands(service),
 		...registerMiscCommands(service, branchesTree, logTree),
 		vscode.commands.registerCommand('hyperGit.toggleBlameAnnotation', () => blame.toggle()),
+		vscode.commands.registerCommand('hyperGit.branchesGroupByPrefix', () => applyBranchesGrouping(true)),
+		vscode.commands.registerCommand('hyperGit.branchesFlatten', () => applyBranchesGrouping(false)),
 		...registerStashCommands(service, stashTree),
 		...registerShelfCommands(service, shelfService, shelfTree),
 		...registerWorktreeCommands(service, worktreeTree),

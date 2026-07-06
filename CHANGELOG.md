@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Branches 视图按 `/` 前缀分组为文件夹树**：Local / Remote / Tags 三段支持在**平铺**与**按 `/` 前缀分组的可折叠文件夹树**间切换——共享前缀的分支收拢到以前缀命名的文件夹下、叶子仅显示末段后缀（如 `bak/2025`、`bak/master-2025-07` → 📁`bak` → `2025` / `master-2025-07`；远程整体收拢为 `origin` 文件夹并内嵌 `feature`）。新增纯逻辑引擎 [`buildRefTree`](./src/engine/ref/ref-tree.ts)（复用「变更文件目录树」`buildFileTree` 的 trie 构建 + compact 折叠范式；叶子携完整 `RawRef`、命令定位不受影响；分支感知排序：当前 HEAD → 收藏 → 同档文件夹优先、名称数字感知升序），并**隐藏 `origin/HEAD` 符号引用**（对齐主流 Git UI，消除 `origin` 叶子与 `origin` 文件夹同名冲突）。工具栏提供「平铺 ⇄ 树」切换（`hyperGit.branchesGroupByPrefix` / `hyperGit.branchesFlatten`，context key 驱动按钮互斥），偏好按仓库持久化于 `workspaceState`（默认树形），文件夹默认展开、展开态跨刷新稳定。文件夹节点用独立 `contextValue` 且不登记任何右键命令，checkout / delete / rename / merge / rebase / compare / favorite 与多选批量均零改动、零破坏。完整叙述见 [分支前缀分组树](./docs/features/branch-tree-group-by-prefix.md)。
+
 ## [0.0.14] - 2026-07-06 — 修复 GRAPH 视图提交记录时间倒序
 
 修复 GRAPH 视图「All」范围下提交记录未按时间倒序排列的问题——取数参数由 `--topo-order` 改为 `--author-date-order`，令跨分支提交按作者日期正确交错、消除「日期回跳」。纯取数排序修复，不改数据协议、布局算法与任何视图交互。完整用户视角叙述见 [Release Note v0.0.14](./docs/releases/v0.0.14.md)。
