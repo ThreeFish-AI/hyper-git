@@ -123,3 +123,12 @@
 - **同类问题影响**：所有用 `git log --topo-order` 取数、自计算或直接渲染提交图、且 UI 暴露「按时间浏览」预期的 Git GUI；凡把「lane 算法要求」误读为「必须 `--topo-order`」（实为「子在父之上」即可）的实现均会复现日期回跳；以及排序键与显示日期列不一致（author date vs committer date）导致的「列内看似乱序」类二次 bug。
 
 
+## #15 新增/删除/重命名文件在 Commit 视图与 Graph 视图无法打开差异（git 空树 ref 兜底缺失端）
+
+- **表因**：用户反馈在 **Commit 视图**与 **Graph 视图**点击一个**新增文件**时差异视图直接打不开（预期应展示「全绿新增」对比）；删除、重命名文件同样失败；Graph 视图重命名文件点击更是彻底无效。
+- **根因**：两处「打开差异」都为差异的「缺失端」构造了指向**不存在对象**的 git URI：Commit 视图 `commands.ts` 的 `openDiff` 取 `toGitUri(change.uri, 'HEAD')`（新增文件在 HEAD 不存在）；Graph 视图 `history-commands.ts` 的 `openCommitFileDiff` 取 `toGitUri(uri, `${hash}^`)`（新增文件在父提交不存在）。VS Code 的 git `GitFileSystemProvider.readFile` 行为随版本演进——**1.85**（本扩展 `engines.vscode` 下限）`catch` 吞掉一切取对象错误返空（容错），**当前主线**改为对不存在对象**抛 `FileNotFound`**、仅当 `ref === repository.getEmptyTree()`（空树）时才回空。故 `'HEAD'` / `${hash}^` 这类具名 ref 在新版会抛错致差异打不开（旧版恰好容错掩盖了缺陷）。附带：Graph 视图 `detailLeafHtml` 的 `data-path` 取的是展示串 `"old → new"`（`sendCommitFiles` 把 rename 拼进 `path`），`joinPath` 得伪路径致重命名彻底崩溃；点击仅回传提交级 `hasParent` 而无逐文件 `status`，宿主无法区分 A/D/M/R。
+- **处理方式**：缺失端统一改用 **git 空树 ref**（`4b825dc642cb6eb9a060e54bf8d69288fbee4904`）构造 URI——旧版容错、新版空树逃逸，两版皆稳定解析为空内容（这正是 VS Code 官方 git 扩展现今为「新增文件」左端的做法，复用非自造）。正交分解：① 纯状态分类器 `engine/diff/change-side.ts`（`diffShapeFromStatus` / `diffShapeFromCode` → `added`/`deleted`/`renamed`/`modified`）；② adapter 层 `diff-sides.ts`（`GIT_EMPTY_TREE` + `resolveDiffSides` 按形态把缺失端置空树）；③ `openDiff` / `openCommitFileDiff` 改为按 `status` 选端（Commit 视图签名不变；Graph 视图签名 `(hash, filePath, status?, oldPath?)`，移除 `hasParent`，由 `status` 取代）；④ 协议 `log/openFile` payload 增 `status`/`oldPath`、去 `hasParent`；⑤ `sendCommitFiles` 的 `path` 改回干净新路径，展示串由 webview 端用 `oldPath` 拼出（数据与展示分离）。新增/根提交均不再依赖 `^`。同步补 `tests/unit/diff-change-side.test.ts`（分类器）与 `tests/suite/diff-open.test.js`（空树 URI 解析为空 + A/D/R/工作区新增打开差异）。
+- **后续防范**：① 为差异的「缺失端」构造 URI 时，**一律用 git 空树 ref**，不要对不存在对象取 `'HEAD'` / `${hash}^` 这类具名 ref——它们只在旧版 VS Code（容错 readFile）上侥幸可用，新版必抛 FileNotFound。② VS Code git 扩展内部行为（如 readFile 容错性）随版本变化，复用其 `toGitUri` 时须确认跨 `engines.vscode` 下限到当前主线的兼容矩阵；空树 ref 是少数有契约保障的「稳定回空」途径。③ webview 的 `data-*` 属性应承载**数据**（机器可用的稳定 key/路径），展示串（含 `"old → new"` 这类人为拼接）只放在可见标签文本里——二者混用会导致 `joinPath` 之类以数据为输入的下游崩溃。④ 逐文件级语义（status）须端到端透传到决策点（host 命令），勿用提交级布尔（`hasParent`）模糊替代——后者无法区分单文件是 A/D/M/R。⑤ 测试断言「差异已打开」时勿按标签计数（VS Code `{preview:true}` 会复用预览槽替换而非新增），应先 `closeAllEditors` 再按差异标题（含文件名）匹配标签。
+- **同类问题影响**：所有消费 vscode.git `toGitUri` 自建差异打开逻辑的扩展，凡为缺失端取具名 ref 的均在新版 VS Code 复现；凡 webview `data-path` 复用展示串（含分隔符）的实现均会在路径拼接处崩溃；以及任何「逐文件操作」误用「提交级 / 全局级」标志判定单文件形态的设计。
+
+

@@ -1,6 +1,8 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { FileStatus } from '../engine/model';
+import { diffShapeFromStatus } from '../engine/diff/change-side';
+import { resolveDiffSides } from './diff-sides';
 import type { ChangelistRegistry } from './changelist-registry';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
 
@@ -121,11 +123,24 @@ export function registerChangesCommands(
 			if (!repo || !change) {
 				return;
 			}
-			// 空仓库（无 HEAD）时用 originalUri 兜底，避免 git scheme 解析失败
-			const left = repo.state.HEAD ? service.toGitUri(change.uri, 'HEAD') : change.originalUri;
-			const right = change.uri;
+			// 按变更形态选择差异端点：新增置空旧端、删除置空新端、重命名旧端取原路径；缺失端统一走 git 空树 ref
+			// （跨 VS Code 版本稳定回空），避免对不存在对象取 'HEAD' 致新版差异打不开。空树在无 HEAD 的空仓库下亦成立。
+			const shape = diffShapeFromStatus(change.status);
+			const oldUri = shape === 'renamed' ? change.originalUri : change.uri;
+			const { left, right } = resolveDiffSides(
+				service,
+				shape,
+				oldUri,
+				service.toGitUri(oldUri, 'HEAD'),
+				change.uri,
+				change.uri,
+			);
 			const title = `${path.basename(change.relativePath)} (HEAD ↔ Working)`;
-			await vscode.commands.executeCommand('vscode.diff', left, right, title);
+			try {
+				await vscode.commands.executeCommand('vscode.diff', left, right, title);
+			} catch (e) {
+				void vscode.window.showErrorMessage(`Failed to open diff: ${e instanceof Error ? e.message : String(e)}`);
+			}
 		}),
 	);
 

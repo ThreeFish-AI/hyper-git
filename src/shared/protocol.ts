@@ -231,7 +231,7 @@ export type LogWebviewToHostMessage =
 	| { readonly type: 'log/selectCommit'; readonly payload: { readonly hash: string } }
 	| { readonly type: 'log/commitAction'; readonly payload: { readonly op: LogCommitOp; readonly hash: string } }
 	| { readonly type: 'log/setScope'; readonly payload: { readonly scope: LogScope } }
-	| { readonly type: 'log/openFile'; readonly payload: { readonly hash: string; readonly path: string; readonly hasParent: boolean } }
+	| { readonly type: 'log/openFile'; readonly payload: { readonly hash: string; readonly path: string; readonly status: string; readonly oldPath?: string } }
 	| { readonly type: 'log/requestCi'; readonly payload: { readonly hashes: readonly string[] } }
 	| { readonly type: 'log/ciSignIn' }
 	| { readonly type: 'log/openExternal'; readonly payload: { readonly url: string } }
