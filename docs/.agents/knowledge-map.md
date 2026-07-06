@@ -20,6 +20,7 @@
 - [Log 视图 CI 状态](../docs/features/log-ci-status.md) — 按提交显示 GitHub CI 最终状态（绿勾/红叉 + Tooltip 明细）：认证、限流、懒加载、边界与配置。
 - [Commit 视图整合](../docs/features/commit-view-consolidation.md) — 移除 CHANGES 视图，其文件操作/changelist 管理/Git 工具栏/未提交角标零回归平移入 Commit 视图。
 - [变更文件目录树](../docs/features/file-list-group-by-directory.md) — Commit / Log 文件列表「平铺 ⇄ 按目录分组」切换：host 侧 `buildFileTree` 构树下发、compact 折叠、目录三态。
+- [分支前缀分组树](../docs/features/branch-tree-group-by-prefix.md) — Branches 视图 Local/Remote/Tags「平铺 ⇄ 按 `/` 前缀分组」切换：`buildRefTree` 构树、分支感知排序、compact 折叠、隐藏 `origin/HEAD`、按仓库持久化。
 - [Log 提交悬浮详情](../docs/features/log-commit-tooltip.md) — 悬停提交行浮层展示 分支/标签/HEAD/完整消息/作者·提交者/时间/SHA；复用 CI 浮层范式、与其互斥。
 - [实施状态总览](../docs/milestones/implementation-status.md) — M0-M5 交付记录 + API 限制 + M5 AI 设计 + 验证/发布（**实施看板**）。
 - [工程实施方案](../docs/architecture/engineering-plan.md) — 路径 B 架构 + M0-M5 里程碑（**开发蓝图**）。

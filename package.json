@@ -195,6 +195,18 @@
 				"icon": "$(refresh)"
 			},
 			{
+				"command": "hyperGit.branchesGroupByPrefix",
+				"title": "Group Branches by Prefix",
+				"category": "Hyper Git",
+				"icon": "$(list-tree)"
+			},
+			{
+				"command": "hyperGit.branchesFlatten",
+				"title": "Show Branches as Flat List",
+				"category": "Hyper Git",
+				"icon": "$(list-flat)"
+			},
+			{
 				"command": "hyperGit.logFilter",
 				"title": "Filter Graph…",
 				"category": "Hyper Git",
@@ -763,6 +775,16 @@
 					"command": "hyperGit.mergeDialog",
 					"when": "view == hyperGit.branches",
 					"group": "navigation@5"
+				},
+				{
+					"command": "hyperGit.branchesGroupByPrefix",
+					"when": "view == hyperGit.branches && !hyperGit.branchesGrouping",
+					"group": "navigation@6"
+				},
+				{
+					"command": "hyperGit.branchesFlatten",
+					"when": "view == hyperGit.branches && hyperGit.branchesGrouping",
+					"group": "navigation@6"
 				},
 				{
 					"command": "hyperGit.fetch",
