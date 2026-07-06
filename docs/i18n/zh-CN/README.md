@@ -20,6 +20,10 @@
 
 ## 核心能力
 
+<p align="center">
+  <img src="../../../media/overview.png" alt="Overview"/>
+</p>
+
 - **多 Changelist Changes 视图**：将改动分组到命名列表，设活动列表为提交目标，新建/重命名/删除/移动，`workspaceState` 持久化（重启恢复）；状态色复用 `gitDecoration.*` 主题色。
 - **Commit 提交窗口**：自绘提交面板 + Conventional Commits 实时校验 + Amend / Sign-off / 跳过 Hook + 提交 / 提交并推送；勾选集即提交权威范围；最近消息复用。
 - **Log 提交图（自绘 DAG）**：彩色泳道、分叉·合并连线、HEAD/分支/标签徽标，虚拟滚动增量加载；7 个可组合过滤器（作者/路径/grep/正则/合并模式/日期/清除）；per-commit 操作（Reset、新建分支·标签、Cherry-Pick、Revert、查看包含分支）。
