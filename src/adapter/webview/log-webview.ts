@@ -168,7 +168,8 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 					'hyperGit.openCommitFileDiff',
 					msg.payload.hash,
 					msg.payload.path,
-					msg.payload.hasParent,
+					msg.payload.status,
+					msg.payload.oldPath,
 				);
 				break;
 			case 'log/setScope':
@@ -421,10 +422,11 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			// 复用 Log 既有逻辑：diff-tree 取变更文件。
 			const out = await this.service.execGit(['diff-tree', '--no-commit-id', '--name-status', '-r', '--root', hash]);
 			const changes = parseNameStatus(out);
+			// path 取干净新路径（供 data-path/建树/端点定位）；rename/copy 的 "old → new" 展示由 webview 端用 oldPath 拼出。
 			const files: LogCommitFileItem[] = changes.map((c) => ({
 				status: c.status,
 				statusLabel: statusLabel(c.status),
-				path: c.oldPath ? `${c.oldPath} → ${c.path}` : c.path,
+				path: c.path,
 				oldPath: c.oldPath,
 				themeColor: fileIconColor(c.status),
 			}));
@@ -1082,20 +1084,20 @@ detailsList.addEventListener('click', function (e) {
   const d = e.target.closest('.tree-dir');
   if (d) { toggleDetailCollapse(d.getAttribute('data-dir')); return; }
   const f = e.target.closest('.file'); if (!f) return;
-  vscode.postMessage({ type: 'log/openFile', payload: { hash: f.getAttribute('data-hash'), path: f.getAttribute('data-path'), hasParent: f.getAttribute('data-hasparent') === '1' } });
+  vscode.postMessage({ type: 'log/openFile', payload: { hash: f.getAttribute('data-hash'), path: f.getAttribute('data-path'), status: f.getAttribute('data-status'), oldPath: f.getAttribute('data-oldpath') || undefined } });
 });
 
 const DINDENT = 14;
-function detailLeafHtml(hash, f, hasParent, depth, label) {
-  return '<div class="file" style="padding-left:' + (depth * DINDENT + 10) + 'px" data-hash="' + esc(hash) + '" data-path="' + esc(f.path) + '" data-hasparent="' + hasParent + '"><span class="dot" style="color:var(--vscode-' + f.themeColor.replace(/\\./g, '-') + ')">' + esc(f.statusLabel) + '</span><span class="nm">' + esc(label) + '</span></div>';
+function detailLeafHtml(hash, f, depth, label) {
+  return '<div class="file" style="padding-left:' + (depth * DINDENT + 10) + 'px" data-hash="' + esc(hash) + '" data-path="' + esc(f.path) + '" data-oldpath="' + esc(f.oldPath || '') + '" data-status="' + esc(f.status) + '"><span class="dot" style="color:var(--vscode-' + f.themeColor.replace(/\\./g, '-') + ')">' + esc(f.statusLabel) + '</span><span class="nm">' + esc(label) + '</span></div>';
 }
-function renderDetailNode(node, depth, hash, hasParent, files, out) {
+function renderDetailNode(node, depth, hash, files, out) {
   if (node.dir) {
     const isCol = dcollapsed.has(node.path);
     out.push('<div class="tree-dir" style="padding-left:' + (depth * DINDENT + 8) + 'px" data-dir="' + esc(node.path) + '"><span class="tree-twist">' + (isCol ? '\\u25B8' : '\\u25BE') + '</span><span class="tree-name">' + esc(node.name) + '</span></div>');
-    if (!isCol) { for (const c of node.children) renderDetailNode(c, depth + 1, hash, hasParent, files, out); }
+    if (!isCol) { for (const c of node.children) renderDetailNode(c, depth + 1, hash, files, out); }
   } else {
-    out.push(detailLeafHtml(hash, files[node.fileIndex], hasParent, depth, node.name));
+    out.push(detailLeafHtml(hash, files[node.fileIndex], depth, node.name));
   }
 }
 function pruneDetailCollapsed(tree) {
@@ -1122,14 +1124,12 @@ function renderDetails(hash, files, tree) {
   if (!hash) { detailsEl.classList.remove('show'); return; }
   curDetailHash = hash; curDetailFiles = files || []; curDetailTree = tree || [];
   updateDetailModeButtons();
-  const row = model.rows.find(function (r) { return r.hash === hash; });
-  const hasParent = row && row.parents && row.parents.length > 0 ? '1' : '0';
   detailsTitleEl.textContent = 'Changed Files (' + curDetailFiles.length + ') · ' + hash.slice(0, 7);
   if (curDetailFiles.length === 0) { detailsList.innerHTML = '<div class="file" style="opacity:.6">No changed files (may be a root or merge commit)</div>'; detailsEl.classList.add('show'); return; }
   pruneDetailCollapsed(curDetailTree);
   const out = [];
-  if (detailsMode === 'tree') { for (const n of curDetailTree) renderDetailNode(n, 0, hash, hasParent, curDetailFiles, out); }
-  else { for (const f of curDetailFiles) out.push(detailLeafHtml(hash, f, hasParent, 0, f.path)); }
+  if (detailsMode === 'tree') { for (const n of curDetailTree) renderDetailNode(n, 0, hash, curDetailFiles, out); }
+  else { for (const f of curDetailFiles) out.push(detailLeafHtml(hash, f, 0, (f.oldPath ? f.oldPath + ' → ' + f.path : f.path))); }
   detailsList.innerHTML = out.join('');
   detailsEl.classList.add('show');
 }

@@ -9,6 +9,8 @@ import { handleGitConflict } from './conflict-ui';
 import type { MergeMode } from '../engine/log/log-filter';
 import { selectedBranchRefs } from './branch-selection';
 import { diffPrunedRefs, formatBranchDeleteConfirm, partitionByMerged, truncateNames } from '../engine/ref/cleanup';
+import { diffShapeFromCode } from '../engine/diff/change-side';
+import { resolveDiffSides } from './diff-sides';
 
 /** 注册 Log/Branches/Blame/History/Tags 相关命令。 */
 export function registerHistoryCommands(
@@ -504,20 +506,26 @@ export function registerHistoryCommands(
 	// —— Log 增强（Phase 2）：高级过滤 + 提交详情 diff + per-commit 操作 ——
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.openCommitFileDiff', async (hash: string, filePath: string, hasParent: boolean) => {
+		vscode.commands.registerCommand('hyperGit.openCommitFileDiff', async (hash: string, filePath: string, status?: string, oldPath?: string) => {
 			const repo = service.repo;
 			if (!repo) {
 				return;
 			}
-			const uri = vscode.Uri.joinPath(repo.rootUri, filePath);
-			const right = service.toGitUri(uri, hash);
+			// 按变更形态选择差异端点：新增置空旧端、删除置空新端、重命名/复制两端取异路径。缺失端统一走 git 空树 ref
+			// （跨 VS Code 版本稳定回空），避免对父提交不存在的对象取 `${hash}^` 致新版差异打不开。新增/根提交均不依赖 `^`。
+			const shape = diffShapeFromCode(status ?? 'M');
+			const newUri = vscode.Uri.joinPath(repo.rootUri, filePath);
+			const oldUri = oldPath ? vscode.Uri.joinPath(repo.rootUri, oldPath) : newUri;
+			const { left, right } = resolveDiffSides(
+				service,
+				shape,
+				oldUri,
+				service.toGitUri(oldUri, `${hash}^`),
+				newUri,
+				service.toGitUri(newUri, hash),
+			);
 			try {
-				if (hasParent) {
-					const left = service.toGitUri(uri, `${hash}^`);
-					await vscode.commands.executeCommand('vscode.diff', left, right, `${filePath} · ${hash.slice(0, 7)} (commit diff)`, { preview: true });
-				} else {
-					await vscode.commands.executeCommand('vscode.open', right);
-				}
+				await vscode.commands.executeCommand('vscode.diff', left, right, `${filePath} · ${hash.slice(0, 7)} (commit diff)`, { preview: true });
 			} catch (e) {
 				void vscode.window.showErrorMessage(`Failed to open diff: ${errMsg(e)}`);
 			}
