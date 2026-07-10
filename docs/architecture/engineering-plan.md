@@ -226,6 +226,8 @@ hyper-git/
 **Commit 流水线 hook 注入点**（M2 即建责任链，默认 Null hooks）：
 `staged diff → [Hook A: 提交信息生成] → message 定稿 → [Hook B: 提交前检查链=beforeCheckin] → [Hook C: 分组校验] → commit → [Hook D: checkinSuccessful] → push → [Hook E: checkinFailed→Hook F: 冲突解决]`
 
+**pre-M5 已落地（配置铺垫）**：新增 `hyperGit.claudeCode.executablePath`（Claude Code CLI 路径，留空=`PATH` 自动探测）与 `Open Claude Settings`（`~/.claude/settings.json` 快捷入口）两项配置——仅承载「配置 + 快捷入口」，接缝仍 Null、`hyperGit.ai.enabled` 行为不变；M5 时 `ILlmProvider` 等将读取该路径定位 CLI。详见 [Claude Code 配置](../features/claude-code-config.md)。
+
 ---
 
 ## 7. CI/CD 与发布策略

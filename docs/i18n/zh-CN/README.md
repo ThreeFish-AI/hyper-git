@@ -16,7 +16,7 @@
   <a href="../../../README.md">English</a> · <b>简体中文</b>
 </p>
 
-<p align="center"><sub>6 视图 · 97 命令 · 6 配置项 · 324 单元测试</sub></p>
+<p align="center"><sub>6 视图 · 101 命令 · 7 配置项 · 372 单元测试</sub></p>
 
 ## 核心能力
 
@@ -40,7 +40,7 @@
 - **消费** 内置 `vscode.git` 导出的稳定 `Repository` API 作为 git 底座，不重造 git 状态机。
 - **受控 CLI 通道**：稳定 API 未覆盖的能力（cherry-pick / revert / reset / 分支重命名 / hunk 暂存 / stash 列表 / graph 拓扑 / shelf 等）经 `GitRepositoryService.execGit` 复用同一 git 二进制（`api.git.path`）实现。
 - **自绘视图** 承载完整的变更管理 UI（Webview 位于 `adapter/webview/`）；纯逻辑沉淀于 `engine/`（零 vscode 依赖、可单测）。
-- **AI 接缝**：预留 `ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver` 共 5 个接口（设计参考 JetBrains `CheckinHandler` 提交生命周期），当前以 Null 实现交付，完整实现延后至 M5。
+- **AI 接缝**：预留 `ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver` 共 5 个接口（设计参考 JetBrains `CheckinHandler` 提交生命周期），当前以 Null 实现交付，完整实现延后至 M5。作为 M5 前置铺垫，已可配置 **Claude Code 可执行路径**（`hyperGit.claudeCode.executablePath`）与 **`~/.claude/settings.json` 快捷入口**——详见 [Claude Code 配置](../../features/claude-code-config.md)。
 
 <p align="center">
   <img src="../../../media/framework.png" alt="Framework"/>
