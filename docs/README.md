@@ -10,6 +10,7 @@
 ## 功能文档
 - [Log 视图 CI 状态](./features/log-ci-status.md) — 按提交显示 GitHub CI 最终状态（绿勾/红叉 + 悬停 Tooltip 明细）：认证、限流、懒加载、边界与配置。
 - [Claude Code 配置](./features/claude-code-config.md) — Agentic Git 预置：Claude Code 可执行路径设置 + `~/.claude/settings.json` 快捷入口（原生设置 + 命令；M5 前置铺垫）。
+- [Agentic Git 偏好配置](./features/agentic-git-preferences.md) — Agentic Git 预置：Base Branch + Commit / Create PR / Review 三项 agent 指令偏好（多行文本域 + 内置默认模板；M5 前置铺垫）。
 
 ## 发布说明
 - [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.14 修复 GRAPH 视图提交记录时间倒序](./releases/v0.0.14.md)。
