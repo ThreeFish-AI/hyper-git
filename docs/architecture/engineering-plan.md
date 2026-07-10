@@ -226,7 +226,7 @@ hyper-git/
 **Commit 流水线 hook 注入点**（M2 即建责任链，默认 Null hooks）：
 `staged diff → [Hook A: 提交信息生成] → message 定稿 → [Hook B: 提交前检查链=beforeCheckin] → [Hook C: 分组校验] → commit → [Hook D: checkinSuccessful] → push → [Hook E: checkinFailed→Hook F: 冲突解决]`
 
-**pre-M5 已落地（配置铺垫）**：新增 `hyperGit.claudeCode.executablePath`（Claude Code CLI 路径，留空=`PATH` 自动探测）与 `Open Claude Settings`（`~/.claude/settings.json` 快捷入口）两项配置——仅承载「配置 + 快捷入口」，接缝仍 Null、`hyperGit.ai.enabled` 行为不变；M5 时 `ILlmProvider` 等将读取该路径定位 CLI。详见 [Claude Code 配置](../features/claude-code-config.md)。
+**pre-M5 已落地（配置铺垫）**：新增 `hyperGit.claudeCode.executablePath`（Claude Code CLI 路径，留空=`PATH` 自动探测）与 `Open Claude Settings`（`~/.claude/settings.json` 快捷入口）两项配置——仅承载「配置 + 快捷入口」，接缝仍 Null、`hyperGit.ai.enabled` 行为不变；M5 时 `ILlmProvider` 等将读取该路径定位 CLI。详见 [Claude Code 配置](../features/claude-code-config.md)。另新增 `hyperGit.agent.*` 四项偏好（`baseBranch` + `commit`/`createPr`/`review` Preferences，多行文本域 + 内置默认模板），M5 时作为对应动作发送给 agent 的指令与 PR 基线；详见 [Agentic Git 偏好配置](../features/agentic-git-preferences.md)。
 
 ---
 
