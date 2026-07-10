@@ -203,6 +203,7 @@ flowchart TD
 
 ### 阶段 1:可选 AI 期——**配置开关 + 模型来源可切换**
 - 新增配置:`sofia.ai.enabled`(总开关)、`sofia.ai.modelSource`(`vscodeLM` | `byok` | `openaiCompatible`)、`sofia.ai.commitMessage.enabled` 等细粒度开关。
+  > 事实校准:实际产品命名空间为 `hyperGit.*`(本文 `sofia.*` 为改名前的历史草案,全量收敛另议)。**首个落地的 pre-M5 配置**为 `hyperGit.claudeCode.executablePath`(Claude Code CLI 路径)——属「CLI 后端定位」,与此处的「模型来源(`modelSource`)」接缝正交;详见 [Claude Code 配置](../features/claude-code-config.md)。
 - `ILlmProvider` 按 `modelSource` 路由:
   - `vscodeLM`:走 `vscode.lm.selectChatModels`([LM API](https://code.visualstudio.com/api/extension-guides/ai/language-model))——需 Copilot 订阅 + 用户 consent。
   - `byok`:走 BYOK/Ollama([Provider API](https://code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider))——**本地化、不强依赖云端、企业友好**。

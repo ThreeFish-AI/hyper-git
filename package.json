@@ -468,6 +468,18 @@
 				"icon": "$(output)"
 			},
 			{
+				"command": "hyperGit.setClaudeCodePath",
+				"title": "Set Claude Code Executable Path…",
+				"category": "Hyper Git",
+				"icon": "$(folder-opened)"
+			},
+			{
+				"command": "hyperGit.openClaudeSettings",
+				"title": "Open Claude Settings",
+				"category": "Hyper Git",
+				"icon": "$(gear)"
+			},
+			{
 				"command": "hyperGit.partialStage",
 				"title": "Stage Hunk…",
 				"category": "Hyper Git"
@@ -1214,6 +1226,11 @@
 					"type": "boolean",
 					"default": false,
 					"markdownDescription": "Enable AI agent capabilities (currently reserved as an architectural seam; not yet active)."
+				},
+				"hyperGit.claudeCode.executablePath": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "Path to the Claude Code CLI executable used by Hyper Git's Agentic Git features. Leave empty to auto-detect the `claude` binary from your `PATH` (recommended).\n\n[Browse for executable…](command:hyperGit.setClaudeCodePath) · [Open Claude settings (`~/.claude/settings.json`)](command:hyperGit.openClaudeSettings)"
 				},
 				"hyperGit.log.ci.enabled": {
 					"type": "boolean",

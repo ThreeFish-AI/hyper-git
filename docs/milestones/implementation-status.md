@@ -96,6 +96,8 @@
 
 **M5 启动前置**：`engines.vscode` 上调以支持 LM/Chat API；opt-in 配置开关；模型来源可切换。
 
+**pre-M5 已落地（配置铺垫）**：`hyperGit.claudeCode.executablePath`（Claude Code CLI 路径，留空=`PATH` 自动探测）+ `Open Claude Settings`（`~/.claude/settings.json` 快捷入口）两项配置已交付——仅承载配置与快捷入口，接缝仍 Null、`hyperGit.ai.enabled` 行为不变。详见 [Claude Code 配置](../features/claude-code-config.md)。
+
 ## 6. 验证体系
 
 - **单元测试（Vitest，< 1s）**：engine/ 纯逻辑（scm-mapping、changelist-grouper、commit-pipeline、conventional-linter、git-status-map、conventional-check）+ CommitService.executeCommit（mock Repository，7 分支）。共 45 项。

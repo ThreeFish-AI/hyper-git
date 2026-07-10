@@ -16,7 +16,7 @@
   <b>English</b> · <a href="./docs/i18n/zh-CN/README.md">简体中文</a>
 </p>
 
-<p align="center"><sub>6 views · 97 commands · 6 settings · 324 unit tests</sub></p>
+<p align="center"><sub>6 views · 101 commands · 7 settings · 372 unit tests</sub></p>
 
 ## Features
 
@@ -40,7 +40,7 @@
 - **Consumes** the stable `Repository` API exported by the built-in `vscode.git` extension as its Git foundation, rather than rebuilding a Git state machine.
 - **Controlled CLI channel**: capabilities the stable API does not cover (cherry-pick / revert / reset / branch rename / hunk staging / stash listing / graph topology / shelf, etc.) run through `GitRepositoryService.execGit`, reusing the same Git binary (`api.git.path`).
 - **Hand-rendered views** carry the full change-management UI (webviews live under `adapter/webview/`); pure logic is distilled into `engine/` (zero `vscode` dependency, unit-testable).
-- **AI seams**: 5 interfaces (`ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver`) are reserved (design inspired by JetBrains' `CheckinHandler` commit lifecycle), currently shipped as Null implementations; the full implementation is deferred to M5.
+- **AI seams**: 5 interfaces (`ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver`) are reserved (design inspired by JetBrains' `CheckinHandler` commit lifecycle), currently shipped as Null implementations; the full implementation is deferred to M5. As pre-M5 groundwork, a **Claude Code executable path** setting (`hyperGit.claudeCode.executablePath`) and a **`~/.claude/settings.json` shortcut** are already configurable — see [Claude Code configuration](./docs/features/claude-code-config.md).
 
 <p align="center">
   <img src="media/framework.png" alt="Framework"/>
