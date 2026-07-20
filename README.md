@@ -16,7 +16,7 @@
   <b>English</b> · <a href="./docs/i18n/zh-CN/README.md">简体中文</a>
 </p>
 
-<p align="center"><sub>6 views · 101 commands · 11 settings · 372 unit tests</sub></p>
+<p align="center"><sub>6 views · 101 commands · 11 settings · 375 unit tests</sub></p>
 
 ## Features
 
@@ -78,7 +78,7 @@ See the [Engineering Plan](./docs/architecture/engineering-plan.md), the [Implem
 pnpm install                  # install dependencies
 pnpm run compile              # type-check + lint + build
 pnpm run watch                # watch build (press F5 to launch the Extension Host debugger)
-pnpm run test:unit            # unit tests (pure engine logic, Vitest, 324 cases)
+pnpm run test:unit            # unit tests (pure engine logic, Vitest, 375 cases)
 pnpm run test:integration     # integration tests (@vscode/test-electron)
 pnpm run package              # production build
 pnpm dlx @vscode/vsce package # package the .vsix

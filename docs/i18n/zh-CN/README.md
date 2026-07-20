@@ -16,7 +16,7 @@
   <a href="../../../README.md">English</a> · <b>简体中文</b>
 </p>
 
-<p align="center"><sub>6 视图 · 101 命令 · 11 配置项 · 372 单元测试</sub></p>
+<p align="center"><sub>6 视图 · 101 命令 · 11 配置项 · 375 单元测试</sub></p>
 
 ## 核心能力
 
@@ -78,7 +78,7 @@
 pnpm install                  # 安装依赖
 pnpm run compile              # 类型检查 + lint + 构建
 pnpm run watch                # 监听构建（F5 启动 Extension Host 调试）
-pnpm run test:unit            # 单元测试（engine 纯逻辑，Vitest，324 例）
+pnpm run test:unit            # 单元测试（engine 纯逻辑，Vitest，375 例）
 pnpm run test:integration     # 集成测试（@vscode/test-electron）
 pnpm run package              # 生产构建
 pnpm dlx @vscode/vsce package # 打包 .vsix
