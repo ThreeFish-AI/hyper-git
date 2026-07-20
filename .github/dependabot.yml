@@ -13,6 +13,12 @@ updates:
       # @types/vscode 的 major.minor ≤ engines.vscode）。Dependabot 单方面 bump 会破坏该约束
       # 并令 CI 的 vsce package 失败，故忽略其升级——抬高最低 VS Code 版本属产品决策，需人工执行。
       - dependency-name: '@types/vscode'
+      # typescript 7.0（Go 原生移植 tsgo）刻意未提供编译器编程 API（延至 7.1），typescript-eslint
+      # 无法运行于 TS7，加载期访问 ts.Extension.Cjs 触发崩溃，使 CI 的 lint 失败（详见
+      # typescript-eslint#12518，closed as not planned）。故忽略 typescript 的 major 升级——
+      # 待 TS 7.1 稳定编程 API 与工具链适配后再由人工重启升级。次要/补丁版仍照常跟进。
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     target-branch: feature/1.x.x
