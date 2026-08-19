@@ -58,6 +58,8 @@ export interface CommitViewState {
 	readonly tree: readonly FileTreeNode[];
 	readonly conventionalEnabled: boolean;
 	readonly busy: boolean;
+	/** 当前活跃仓库根（issue #107）：webview 勾选集/视图模式按仓库分区记忆。 */
+	readonly repoRoot: string;
 }
 
 /** Host → Webview */

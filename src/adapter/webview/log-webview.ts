@@ -96,6 +96,8 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 	private view?: vscode.WebviewView;
 	private filter: LogFilter = {};
 	private scope: LogScope = 'all';
+	/** scope 按仓库记忆（内存级，issue #107）：切回仓库恢复其视图范围，host 侧即事实源随 graphData 下发。 */
+	private readonly scopeByRepo = new Map<string, LogScope>();
 	private refreshTimer: ReturnType<typeof setTimeout> | undefined;
 	private readonly disposables: vscode.Disposable[] = [];
 
@@ -109,8 +111,13 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			}),
 		);
 		// 活跃仓库切换（issue #107）：host 级过滤条件是旧仓库语境的产物，跨仓库无意义 → 清空；
-		// 图数据重拉由上方 onDidChange 订阅驱动，无需额外处理。
-		this.disposables.push(service.onDidChangeRepository(() => { this.filter = {}; }));
+		// scope 恢复该仓库的记忆值（无记忆回退 'all'）；图数据重拉由上方 onDidChange 订阅驱动。
+		this.disposables.push(
+			service.onDidChangeRepository((e) => {
+				this.filter = {};
+				this.scope = (e.root ? this.scopeByRepo.get(e.root) : undefined) ?? 'all';
+			}),
+		);
 	}
 
 	setFilter(filter: LogFilter): void {
@@ -177,6 +184,9 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				break;
 			case 'log/setScope':
 				this.scope = msg.payload.scope;
+				if (this.service.repoRoot) {
+					this.scopeByRepo.set(this.service.repoRoot, msg.payload.scope);
+				}
 				void this.pushState();
 				break;
 			case 'log/commitAction':
@@ -635,12 +645,33 @@ const PALETTE = (function () {
 const ROW_H = 24, LANE_W = 14, NODE_R = 4, GUTTER = 10, OVERSCAN = 8, LOAD_THRESHOLD = 40;
 /** scope 白名单兜底：仅接受三态，否则回退默认 'all'（兼容未来废弃的持久化值）。 */
 function normalizeScope(v) { return v === 'all' || v === 'current' || v === 'checkpointer' ? v : 'all'; }
-const persisted = vscode.getState() || {};
-let selectedHash = persisted.selectedHash || null;
-let scope = normalizeScope(persisted.scope);
-let detailsMode = persisted.dmode === 'tree' ? 'tree' : 'flat';
-const dcollapsed = new Set(persisted.dcollapsed || []);
-function persist() { vscode.setState({ selectedHash: selectedHash, scope: scope, dmode: detailsMode, dcollapsed: Array.from(dcollapsed) }); }
+// ── 视图状态按仓库分区（v2，issue #107）：scope/选中/dmode/dcollapsed 记忆跟随仓库，
+// 切换仓库换装载互不串扰；无 v2 时从旧平铺结构一次性升级（旧值归首个见到的仓库，不丢偏好）。──
+const persistedRaw = vscode.getState() || {};
+let persistedRepo = '';
+let persistedByRepo = {};
+if (persistedRaw.v === 2 && persistedRaw.byRepo) {
+  persistedByRepo = persistedRaw.byRepo;
+} else if (persistedRaw.selectedHash || persistedRaw.scope || persistedRaw.dmode || persistedRaw.dcollapsed) {
+  persistedByRepo = { '': { selectedHash: persistedRaw.selectedHash, scope: persistedRaw.scope, dmode: persistedRaw.dmode, dcollapsed: persistedRaw.dcollapsed } };
+}
+let selectedHash = null;
+let scope = 'all';
+let detailsMode = 'flat';
+let dcollapsed = new Set();
+/** 装载某仓库的分区状态（graphData 到达时调用；host 下发的 scope 为该仓库事实源）。 */
+function loadPersistedFor(repoRoot, hostScope) {
+  persistedRepo = repoRoot;
+  const s = persistedByRepo[repoRoot] || persistedByRepo[''] || {};
+  selectedHash = s.selectedHash || null;
+  scope = hostScope || normalizeScope(s.scope);
+  detailsMode = s.dmode === 'tree' ? 'tree' : 'flat';
+  dcollapsed = new Set(s.dcollapsed || []);
+}
+function persist() {
+  persistedByRepo[persistedRepo] = { selectedHash: selectedHash, scope: scope, dmode: detailsMode, dcollapsed: Array.from(dcollapsed) };
+  vscode.setState({ v: 2, byRepo: persistedByRepo });
+}
 let model = { rows: [], maxLanes: 0, hasMore: false, repoRoot: '', multiRepo: false };
 let renderedFirst = -1, renderedLast = -1, fetching = false;
 // ── CI 状态（懒加载、仅取可见行；ciByHash 稳定缓存、ciRequested 去重、ciPending 防抖批量）──
@@ -1263,8 +1294,8 @@ window.addEventListener('message', function (e) {
   const m = e.data;
   if (m.type === 'log/graphData') {
     model = { rows: m.payload.rows, maxLanes: m.payload.maxLanes, hasMore: m.payload.hasMore, repoRoot: m.payload.repoRoot, multiRepo: !!m.payload.multiRepo };
+    loadPersistedFor(m.payload.repoRoot, m.payload.scope);
     // 仓库名按钮：多仓库态显示 basename + ▾（Git Graph 形态），单仓库保持完整路径纯文本观感。
-    scope = m.payload.scope;
     if (model.multiRepo) {
       repoEl.textContent = repoBasename(m.payload.repoRoot) + ' ▾';
       repoEl.title = m.payload.repoRoot + ' — Switch repository';
