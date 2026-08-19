@@ -140,3 +140,11 @@
 - **同类问题影响**：所有以 `contributes.views` 声明默认布局的 VS Code 扩展；凡将「默认隐藏但可恢复」误用 `when:false`（致用户无法启用）或反向混淆的实现；以及把「仅初始态生效」误当「持久强制」而困惑于老用户升级后不生效的排障。
 
 
+
+## #107 多根工作区无法切换 Git 仓库（Graph 等全部视图锁定单一仓库）
+
+- **表因**：多根工作区（multi-root）含多个 Git 仓库时，Graph 面板恒只显示其中一个仓库（`workspaceFolders[0]` 匹配或 `repositories[0]`），无任何切换入口；Git Graph / GitLens 等均有仓库选择器。
+- **根因**：扩展的活跃仓库模型是**单仓库假设**——① `GitRepositoryService.pickRepository()` 只按「首个 folder → 首个仓库」两级选取，无手动切换 API；② 4 处**构造期冻结**的按 repoRoot 键控持久化状态（`ChangelistRegistry` / `BranchFavorites` / `BranchesTreeProvider.groupingKey` / `ShelfService` 目录）不随仓库变化，即使切了活跃仓库，changelist 分配与收藏仍指向旧仓库、Shelf 会跨库误 apply；③ Blame 注解、Graph host 级 filter、webview 持久化状态等均无切库清理/隔离。
+- **处理方式**：落地全局活跃仓库切换（Git Graph 模式）——① 选取逻辑下沉纯函数 `engine/git-state/repo-selection.ts`（三级优先：持久化恢复 → folder0 匹配 → 首个仓库，路径归一化跨平台稳定），`GitRepositoryService` 新增 `selectRepository`/`listRepositories`/`onDidChangeRepository`，活跃仓库持久化 `hyperGit.activeRepoRoot`；② **三重顺序不变量**保证 rebind 先于刷新：`applyRepository` 内先 fire 切换事件（同步 rebind：registry/favorites/branchesTree.setRepoRoot + context key 同步 + blame 清理 + filter 清空）后 fire onDidChange（防抖刷新），且 rebind 订阅先于 `refreshAll` 注册；③ Shelf 目录随 `service.repoRoot` 动态求值（`shelves/<basename>.<sha1[:8]>/`）+ 旧平铺数据一次性安全迁移（仅 rename、目标存在即跳过、失败可重试）；④ Graph 工具栏仓库名升级可点击按钮（单仓库退化纯文本）+ `hyperGit.selectRepository` palette 命令（带参=程序化切换接缝，`activate()` 导出 `{ service }` 供集成测试）；⑤ webview 视图状态（scope/选中/勾选集等）v2 `byRepo` 分区 + 最近提交消息 per-repo key（旧 key 回落一次平滑迁移）。集成测试新增 multi-root 双仓库 fixture 套件（`tests/suite/multi-root.test.js`）。
+- **后续防范**：① **新增组件若构造期快照 repoRoot（拼 memento key / 存储目录），必须订阅 `service.onDidChangeRepository` 重绑**——可用 `grep -rn 'repoRoot' src/adapter/ | grep -v 'service.repoRoot'` 扫描快照点；② 集成测试需 UI 交互时，优先给命令 handler 加可选参数（无参=QuickPick，带参=程序化）+ `activate()` 导出接缝，勿依赖无法自动化的原生弹窗；③ 顺带修复了既有激活竞态（repo 发现晚于 activate 时 memento key 落 workspaceRoot 占位），rebind 事件会纠正——但根治应在「窗口内无写入路径」前提下依赖该纠正，勿在激活早期引入持久化写入。
+- **同类问题影响**：所有围绕「单一活跃仓库」装配的 VS Code Git 扩展；凡按 repoRoot 构造 workspaceState/globalStorage 键或存储目录、却不在仓库集合变化时重绑的实现；以及 macOS 上 VS Code ≥ 1.110 主二进制 `Electron`→`Code` 更名导致 `@vscode/test-electron` 旧版 ENOENT 的集成测试环境（升 3.1.0 解决，见 PR #102）。
