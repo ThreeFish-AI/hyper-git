@@ -28,6 +28,7 @@ import { RebaseWebview } from './adapter/webview/rebase-webview';
 import { registerMergeCommands } from './adapter/webview/merge-editor';
 import { registerMiscCommands } from './adapter/misc-commands';
 import { registerClaudeCommands } from './adapter/claude-commands';
+import { registerRepositorySelectionCommand } from './adapter/repository-selection';
 import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
 import { GitHubAuth } from './adapter/ci/github-auth';
@@ -174,6 +175,7 @@ export async function activate(
 		...registerMergeCommands(service),
 		...registerMiscCommands(service, branchesTree, logTree),
 		...registerClaudeCommands(),
+		registerRepositorySelectionCommand(service),
 		vscode.commands.registerCommand('hyperGit.toggleBlameAnnotation', () => blame.toggle()),
 		vscode.commands.registerCommand('hyperGit.branchesGroupByPrefix', () => applyBranchesGrouping(true)),
 		vscode.commands.registerCommand('hyperGit.branchesFlatten', () => applyBranchesGrouping(false)),

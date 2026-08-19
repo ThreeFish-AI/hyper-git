@@ -183,6 +183,12 @@
 				"icon": "$(refresh)"
 			},
 			{
+				"command": "hyperGit.selectRepository",
+				"title": "Select Repository…",
+				"category": "Hyper Git",
+				"icon": "$(repo)"
+			},
+			{
 				"command": "hyperGit.ci.signIn",
 				"title": "Sign In to GitHub for CI Status",
 				"category": "Hyper Git",

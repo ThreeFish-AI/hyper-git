@@ -108,6 +108,9 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				t = setTimeout(() => this.refresh(), 400);
 			}),
 		);
+		// 活跃仓库切换（issue #107）：host 级过滤条件是旧仓库语境的产物，跨仓库无意义 → 清空；
+		// 图数据重拉由上方 onDidChange 订阅驱动，无需额外处理。
+		this.disposables.push(service.onDidChangeRepository(() => { this.filter = {}; }));
 	}
 
 	setFilter(filter: LogFilter): void {
@@ -193,6 +196,10 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			case 'log/showCommitDetail':
 				void this.showCommitDetail(msg.payload.hash);
 				break;
+			case 'log/selectRepo':
+				// 复用 postMessage → 原生交互 → executeCommand 通路（同 handleCommitMenu 形态）。
+				void vscode.commands.executeCommand('hyperGit.selectRepository');
+				break;
 		}
 	}
 
@@ -263,6 +270,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			hasMore: page.hasMore,
 			scope: this.scope,
 			repoRoot: this.service.repoRoot ?? '',
+			multiRepo: this.service.listRepositories().length > 1,
 		};
 		this.post({ type: 'log/graphData', payload: state });
 		// CI 元信息异步随附（不阻塞建图）：远程为 GitHub 才启用，未授权则提示登录。
@@ -470,6 +478,10 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 .seg button:hover { background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground)); opacity: 0.9; }
 .seg button.active { background: var(--vscode-inputOption-activeBackground, var(--vscode-button-background)); color: var(--vscode-inputOption-activeForeground, var(--vscode-button-foreground)); opacity: 1; }
 .repo { margin-left: auto; font-size: 10px; opacity: 0.55; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 多仓库态：仓库名升级为可点击切换按钮（Git Graph 形态）；单仓库保持纯文本观感。 */
+button.repo { background: transparent; color: var(--vscode-foreground); border: none; padding: 1px 6px; border-radius: 3px; cursor: pointer; }
+button.repo.switchable:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
+button.repo:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 #viewport { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; outline: none; }
 #spacer { position: relative; }
 #rows { position: absolute; left: 0; right: 0; }
@@ -589,7 +601,7 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
     <button id="scope-current" aria-pressed="false">Current</button>
     <button id="scope-checkpointer" aria-pressed="false" title="Show internal checkpoint (auto-snapshot) commits">Checkpoints</button>
   </span>
-  <span class="repo" id="repo"></span>
+  <button class="repo" id="repo" type="button"></button>
   <button id="ci-signin" class="ci-signin" title="Sign in to GitHub to view CI status">Sign In to GitHub</button>
 </div>
 <div id="viewport" tabindex="0" role="tree" aria-label="Commit graph">
@@ -629,7 +641,7 @@ let scope = normalizeScope(persisted.scope);
 let detailsMode = persisted.dmode === 'tree' ? 'tree' : 'flat';
 const dcollapsed = new Set(persisted.dcollapsed || []);
 function persist() { vscode.setState({ selectedHash: selectedHash, scope: scope, dmode: detailsMode, dcollapsed: Array.from(dcollapsed) }); }
-let model = { rows: [], maxLanes: 0, hasMore: false, repoRoot: '' };
+let model = { rows: [], maxLanes: 0, hasMore: false, repoRoot: '', multiRepo: false };
 let renderedFirst = -1, renderedLast = -1, fetching = false;
 // ── CI 状态（懒加载、仅取可见行；ciByHash 稳定缓存、ciRequested 去重、ciPending 防抖批量）──
 // ciByHash 跨 graphData 刷新保留（CI 状态以不可变 hash 为键），杜绝每次 git 状态变化引发的重拉闪烁。
@@ -664,6 +676,8 @@ const errorMsgEl = document.getElementById('error-msg');
 const retryBtnEl = document.getElementById('retry-btn');
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+// 仓库根路径 → basename（多仓库态按钮文案；尾分隔符安全）。
+function repoBasename(p) { const parts = String(p).split(/[\\\\/]/).filter(Boolean); return parts.pop() || String(p); }
 // 引用胶囊图标（内联 SVG，仿 codicon git-branch / cloud / tag；fill=currentColor 继承 chip 前景色）。
 // 项目未引入 codicon 字体（localResourceRoots=[]、CSP 无 font-src），故图标一律内联，与 ciGlyph 一致。
 const ICO_BRANCH = '<svg class="chip-ico" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9.5 3.25a2.25 2.25 0 1 1-3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 1 1 9.5 3.25zm-4 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0zm.75 8.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5z"/></svg>';
@@ -1057,6 +1071,11 @@ function setScope(next) { if (scope !== next) { scope = next; persist(); vscode.
 document.getElementById('scope-all').addEventListener('click', function () { setScope('all'); });
 document.getElementById('scope-current').addEventListener('click', function () { setScope('current'); });
 document.getElementById('scope-checkpointer').addEventListener('click', function () { setScope('checkpointer'); });
+// 仓库名按钮（多仓库态）：点击弹出原生仓库选择（host 复用 hyperGit.selectRepository）。
+repoEl.addEventListener('click', function () {
+  if (!model.multiRepo) { return; }
+  vscode.postMessage({ type: 'log/selectRepo' });
+});
 detailsCloseEl.addEventListener('click', function () { detailsEl.classList.remove('show'); });
 retryBtnEl.addEventListener('click', function () { errorEl.style.display = 'none'; spinnerEl.style.display = 'block'; vscode.postMessage({ type: 'log/retry' }); });
 viewport.addEventListener('scroll', scheduleRender, { passive: true });
@@ -1243,8 +1262,19 @@ commitTipEl.addEventListener('keydown', function (e) {
 window.addEventListener('message', function (e) {
   const m = e.data;
   if (m.type === 'log/graphData') {
-    model = { rows: m.payload.rows, maxLanes: m.payload.maxLanes, hasMore: m.payload.hasMore, repoRoot: m.payload.repoRoot };
-    scope = m.payload.scope; repoEl.textContent = m.payload.repoRoot; repoEl.title = m.payload.repoRoot;
+    model = { rows: m.payload.rows, maxLanes: m.payload.maxLanes, hasMore: m.payload.hasMore, repoRoot: m.payload.repoRoot, multiRepo: !!m.payload.multiRepo };
+    // 仓库名按钮：多仓库态显示 basename + ▾（Git Graph 形态），单仓库保持完整路径纯文本观感。
+    scope = m.payload.scope;
+    if (model.multiRepo) {
+      repoEl.textContent = repoBasename(m.payload.repoRoot) + ' ▾';
+      repoEl.title = m.payload.repoRoot + ' — Switch repository';
+      repoEl.setAttribute('aria-label', 'Switch repository: ' + m.payload.repoRoot);
+      repoEl.classList.add('switchable');
+    } else {
+      repoEl.textContent = m.payload.repoRoot; repoEl.title = m.payload.repoRoot;
+      repoEl.removeAttribute('aria-label');
+      repoEl.classList.remove('switchable');
+    }
     // 保留 ciByHash 稳定缓存（CI 状态以不可变 hash 为键）：图重置只清请求去重集合，
     // 已缓存的提交重绘时立即可见图标，避免「清缓存→重拉→整行重建」的闪烁。
     ciRequested.clear(); ciPending.clear();
