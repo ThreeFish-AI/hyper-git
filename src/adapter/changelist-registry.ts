@@ -20,7 +20,7 @@ export class ChangelistRegistry implements vscode.Disposable {
 	private defs: ChangelistDef[];
 	private activeId: string;
 	private assignments: ChangelistAssignment;
-	private readonly storageKey: string;
+	private storageKey: string;
 	private readonly _onDidChange = new vscode.EventEmitter<void>();
 	readonly onDidChange: vscode.Event<void> = this._onDidChange.event;
 
@@ -30,6 +30,23 @@ export class ChangelistRegistry implements vscode.Disposable {
 		this.defs = loaded.defs;
 		this.activeId = loaded.activeId;
 		this.assignments = loaded.assignments;
+	}
+
+	/**
+	 * 多根仓库切换 rebind（issue #107）：换 storageKey 并重载该仓库的持久化状态。
+	 * 幂等（同 root 不动）；切换后 fire onDidChange 并入 refreshAll 防抖刷新。
+	 */
+	setRepoRoot(repoRoot: string): void {
+		const key = `hyperGit.changelists:${repoRoot}`;
+		if (key === this.storageKey) {
+			return;
+		}
+		this.storageKey = key;
+		const loaded = this.load();
+		this.defs = loaded.defs;
+		this.activeId = loaded.activeId;
+		this.assignments = loaded.assignments;
+		this._onDidChange.fire();
 	}
 
 	private load(): PersistedState {
