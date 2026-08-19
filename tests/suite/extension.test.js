@@ -77,6 +77,7 @@ suite('扩展冒烟测试', function () {
 			'hyperGit.deleteShelf',
 			'hyperGit.startRebase',
 			'hyperGit.moveHunkToChangelist',
+			'hyperGit.selectRepository',
 		]) {
 			assert.ok(commands.includes(cmd), `命令 ${cmd} 未注册`);
 		}
