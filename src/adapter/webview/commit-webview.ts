@@ -180,6 +180,7 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 			tree: buildFileTree(files.map((f) => f.path)),
 			conventionalEnabled: this.commit.conventionalEnabled(),
 			busy: false,
+			repoRoot: this.service.repoRoot ?? '',
 		};
 		this.post({ type: 'state', payload: state });
 		this.sendValidation();
@@ -274,11 +275,30 @@ details.advanced[open] summary { margin-bottom: 4px; }
 
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
-const persisted = vscode.getState() || {};
-const checked = new Set(persisted.checked || []);
-let mode = persisted.mode === 'tree' ? 'tree' : 'flat';
-const collapsed = new Set(persisted.collapsed || []);
-function saveState() { vscode.setState({ checked: Array.from(checked), mode: mode, collapsed: Array.from(collapsed) }); }
+// ── 勾选集/视图模式按仓库分区（v2，issue #107）：勾选是相对路径集合，跨仓库本就错位；
+// 切换仓库换装载互不串扰；无 v2 时从旧平铺结构一次性升级（旧值归首个见到的仓库）。──
+const persistedRaw = vscode.getState() || {};
+let persistedRepo = '';
+let persistedByRepo = {};
+if (persistedRaw.v === 2 && persistedRaw.byRepo) {
+  persistedByRepo = persistedRaw.byRepo;
+} else if (persistedRaw.checked || persistedRaw.mode || persistedRaw.collapsed) {
+  persistedByRepo = { '': { checked: persistedRaw.checked, mode: persistedRaw.mode, collapsed: persistedRaw.collapsed } };
+}
+let checked = new Set();
+let mode = 'flat';
+let collapsed = new Set();
+function loadPersistedFor(repoRoot) {
+  persistedRepo = repoRoot;
+  const s = persistedByRepo[repoRoot] || persistedByRepo[''] || {};
+  checked = new Set(s.checked || []);
+  mode = s.mode === 'tree' ? 'tree' : 'flat';
+  collapsed = new Set(s.collapsed || []);
+}
+function saveState() {
+  persistedByRepo[persistedRepo] = { checked: Array.from(checked), mode: mode, collapsed: Array.from(collapsed) };
+  vscode.setState({ v: 2, byRepo: persistedByRepo });
+}
 let conventionalEnabled = true;
 let templateApplied = false;
 let curFiles = [];
@@ -557,6 +577,7 @@ window.addEventListener('message', function (e) {
   const m = e.data;
   if (m.type === 'state') {
     const p = m.payload;
+    loadPersistedFor(p.repoRoot || '');
     curFiles = p.files || [];
     curTree = p.tree || [];
     reconcileChecked(curFiles);

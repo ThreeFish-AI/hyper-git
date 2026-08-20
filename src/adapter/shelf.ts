@@ -5,6 +5,8 @@ import * as vscode from 'vscode';
 import type { GitRepositoryService } from './git-repository-service';
 import { handleGitConflict } from './conflict-ui';
 import { mdTooltip, relativeDate } from './tree/tree-tooltip';
+import { shelfRepoDirName } from '../engine/git-state/shelf-dir';
+import { logGit } from '../infra/git-console';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -42,13 +44,54 @@ export type ShelfTreeNode = ShelfNode | ShelfFileNode;
  * - Unshelve：读取 patch → `git apply`（静默）或 `git apply --3way`（三方合并冲突解决）。
  * - Drop：删除 patch 文件。
  *
+ * 多根仓库（issue #107）：存储按仓库隔离——`shelves/<basename>.<sha1 前 8 位>/`，
+ * 目录随 `service.repoRoot` 动态求值（零快照零双源），切换仓库即切换 shelf 集。
+ *
  * 与 git stash 的区别：Shelf 是命名 patch 序列（扩展存储），不占用 git stash 栈；可同时保留多个独立 shelf。
  */
 export class ShelfService {
-	private readonly shelvesDir: string;
+	private readonly shelvesBase: string;
 
 	constructor(private readonly service: GitRepositoryService, storageDir: string) {
-		this.shelvesDir = path.join(storageDir, 'shelves');
+		this.shelvesBase = path.join(storageDir, 'shelves');
+	}
+
+	/** 当前活跃仓库的 shelf 目录；无 repo 时 null（调用方各自短路）。 */
+	private currentDir(): string | null {
+		const root = this.service.repoRoot;
+		return root ? path.join(this.shelvesBase, shelfRepoDirName(root)) : null;
+	}
+
+	/**
+	 * 旧版平铺目录（shelves/*.json 不分仓库）一次性安全迁移到当前仓库子目录：
+	 * 仅 rename（零删除）、目标已存在即跳过（零覆盖）、失败静默可重试（已移入保留，未移入下次续迁）。
+	 * 多仓库历史混仓数据无法事后归因，归属当前活跃仓库（Known Limitation）。
+	 */
+	private migrateLegacyShelves(targetDir: string): void {
+		try {
+			if (fs.existsSync(targetDir)) {
+				return; // 本仓库已迁移/已使用（幂等出口）
+			}
+			if (!fs.existsSync(this.shelvesBase)) {
+				return;
+			}
+			const legacyFiles = fs.readdirSync(this.shelvesBase).filter((f) => f.endsWith('.json'));
+			if (legacyFiles.length === 0) {
+				return;
+			}
+			fs.mkdirSync(targetDir, { recursive: true });
+			for (const f of legacyFiles) {
+				const dest = path.join(targetDir, f);
+				if (fs.existsSync(dest)) {
+					continue; // 绝不覆盖
+				}
+				fs.renameSync(path.join(this.shelvesBase, f), dest);
+			}
+			logGit(['shelf:migrateLegacy'], targetDir);
+		} catch (e) {
+			// 权限/占用等：已移入的保留（合法数据），未移入的留在原处下次重试，零数据损失。
+			logGit(['shelf:migrateLegacy:failed'], undefined, errMsg(e));
+		}
 	}
 
 	async shelve(name: string, paths: readonly string[], timestamp: string): Promise<void> {
@@ -56,13 +99,18 @@ export class ShelfService {
 		if (!repo) {
 			throw new Error('No Git repository found');
 		}
+		const dir = this.currentDir();
+		if (!dir) {
+			throw new Error('No Git repository found');
+		}
 		const patch = await this.service.execGit(['diff', '--', ...paths]);
 		if (!patch.trim()) {
 			throw new Error('Selected files have no changes (or are untracked)');
 		}
-		fs.mkdirSync(this.shelvesDir, { recursive: true });
+		this.migrateLegacyShelves(dir);
+		fs.mkdirSync(dir, { recursive: true });
 		const entry: ShelfEntry = { name, paths, timestamp, patch };
-		fs.writeFileSync(path.join(this.shelvesDir, `${sanitize(name)}.json`), JSON.stringify(entry, null, 2));
+		fs.writeFileSync(path.join(dir, `${sanitize(name)}.json`), JSON.stringify(entry, null, 2));
 		// 移除工作区改动（变更已保存在 patch）
 		await this.service.execGit(['checkout', '--', ...paths]);
 	}
@@ -96,22 +144,31 @@ export class ShelfService {
 	}
 
 	drop(name: string): void {
-		const file = path.join(this.shelvesDir, `${sanitize(name)}.json`);
+		const dir = this.currentDir();
+		if (!dir) {
+			return;
+		}
+		const file = path.join(dir, `${sanitize(name)}.json`);
 		if (fs.existsSync(file)) {
 			fs.unlinkSync(file);
 		}
 	}
 
 	listShelves(): ShelfNode[] {
-		if (!fs.existsSync(this.shelvesDir)) {
+		const dir = this.currentDir();
+		if (!dir) {
+			return [];
+		}
+		this.migrateLegacyShelves(dir);
+		if (!fs.existsSync(dir)) {
 			return [];
 		}
 		return fs
-			.readdirSync(this.shelvesDir)
+			.readdirSync(dir)
 			.filter((f) => f.endsWith('.json'))
 			.map((f) => {
 				try {
-					const entry = JSON.parse(fs.readFileSync(path.join(this.shelvesDir, f), 'utf8')) as ShelfEntry;
+					const entry = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as ShelfEntry;
 					return { kind: 'shelf' as const, name: entry.name, paths: entry.paths, timestamp: entry.timestamp };
 				} catch {
 					return null;
@@ -121,7 +178,11 @@ export class ShelfService {
 	}
 
 	private readEntry(name: string): ShelfEntry | null {
-		const file = path.join(this.shelvesDir, `${sanitize(name)}.json`);
+		const dir = this.currentDir();
+		if (!dir) {
+			return null;
+		}
+		const file = path.join(dir, `${sanitize(name)}.json`);
 		if (!fs.existsSync(file)) {
 			return null;
 		}

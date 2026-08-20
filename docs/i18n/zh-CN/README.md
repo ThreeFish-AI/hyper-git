@@ -16,7 +16,7 @@
   <a href="../../../README.md">English</a> · <b>简体中文</b>
 </p>
 
-<p align="center"><sub>6 视图 · 101 命令 · 11 配置项 · 375 单元测试</sub></p>
+<p align="center"><sub>6 视图 · 102 命令 · 11 配置项 · 403 单元测试</sub></p>
 
 ## 核心能力
 
@@ -25,6 +25,7 @@
 </p>
 
 - **多 Changelist Changes 视图**：将改动分组到命名列表，设活动列表为提交目标，新建/重命名/删除/移动，`workspaceState` 持久化（重启恢复）；状态色复用 `gitDecoration.*` 主题色。
+- **多根工作区仓库切换**：多根工作区含多个 Git 仓库时，Graph 工具栏仓库名升级为可切换按钮（对标 Git Graph）并提供 `Select Repository…` 命令；一次切换全局活跃仓库，Graph / Branches / Commit / Stash / Shelf / Worktrees / 角标全部视图跟随，changelist、分支收藏、分组偏好、Shelf、最近提交消息按仓库隔离记忆，重开窗口恢复上次活跃仓库。
 - **Commit 提交窗口**：自绘提交面板 + Conventional Commits 实时校验 + Amend / Sign-off / 跳过 Hook + 提交 / 提交并推送；勾选集即提交权威范围；最近消息复用。
 - **Log 提交图（自绘 DAG）**：彩色泳道、分叉·合并连线、HEAD/分支/标签徽标，虚拟滚动增量加载；7 个可组合过滤器（作者/路径/grep/正则/合并模式/日期/清除）；per-commit 操作（Reset、新建分支·标签、Cherry-Pick、Revert、查看包含分支）。
 - **Branches 分支管理**：收藏/本地/远程/标签四段分组 + ahead·behind·upstream 跟踪；**前缀文件夹分组**（平铺 ⇄ 树切换）将共享 `/` 前缀的分支收拢到共同前缀下、仅显示后缀；新建/检出/删除/重命名/合并/变基/比较/收藏；**多选批量**删除、复制引用、收藏（已合并/未合并诚实分栏确认）。
@@ -78,7 +79,7 @@
 pnpm install                  # 安装依赖
 pnpm run compile              # 类型检查 + lint + 构建
 pnpm run watch                # 监听构建（F5 启动 Extension Host 调试）
-pnpm run test:unit            # 单元测试（engine 纯逻辑，Vitest，375 例）
+pnpm run test:unit            # 单元测试（engine 纯逻辑，Vitest，403 例）
 pnpm run test:integration     # 集成测试（@vscode/test-electron）
 pnpm run package              # 生产构建
 pnpm dlx @vscode/vsce package # 打包 .vsix

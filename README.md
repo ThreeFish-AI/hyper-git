@@ -16,7 +16,7 @@
   <b>English</b> · <a href="./docs/i18n/zh-CN/README.md">简体中文</a>
 </p>
 
-<p align="center"><sub>6 views · 101 commands · 11 settings · 375 unit tests</sub></p>
+<p align="center"><sub>6 views · 102 commands · 11 settings · 403 unit tests</sub></p>
 
 ## Features
 
@@ -25,6 +25,7 @@
 </p>
 
 - **Multi-Changelist Changes view**: group edits into named lists, mark one as the active commit target, create / rename / delete / move lists, persisted in `workspaceState` (restored across restarts); status colors reuse the `gitDecoration.*` theme tokens.
+- **Multi-root repository switching**: in multi-root workspaces with several Git repositories, the Graph toolbar's repository name becomes a clickable switcher (Git Graph-style) plus a `Select Repository…` command; one switch updates the active repository across all views (Graph / Branches / Commit / Stash / Shelf / Worktrees / badge), with changelists, branch favorites, grouping preferences, shelves, and recent messages remembered per repository, and the last active repository restored across restarts.
 - **Commit panel**: a hand-built commit view with real-time Conventional Commits validation, Amend / Sign-off / skip hooks, and Commit / Commit & Push; the checkbox selection is the authoritative commit scope, and recent messages are reusable.
 - **Log commit graph (hand-rendered DAG)**: colored swimlanes, branch/merge edges, HEAD/branch/tag badges, virtualized incremental loading; 7 composable filters (author / path / grep / regex / merge-mode / date / clear); per-commit actions (Reset, new branch·tag, Cherry-Pick, Revert, list containing branches).
 - **Branches management**: favorites / local / remote / tags grouped into four sections with ahead·behind·upstream tracking; **prefix folder grouping** (flat ⇄ tree toggle) that collapses `/`-shared branches under their common prefix, showing only the suffix; create / checkout / delete / rename / merge / rebase / compare / favorite; **multi-select batch** delete, copy ref, and favorite (with an honest merged/unmerged split confirmation).
@@ -78,7 +79,7 @@ See the [Engineering Plan](./docs/architecture/engineering-plan.md), the [Implem
 pnpm install                  # install dependencies
 pnpm run compile              # type-check + lint + build
 pnpm run watch                # watch build (press F5 to launch the Extension Host debugger)
-pnpm run test:unit            # unit tests (pure engine logic, Vitest, 375 cases)
+pnpm run test:unit            # unit tests (pure engine logic, Vitest, 403 cases)
 pnpm run test:integration     # integration tests (@vscode/test-electron)
 pnpm run package              # production build
 pnpm dlx @vscode/vsce package # package the .vsix

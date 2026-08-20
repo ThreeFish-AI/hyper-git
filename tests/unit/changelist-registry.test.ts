@@ -1,12 +1,23 @@
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('vscode', () => ({
+	// 功能性 EventEmitter mock：event 注册监听、fire 通知（供 rebind fire 断言）。
 	EventEmitter: class {
+		private listeners: Array<() => void> = [];
 		get event() {
-			return () => ({ dispose: () => undefined });
+			return (l: () => void) => {
+				this.listeners.push(l);
+				return { dispose: () => { this.listeners = this.listeners.filter((x) => x !== l); } };
+			};
 		}
-		fire() {}
-		dispose() {}
+		fire(): void {
+			for (const l of [...this.listeners]) {
+				l();
+			}
+		}
+		dispose(): void {
+			this.listeners = [];
+		}
 	},
 }));
 
@@ -89,5 +100,51 @@ describe('ChangelistRegistry', () => {
 		const reg = new ChangelistRegistry(memento as unknown as Memento, '/repo');
 		expect(reg.listDefs().map((d) => d.id)).toEqual(['default']);
 		expect(reg.activeChangelistId).toBe('default');
+	});
+
+	it('setRepoRoot 切换后读到另一仓库的数据（多根隔离，issue #107）', () => {
+		const { reg } = makeRegistry('/repo-a');
+		const id = reg.create('Feature A');
+		reg.move('a.ts', id);
+
+		const mementoB = new MemMemento();
+		mementoB.update(
+			'hyperGit.changelists:/repo-b',
+			JSON.stringify({
+				defs: [
+					{ id: 'default', name: 'Default' },
+					{ id: 'cl_b', name: 'Feature B' },
+				],
+				activeId: 'cl_b',
+				assignments: { 'b.ts': 'cl_b' },
+			}),
+		);
+		// 同一实例切到 repo-b：换 key 重载
+		(reg as unknown as { workspaceState: Memento }).workspaceState = mementoB as unknown as Memento;
+		reg.setRepoRoot('/repo-b');
+		expect(reg.listDefs().map((d) => d.name)).toEqual(['Default', 'Feature B']);
+		expect(reg.activeChangelistId).toBe('cl_b');
+	});
+
+	it('setRepoRoot 同 root 幂等（不 fire 不动状态）', () => {
+		const { reg } = makeRegistry();
+		let fired = 0;
+		reg.onDidChange(() => fired++);
+		reg.setRepoRoot('/repo');
+		expect(fired).toBe(0);
+	});
+
+	it('setRepoRoot 切换后 fire onDidChange 并 persist 写入新 key', () => {
+		const memento = new MemMemento();
+		const reg = new ChangelistRegistry(memento as unknown as Memento, '/repo-a');
+		let fired = 0;
+		reg.onDidChange(() => fired++);
+		reg.setRepoRoot('/repo-b');
+		expect(fired).toBe(1);
+		const id = reg.create('in B');
+		const raw = memento.get<string>('hyperGit.changelists:/repo-b');
+		expect(raw).toBeDefined();
+		expect(JSON.parse(raw as string).defs.some((d: { name: string }) => d.name === 'in B')).toBe(true);
+		expect(id).toBeTruthy();
 	});
 });

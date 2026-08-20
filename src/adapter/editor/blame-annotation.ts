@@ -31,6 +31,8 @@ export class BlameAnnotationController implements vscode.Disposable {
 				}
 			}),
 		);
+		// 活跃仓库切换（issue #107）后清除注解：blame 数据属于旧仓库，不清理会残留误导。
+		this.disposables.push(service.onDidChangeRepository(() => this.clearAll()));
 	}
 
 	async toggle(): Promise<void> {
@@ -83,6 +85,15 @@ export class BlameAnnotationController implements vscode.Disposable {
 		const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri.toString());
 		editor?.setDecorations(this.decoration, []);
 		this.annotated.delete(uri.toString());
+	}
+
+	/** 清除全部注解（仓库切换时，annotated 中的 uri 逐个对可见编辑器复位装饰）。 */
+	private clearAll(): void {
+		for (const key of [...this.annotated]) {
+			const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === key);
+			editor?.setDecorations(this.decoration, []);
+		}
+		this.annotated.clear();
 	}
 
 	dispose(): void {

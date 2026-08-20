@@ -61,7 +61,7 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 	private readonly disposables: vscode.Disposable[] = [];
 	private refsCache: RawRef[] | undefined;
 	private refsInFlight: Promise<RawRef[]> | undefined;
-	private readonly groupingKey: string;
+	private groupingKey: string;
 	/** 「按前缀分组为文件夹树」开关（工具栏切换、按仓库持久化，默认开启）。 */
 	private groupingEnabled: boolean;
 
@@ -75,6 +75,20 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		this.groupingEnabled = this.workspaceState.get<boolean>(this.groupingKey) ?? true;
 		this.disposables.push(service.onDidChange(() => this.refresh()));
 		this.disposables.push(favorites.onDidChange(() => this.refresh()));
+	}
+
+	/**
+	 * 多根仓库切换 rebind（issue #107）：换 groupingKey 并重读该仓库的分组偏好，refresh 清缓存重取。
+	 * 配套的 `hyperGit.branchesGrouping` context key 由 extension.ts 级联处同步（读取重绑后的 grouping）。
+	 */
+	setRepoRoot(repoRoot: string): void {
+		const key = `hyperGit.branchesGrouping:${repoRoot}`;
+		if (key === this.groupingKey) {
+			return;
+		}
+		this.groupingKey = key;
+		this.groupingEnabled = this.workspaceState.get<boolean>(this.groupingKey) ?? true;
+		this.refresh();
 	}
 
 	refresh(): void {

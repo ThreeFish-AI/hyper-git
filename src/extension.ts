@@ -28,6 +28,7 @@ import { RebaseWebview } from './adapter/webview/rebase-webview';
 import { registerMergeCommands } from './adapter/webview/merge-editor';
 import { registerMiscCommands } from './adapter/misc-commands';
 import { registerClaudeCommands } from './adapter/claude-commands';
+import { registerRepositorySelectionCommand } from './adapter/repository-selection';
 import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
 import { GitHubAuth } from './adapter/ci/github-auth';
@@ -46,8 +47,11 @@ class EmptyTreeProvider implements vscode.TreeDataProvider<never> {
 
 /**
  * 扩展入口。仅做装配（DI 注册），业务逻辑下沉到 engine/adapter 层。
+ * 返回 `{ service }` 供集成测试程序化驱动仓库切换（vscode.git 同款导出模式）。
  */
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export async function activate(
+	context: vscode.ExtensionContext,
+): Promise<{ service: GitRepositoryService } | void> {
 	const logger = createLogger();
 	logger.info('Hyper Git activated');
 
@@ -69,7 +73,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	}
 
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? 'default';
-	const service = new GitRepositoryService(api);
+	const service = new GitRepositoryService(api, context.workspaceState);
 	const registry = new ChangelistRegistry(context.workspaceState, service.repoRoot ?? workspaceRoot);
 	const favorites = new BranchFavorites(context.workspaceState, service.repoRoot ?? workspaceRoot);
 	const githubAuth = new GitHubAuth(context.subscriptions);
@@ -126,6 +130,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		setBranchesGroupingContext(v);
 	};
 
+	// 多根仓库切换级联（issue #107）：构造期快照 repoRoot 的持久化组件在此 rebind（换 memento key、
+	// 重载状态、fire 刷新），并同步 branchesGrouping context key（否则仅 activate 设一次，切库后按钮显隐错）。
+	// 顺序不变量：本订阅先于下方 service.onDidChange(refreshAll) 注册，且切换事件在 applyRepository 内
+	// 先于 onDidChange fire —— rebind 同步完成后，防抖刷新才重取数据。root 为 null（全部仓库关闭）时
+	// 跳过：无 repo 的一切写路径均短路，旧 key 残留无害。
+	const rebindRepoScopedState = (root: string): void => {
+		registry.setRepoRoot(root);
+		favorites.setRepoRoot(root);
+		branchesTree.setRepoRoot(root);
+		setBranchesGroupingContext(branchesTree.grouping);
+	};
+	context.subscriptions.push(service.onDidChangeRepository((e) => {
+		if (e.root) {
+			rebindRepoScopedState(e.root);
+		}
+	}));
+
 	context.subscriptions.push(
 		service,
 		registry,
@@ -154,6 +175,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		...registerMergeCommands(service),
 		...registerMiscCommands(service, branchesTree, logTree),
 		...registerClaudeCommands(),
+		registerRepositorySelectionCommand(service),
 		vscode.commands.registerCommand('hyperGit.toggleBlameAnnotation', () => blame.toggle()),
 		vscode.commands.registerCommand('hyperGit.branchesGroupByPrefix', () => applyBranchesGrouping(true)),
 		vscode.commands.registerCommand('hyperGit.branchesFlatten', () => applyBranchesGrouping(false)),
@@ -222,6 +244,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		worktreeTree.refresh();
 		updateBadge();
 	}, 500);
+
+	return { service };
 }
 
 export function deactivate(): void {
