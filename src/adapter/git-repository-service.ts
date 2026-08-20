@@ -202,5 +202,6 @@ export class GitRepositoryService implements vscode.Disposable {
 		this.repoSub?.dispose();
 		this.disposables.forEach((d) => d.dispose());
 		this._onDidChange.dispose();
+		this._onDidChangeRepository.dispose();
 	}
 }

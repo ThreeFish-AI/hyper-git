@@ -219,10 +219,16 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			this.post({ type: 'log/commitDetail', payload: { vm: null } });
 			return;
 		}
+		// 切库竞态守卫（issue #107）：hash 属旧仓库语境，迟到响应不作数（可能取到同名歧义提交）。
+		const rootAtStart = this.service.repoRoot;
 		try {
 			// %x00 分隔，与 LOG_GRAPH_FORMAT 同范式；单条 git show 开销极小。
 			const fmt = '%H%x00%s%x00%b%x00%an%x00%ae%x00%aI%x00%cn%x00%cI%x00%P';
 			const raw = await this.service.execGit(['show', '-s', `--format=${fmt}`, hash]);
+			if (this.service.repoRoot !== rootAtStart) {
+				this.post({ type: 'log/commitDetail', payload: { vm: null } });
+				return;
+			}
 			const f = raw.split('\0');
 			if (f.length < 9 || !f[0]) {
 				this.post({ type: 'log/commitDetail', payload: { vm: null } });
@@ -232,6 +238,10 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			const stat = parseShortStat(
 				await this.service.execGit(['diff-tree', '--no-commit-id', '--shortstat', '-r', '--root', hash]),
 			);
+			if (this.service.repoRoot !== rootAtStart) {
+				this.post({ type: 'log/commitDetail', payload: { vm: null } });
+				return;
+			}
 			const remote = this.ciService.getGitHubRemote();
 			const cappedBody = body.length > 4000 ? `${body.slice(0, 4000)}…` : body.replace(/\s+$/, '');
 			const vm: CommitDetailVM = {
@@ -343,8 +353,14 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 		if (!repo) {
 			return undefined;
 		}
+		// 切库竞态守卫（issue #107）：锁定发起时刻的仓库，execGit 期间发生切换则结果作废——
+		// 旧仓库的迟到响应（graphData/appendData）不得污染新仓库的图（泳道布局按行集计算）。
+		const rootAtStart = this.service.repoRoot;
 		try {
 			const out = await this.service.execGit(['log', ...buildLogArgs(this.filter, this.scope, { maxCount: PAGE, skip })]);
+			if (this.service.repoRoot !== rootAtStart) {
+				return undefined; // 切库后的 reset graphData 由 onDidChange 驱动的 refresh 下发
+			}
 			const raws = parseLogLines(out);
 			if (raws.length === 0) {
 				return { rows: [], maxLanes: 0, hasMore: false };
@@ -362,6 +378,9 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			const layout = computeGraphLayout(survived.map((s) => ({ hash: s.hash, parents: s.parents })));
 			const hashSet = new Set(survived.map((s) => s.hash));
 			const chips = await this.fetchChips(hashSet);
+			if (this.service.repoRoot !== rootAtStart) {
+				return undefined; // 第二次 await（for-each-ref）期间的切换同样作废
+			}
 			const rows: GraphRowVM[] = survived.map((s, i) => ({
 				hash: s.raw.hash,
 				shortHash: s.raw.hash.slice(0, 7),
@@ -436,9 +455,14 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 		if (!repo) {
 			return;
 		}
+		// 切库竞态守卫（issue #107）：迟到响应不回填（新仓库的选中/详情由切库后交互重新触发）。
+		const rootAtStart = this.service.repoRoot;
 		try {
 			// 复用 Log 既有逻辑：diff-tree 取变更文件。
 			const out = await this.service.execGit(['diff-tree', '--no-commit-id', '--name-status', '-r', '--root', hash]);
+			if (this.service.repoRoot !== rootAtStart) {
+				return;
+			}
 			const changes = parseNameStatus(out);
 			// path 取干净新路径（供 data-path/建树/端点定位）；rename/copy 的 "old → new" 展示由 webview 端用 oldPath 拼出。
 			const files: LogCommitFileItem[] = changes.map((c) => ({
