@@ -9,6 +9,7 @@ async function run() {
 	const mocha = new Mocha({ ui: 'tdd', color: true, timeout: 60000 });
 	mocha.addFile(path.resolve(__dirname, 'extension.test.js'));
 	mocha.addFile(path.resolve(__dirname, 'commit-flow.test.js'));
+	mocha.addFile(path.resolve(__dirname, 'diff-open.test.js'));
 
 	return new Promise((resolve, reject) => {
 		mocha.run((failures) => {

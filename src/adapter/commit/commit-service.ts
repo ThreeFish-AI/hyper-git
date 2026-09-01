@@ -40,7 +40,11 @@ export interface AiSeams {
 	readonly conflict: IConflictResolver;
 }
 
-const RECENT_KEY = 'hyperGit.recentCommitMessages';
+/** 旧版全局 key（升级前数据）：per-repo key 未命中时回落读一次，平滑迁移不删旧数据。 */
+const RECENT_KEY_LEGACY = 'hyperGit.recentCommitMessages';
+/** per-repo key（issue #107 多根隔离）：最近提交消息按仓库记忆。 */
+const recentKey = (repoRoot: string | null): string =>
+	repoRoot ? `hyperGit.recentCommitMessages:${repoRoot}` : RECENT_KEY_LEGACY;
 const RECENT_MAX = 10;
 
 /**
@@ -85,7 +89,12 @@ export class CommitService implements vscode.Disposable {
 	}
 
 	getRecentMessages(): readonly string[] {
-		const raw = this.workspaceState.get<string>(RECENT_KEY);
+		// per-repo key 优先；未命中回落旧全局 key（升级平滑迁移，不删旧数据）。
+		const key = recentKey(this.service.repoRoot);
+		let raw = this.workspaceState.get<string>(key);
+		if (!raw && key !== RECENT_KEY_LEGACY) {
+			raw = this.workspaceState.get<string>(RECENT_KEY_LEGACY);
+		}
 		try {
 			return raw ? (JSON.parse(raw) as string[]) : [];
 		} catch {
@@ -96,7 +105,7 @@ export class CommitService implements vscode.Disposable {
 	private pushRecent(message: string): void {
 		const trimmed = message.trim();
 		const list = [trimmed, ...this.getRecentMessages().filter((m) => m !== trimmed)].slice(0, RECENT_MAX);
-		void this.workspaceState.update(RECENT_KEY, JSON.stringify(list));
+		void this.workspaceState.update(recentKey(this.service.repoRoot), JSON.stringify(list));
 	}
 
 	/** 提交：stage 选中文件 → Checkin hook 链 → commit → 可选 push。 */

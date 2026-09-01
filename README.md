@@ -16,7 +16,7 @@
   <b>English</b> · <a href="./docs/i18n/zh-CN/README.md">简体中文</a>
 </p>
 
-<p align="center"><sub>6 views · 97 commands · 6 settings · 324 unit tests</sub></p>
+<p align="center"><sub>6 views · 102 commands · 11 settings · 403 unit tests</sub></p>
 
 ## Features
 
@@ -25,9 +25,10 @@
 </p>
 
 - **Multi-Changelist Changes view**: group edits into named lists, mark one as the active commit target, create / rename / delete / move lists, persisted in `workspaceState` (restored across restarts); status colors reuse the `gitDecoration.*` theme tokens.
+- **Multi-root repository switching**: in multi-root workspaces with several Git repositories, the Graph toolbar's repository name becomes a clickable switcher (Git Graph-style) plus a `Select Repository…` command; one switch updates the active repository across all views (Graph / Branches / Commit / Stash / Shelf / Worktrees / badge), with changelists, branch favorites, grouping preferences, shelves, and recent messages remembered per repository, and the last active repository restored across restarts.
 - **Commit panel**: a hand-built commit view with real-time Conventional Commits validation, Amend / Sign-off / skip hooks, and Commit / Commit & Push; the checkbox selection is the authoritative commit scope, and recent messages are reusable.
 - **Log commit graph (hand-rendered DAG)**: colored swimlanes, branch/merge edges, HEAD/branch/tag badges, virtualized incremental loading; 7 composable filters (author / path / grep / regex / merge-mode / date / clear); per-commit actions (Reset, new branch·tag, Cherry-Pick, Revert, list containing branches).
-- **Branches management**: favorites / local / remote / tags grouped into four sections with ahead·behind·upstream tracking; create / checkout / delete / rename / merge / rebase / compare / favorite; **multi-select batch** delete, copy ref, and favorite (with an honest merged/unmerged split confirmation).
+- **Branches management**: favorites / local / remote / tags grouped into four sections with ahead·behind·upstream tracking; **prefix folder grouping** (flat ⇄ tree toggle) that collapses `/`-shared branches under their common prefix, showing only the suffix; create / checkout / delete / rename / merge / rebase / compare / favorite; **multi-select batch** delete, copy ref, and favorite (with an honest merged/unmerged split confirmation).
 - **Stash & Shelf**: full stash operations (including keep-index / clear / create branch from stash); a standalone **Shelf** (patch-based, independent of stash, with 3-way merge Unshelve).
 - **Worktrees**: full-lifecycle management — create (new branch / checkout / detached), open in a new window, lock / unlock, move, remove, and prune stale entries.
 - **Line-level & hunk commits**: in-editor "Commit this Hunk" CodeLens, partial stage / unstage, stage at cursor, and hunk-to-changelist attribution.
@@ -40,7 +41,7 @@
 - **Consumes** the stable `Repository` API exported by the built-in `vscode.git` extension as its Git foundation, rather than rebuilding a Git state machine.
 - **Controlled CLI channel**: capabilities the stable API does not cover (cherry-pick / revert / reset / branch rename / hunk staging / stash listing / graph topology / shelf, etc.) run through `GitRepositoryService.execGit`, reusing the same Git binary (`api.git.path`).
 - **Hand-rendered views** carry the full change-management UI (webviews live under `adapter/webview/`); pure logic is distilled into `engine/` (zero `vscode` dependency, unit-testable).
-- **AI seams**: 5 interfaces (`ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver`) are reserved (design inspired by JetBrains' `CheckinHandler` commit lifecycle), currently shipped as Null implementations; the full implementation is deferred to M5.
+- **AI seams**: 5 interfaces (`ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver`) are reserved (design inspired by JetBrains' `CheckinHandler` commit lifecycle), currently shipped as Null implementations; the full implementation is deferred to M5. As pre-M5 groundwork, a **Claude Code executable path** setting (`hyperGit.claudeCode.executablePath`) and a **`~/.claude/settings.json` shortcut** are already configurable — see [Claude Code configuration](./docs/features/claude-code-config.md); plus **`hyperGit.agent.*` preferences** (base branch + Commit / Create PR / Review agent instructions) — see [Agentic Git preferences](./docs/features/agentic-git-preferences.md).
 
 <p align="center">
   <img src="media/framework.png" alt="Framework"/>
@@ -78,18 +79,18 @@ See the [Engineering Plan](./docs/architecture/engineering-plan.md), the [Implem
 pnpm install                  # install dependencies
 pnpm run compile              # type-check + lint + build
 pnpm run watch                # watch build (press F5 to launch the Extension Host debugger)
-pnpm run test:unit            # unit tests (pure engine logic, Vitest, 324 cases)
+pnpm run test:unit            # unit tests (pure engine logic, Vitest, 403 cases)
 pnpm run test:integration     # integration tests (@vscode/test-electron)
 pnpm run package              # production build
-pnpm dlx @vscode/vsce package # package the .vsix
+pnpm exec vsce package        # package the .vsix
 ```
 
-Packaging and publishing with vsce (`@vscode/vsce`):
+Packaging and publishing with vsce (`@vscode/vsce` is a devDependency; `pnpm exec` uses the locked project version — pnpm 12's `dlx` hard-fails on its unapproved native build scripts):
 
 ```bash
-pnpm dlx @vscode/vsce package
+pnpm exec vsce package
 # hyper-git-agentic-git-x.x.x.vsix generated
-pnpm dlx @vscode/vsce publish
+pnpm exec vsce publish
 # ThreeFish-AI.hyper-git-agentic-git-x.x.x published to VS Code Marketplace
 ```
 

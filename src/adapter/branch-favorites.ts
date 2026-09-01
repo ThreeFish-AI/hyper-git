@@ -9,13 +9,24 @@ import { toggleFavorite } from '../engine/ref/favorites';
  */
 export class BranchFavorites implements vscode.Disposable {
 	private names: string[];
-	private readonly storageKey: string;
+	private storageKey: string;
 	private readonly _onDidChange = new vscode.EventEmitter<void>();
 	readonly onDidChange: vscode.Event<void> = this._onDidChange.event;
 
 	constructor(private readonly workspaceState: vscode.Memento, repoRoot: string) {
 		this.storageKey = `hyperGit.branchFavorites:${repoRoot}`;
 		this.names = this.load();
+	}
+
+	/** 多根仓库切换 rebind（issue #107）：换 storageKey 重载该仓库的收藏，幂等，切换后 fire 刷新。 */
+	setRepoRoot(repoRoot: string): void {
+		const key = `hyperGit.branchFavorites:${repoRoot}`;
+		if (key === this.storageKey) {
+			return;
+		}
+		this.storageKey = key;
+		this.names = this.load();
+		this._onDidChange.fire();
 	}
 
 	private load(): string[] {

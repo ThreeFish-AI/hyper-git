@@ -58,6 +58,8 @@ export interface CommitViewState {
 	readonly tree: readonly FileTreeNode[];
 	readonly conventionalEnabled: boolean;
 	readonly busy: boolean;
+	/** 当前活跃仓库根（issue #107）：webview 勾选集/视图模式按仓库分区记忆。 */
+	readonly repoRoot: string;
 }
 
 /** Host → Webview */
@@ -176,6 +178,8 @@ export interface LogGraphState {
 	readonly hasMore: boolean;
 	readonly scope: LogScope;
 	readonly repoRoot: string;
+	/** 工作区含多个 git 仓库时为 true：仓库名按钮呈现可切换态（缺省视为 false，向后兼容）。 */
+	readonly multiRepo?: boolean;
 }
 
 /** per-commit 操作枚举（webview 右键菜单 → host 重调用既有命令）。 */
@@ -231,12 +235,14 @@ export type LogWebviewToHostMessage =
 	| { readonly type: 'log/selectCommit'; readonly payload: { readonly hash: string } }
 	| { readonly type: 'log/commitAction'; readonly payload: { readonly op: LogCommitOp; readonly hash: string } }
 	| { readonly type: 'log/setScope'; readonly payload: { readonly scope: LogScope } }
-	| { readonly type: 'log/openFile'; readonly payload: { readonly hash: string; readonly path: string; readonly hasParent: boolean } }
+	| { readonly type: 'log/openFile'; readonly payload: { readonly hash: string; readonly path: string; readonly status: string; readonly oldPath?: string } }
 	| { readonly type: 'log/requestCi'; readonly payload: { readonly hashes: readonly string[] } }
 	| { readonly type: 'log/ciSignIn' }
 	| { readonly type: 'log/openExternal'; readonly payload: { readonly url: string } }
 	/** 悬停提交行 → 请求在右侧编辑器区打开该提交的详情面板。 */
-	| { readonly type: 'log/showCommitDetail'; readonly payload: { readonly hash: string } };
+	| { readonly type: 'log/showCommitDetail'; readonly payload: { readonly hash: string } }
+	/** 工具栏仓库名按钮 → 打开原生仓库选择（host 复用 hyperGit.selectRepository 命令，issue #107）。 */
+	| { readonly type: 'log/selectRepo' };
 
 /** Host → Commit 详情面板（编辑器区 WebviewPanel）。 */
 export type CommitDetailHostToWebviewMessage =

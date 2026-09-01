@@ -16,7 +16,7 @@
   <a href="../../../README.md">English</a> · <b>简体中文</b>
 </p>
 
-<p align="center"><sub>6 视图 · 97 命令 · 6 配置项 · 324 单元测试</sub></p>
+<p align="center"><sub>6 视图 · 102 命令 · 11 配置项 · 403 单元测试</sub></p>
 
 ## 核心能力
 
@@ -25,9 +25,10 @@
 </p>
 
 - **多 Changelist Changes 视图**：将改动分组到命名列表，设活动列表为提交目标，新建/重命名/删除/移动，`workspaceState` 持久化（重启恢复）；状态色复用 `gitDecoration.*` 主题色。
+- **多根工作区仓库切换**：多根工作区含多个 Git 仓库时，Graph 工具栏仓库名升级为可切换按钮（对标 Git Graph）并提供 `Select Repository…` 命令；一次切换全局活跃仓库，Graph / Branches / Commit / Stash / Shelf / Worktrees / 角标全部视图跟随，changelist、分支收藏、分组偏好、Shelf、最近提交消息按仓库隔离记忆，重开窗口恢复上次活跃仓库。
 - **Commit 提交窗口**：自绘提交面板 + Conventional Commits 实时校验 + Amend / Sign-off / 跳过 Hook + 提交 / 提交并推送；勾选集即提交权威范围；最近消息复用。
 - **Log 提交图（自绘 DAG）**：彩色泳道、分叉·合并连线、HEAD/分支/标签徽标，虚拟滚动增量加载；7 个可组合过滤器（作者/路径/grep/正则/合并模式/日期/清除）；per-commit 操作（Reset、新建分支·标签、Cherry-Pick、Revert、查看包含分支）。
-- **Branches 分支管理**：收藏/本地/远程/标签四段分组 + ahead·behind·upstream 跟踪；新建/检出/删除/重命名/合并/变基/比较/收藏；**多选批量**删除、复制引用、收藏（已合并/未合并诚实分栏确认）。
+- **Branches 分支管理**：收藏/本地/远程/标签四段分组 + ahead·behind·upstream 跟踪；**前缀文件夹分组**（平铺 ⇄ 树切换）将共享 `/` 前缀的分支收拢到共同前缀下、仅显示后缀；新建/检出/删除/重命名/合并/变基/比较/收藏；**多选批量**删除、复制引用、收藏（已合并/未合并诚实分栏确认）。
 - **Stash & Shelf**：Stash 全操作（含 keep-index / clear / 从 Stash 建分支）；独立 **Shelf**（基于 patch、独立于 stash，含 3-way 合并 Unshelve）。
 - **Worktrees**：全生命周期管理——新建（新分支/检出/detached）、在新窗口打开、锁定/解锁、移动、删除、清理失效。
 - **行级与 Hunk 提交**：编辑器内 CodeLens「Commit this Hunk」、部分暂存/取消暂存、光标处暂存、Hunk 归属 Changelist。
@@ -40,7 +41,7 @@
 - **消费** 内置 `vscode.git` 导出的稳定 `Repository` API 作为 git 底座，不重造 git 状态机。
 - **受控 CLI 通道**：稳定 API 未覆盖的能力（cherry-pick / revert / reset / 分支重命名 / hunk 暂存 / stash 列表 / graph 拓扑 / shelf 等）经 `GitRepositoryService.execGit` 复用同一 git 二进制（`api.git.path`）实现。
 - **自绘视图** 承载完整的变更管理 UI（Webview 位于 `adapter/webview/`）；纯逻辑沉淀于 `engine/`（零 vscode 依赖、可单测）。
-- **AI 接缝**：预留 `ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver` 共 5 个接口（设计参考 JetBrains `CheckinHandler` 提交生命周期），当前以 Null 实现交付，完整实现延后至 M5。
+- **AI 接缝**：预留 `ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver` 共 5 个接口（设计参考 JetBrains `CheckinHandler` 提交生命周期），当前以 Null 实现交付，完整实现延后至 M5。作为 M5 前置铺垫，已可配置 **Claude Code 可执行路径**（`hyperGit.claudeCode.executablePath`）与 **`~/.claude/settings.json` 快捷入口**（详见 [Claude Code 配置](../../features/claude-code-config.md)），以及 **`hyperGit.agent.*` 偏好**（基线分支 + Commit / Create PR / Review 的 agent 指令，详见 [Agentic Git 偏好配置](../../features/agentic-git-preferences.md)）。
 
 <p align="center">
   <img src="../../../media/framework.png" alt="Framework"/>
@@ -78,18 +79,18 @@
 pnpm install                  # 安装依赖
 pnpm run compile              # 类型检查 + lint + 构建
 pnpm run watch                # 监听构建（F5 启动 Extension Host 调试）
-pnpm run test:unit            # 单元测试（engine 纯逻辑，Vitest，324 例）
+pnpm run test:unit            # 单元测试（engine 纯逻辑，Vitest，403 例）
 pnpm run test:integration     # 集成测试（@vscode/test-electron）
 pnpm run package              # 生产构建
-pnpm dlx @vscode/vsce package # 打包 .vsix
+pnpm exec vsce package        # 打包 .vsix
 ```
 
-使用 vsce（`@vscode/vsce`）打包与发布：
+使用 vsce（`@vscode/vsce` 已列为 devDependency；`pnpm exec` 使用项目锁定版本——pnpm 12 起 `dlx` 临时环境对其未审批的原生构建脚本会硬失败）打包与发布：
 
 ```bash
-pnpm dlx @vscode/vsce package
+pnpm exec vsce package
 # 生成 hyper-git-agentic-git-x.x.x.vsix
-pnpm dlx @vscode/vsce publish
+pnpm exec vsce publish
 # ThreeFish-AI.hyper-git-agentic-git-x.x.x published to VS Code Marketplace
 ```
 
