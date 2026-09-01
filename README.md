@@ -82,15 +82,15 @@ pnpm run watch                # watch build (press F5 to launch the Extension Ho
 pnpm run test:unit            # unit tests (pure engine logic, Vitest, 403 cases)
 pnpm run test:integration     # integration tests (@vscode/test-electron)
 pnpm run package              # production build
-pnpm dlx @vscode/vsce package # package the .vsix
+pnpm exec vsce package        # package the .vsix
 ```
 
-Packaging and publishing with vsce (`@vscode/vsce`):
+Packaging and publishing with vsce (`@vscode/vsce` is a devDependency; `pnpm exec` uses the locked project version — pnpm 12's `dlx` hard-fails on its unapproved native build scripts):
 
 ```bash
-pnpm dlx @vscode/vsce package
+pnpm exec vsce package
 # hyper-git-agentic-git-x.x.x.vsix generated
-pnpm dlx @vscode/vsce publish
+pnpm exec vsce publish
 # ThreeFish-AI.hyper-git-agentic-git-x.x.x published to VS Code Marketplace
 ```
 
