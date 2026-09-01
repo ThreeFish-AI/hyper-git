@@ -1314,7 +1314,7 @@
 		"prettier": "^3.9.6",
 		"rimraf": "^6.0.1",
 		"typescript": "^6.0.3",
-		"typescript-eslint": "^8.64.0",
+		"typescript-eslint": "^8.68.0",
 		"vite": "^8.1.5",
 		"vitest": "^4.1.10"
 	}
