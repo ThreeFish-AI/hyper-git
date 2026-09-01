@@ -82,15 +82,15 @@ pnpm run watch                # 监听构建（F5 启动 Extension Host 调试�
 pnpm run test:unit            # 单元测试（engine 纯逻辑，Vitest，403 例）
 pnpm run test:integration     # 集成测试（@vscode/test-electron）
 pnpm run package              # 生产构建
-pnpm dlx @vscode/vsce package # 打包 .vsix
+pnpm exec vsce package        # 打包 .vsix
 ```
 
-使用 vsce（`@vscode/vsce`）打包与发布：
+使用 vsce（`@vscode/vsce` 已列为 devDependency；`pnpm exec` 使用项目锁定版本——pnpm 12 起 `dlx` 临时环境对其未审批的原生构建脚本会硬失败）打包与发布：
 
 ```bash
-pnpm dlx @vscode/vsce package
+pnpm exec vsce package
 # 生成 hyper-git-agentic-git-x.x.x.vsix
-pnpm dlx @vscode/vsce publish
+pnpm exec vsce publish
 # ThreeFish-AI.hyper-git-agentic-git-x.x.x published to VS Code Marketplace
 ```
 
