@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { showGitError } from './notify';
+import { validateRefName } from '../engine/ref/ref-name';
 import type { GitRepositoryService } from './git-repository-service';
 import type { StashEntryNode, StashNode, StashTreeProvider } from './tree/stash-tree';
 import { handleGitConflict } from './conflict-ui';
@@ -200,7 +201,11 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 					return;
 				}
 			}
-			const name = await vscode.window.showInputBox({ prompt: `Create and checkout a new branch from stash@{${index}}`, placeHolder: 'New branch name' });
+			const name = await vscode.window.showInputBox({
+				prompt: `Create and checkout a new branch from stash@{${index}}`,
+				placeHolder: 'New branch name',
+				validateInput: (v) => validateRefName(v, 'branch'),
+			});
 			if (!name || !name.trim()) {
 				return;
 			}

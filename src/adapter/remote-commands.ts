@@ -60,7 +60,7 @@ export function registerRemoteCommands(
 				[
 					{ label: 'Normal', description: 'Normal push', force: undefined as 0 | 1 | undefined },
 					{ label: 'Force-with-lease', description: 'Safe force push (recommended)', force: 1 as const },
-					{ label: 'Force', description: '⚠ Force overwrite remote (dangerous)', force: 0 as const },
+					{ label: 'Force', description: '$(alert) Force overwrite remote (dangerous)', force: 0 as const },
 				],
 				{ placeHolder: 'Push mode' },
 			);

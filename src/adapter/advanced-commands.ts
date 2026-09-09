@@ -193,6 +193,6 @@ async function pickCommitHash(service: GitRepositoryService): Promise<string | u
 		description: `${c.authorName ?? ''} · ${c.hash.slice(0, 7)}`,
 		hash: c.hash,
 	}));
-	const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select a commit' });
+	const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select a commit', matchOnDescription: true, matchOnDetail: true });
 	return pick?.hash;
 }

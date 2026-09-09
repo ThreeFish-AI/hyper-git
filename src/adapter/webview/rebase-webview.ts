@@ -63,16 +63,15 @@ export class RebaseWebview {
 			void vscode.window.showWarningMessage('No Git repository found');
 			return;
 		}
-		// 选择 base
+		// 选择 base：快捷项与提交列表用 Separator 分段；matchOnDescription 支持按 subject 模糊搜索。
 		const baseOptions = ['HEAD~5', 'HEAD~10', 'HEAD~20', 'HEAD~3', 'HEAD~2'];
 		const commits = await repo.log({ maxEntries: 30 });
-		const basePick = await vscode.window.showQuickPick(
-			[
-				...baseOptions.map((b) => ({ label: b, description: `Rebase from ${b}` })),
-				...commits.slice(1).map((c) => ({ label: c.hash.slice(0, 7), description: (c.message.split('\n', 1)[0] ?? '').slice(0, 60) })),
-			],
-			{ placeHolder: 'Select rebase base' },
-		);
+		const baseItems: Array<{ label: string; description?: string } | { label: string; kind: vscode.QuickPickItemKind.Separator }> = [
+			...baseOptions.map((b) => ({ label: b, description: `Rebase from ${b}` })),
+			{ label: 'Recent Commits', kind: vscode.QuickPickItemKind.Separator },
+			...commits.slice(1).map((c) => ({ label: c.hash.slice(0, 7), description: (c.message.split('\n', 1)[0] ?? '').slice(0, 60) })),
+		];
+		const basePick = await vscode.window.showQuickPick(baseItems, { placeHolder: 'Select rebase base', matchOnDescription: true });
 		if (!basePick) {
 			return;
 		}

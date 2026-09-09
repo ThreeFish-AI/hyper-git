@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { showGitError } from './notify';
 import { runWithProgress } from './task-progress';
+import { validateRefName } from '../engine/ref/ref-name';
 import type { BranchNode } from './tree/branches-tree';
 import type { BranchesTreeProvider } from './tree/branches-tree';
 import type { BranchFavorites } from './branch-favorites';
@@ -105,7 +106,10 @@ export function registerHistoryCommands(
 			if (!repo) {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: 'New branch name' });
+			const name = await vscode.window.showInputBox({
+				prompt: 'New branch name',
+				validateInput: (v) => validateRefName(v, 'branch'),
+			});
 			if (name && name.trim()) {
 				try {
 					await repo.createBranch(name.trim(), true);
@@ -392,7 +396,11 @@ export function registerHistoryCommands(
 				return;
 			}
 			const source = node.ref.shortName;
-			const name = await vscode.window.showInputBox({ prompt: `Create and checkout a new local branch from "${source}"`, placeHolder: 'New branch name' });
+			const name = await vscode.window.showInputBox({
+				prompt: `Create and checkout a new local branch from "${source}"`,
+				placeHolder: 'New branch name',
+				validateInput: (v) => validateRefName(v, 'branch'),
+			});
 			if (!name || !name.trim()) {
 				return;
 			}
@@ -428,23 +436,29 @@ export function registerHistoryCommands(
 			if (!repo) {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: 'Tag name (e.g. v1.0.0)' });
+			const name = await vscode.window.showInputBox({
+				prompt: 'Tag name (e.g. v1.0.0)',
+				validateInput: (v) => validateRefName(v, 'tag'),
+			});
 			if (!name || !name.trim()) {
 				return;
 			}
 			const commits = await repo.log({ maxEntries: 20 });
-			const items = [
+			// Separator 分段 HEAD 与历史提交（QuickPickItemKind.Separator，1.53+）；description 带 hash 供模糊搜索。
+			const items: Array<{ label: string; description?: string; target: string } | { label: string; kind: vscode.QuickPickItemKind.Separator }> = [
 				{ label: 'HEAD', description: 'Current commit', target: 'HEAD' },
+				{ label: 'Recent Commits', kind: vscode.QuickPickItemKind.Separator },
 				...commits.map((c) => ({
 					label: (c.message.split('\n', 1)[0] ?? c.hash).slice(0, 50),
 					description: c.hash.slice(0, 7),
 					target: c.hash,
 				})),
 			];
-			const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Choose a commit to tag' });
-			if (!pick) {
+			const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Choose a commit to tag', matchOnDescription: true, matchOnDetail: true });
+			if (!picked || !('target' in picked)) {
 				return;
 			}
+			const pick = picked;
 			try {
 				await service.execGit(['tag', name.trim(), pick.target]);
 				branchesTree.refresh();
@@ -576,7 +590,11 @@ export function registerHistoryCommands(
 			if (!repo || node?.kind !== 'commit') {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: `Create and checkout a new branch from ${node.commit.hash.slice(0, 7)}`, placeHolder: 'New branch name' });
+			const name = await vscode.window.showInputBox({
+				prompt: `Create and checkout a new branch from ${node.commit.hash.slice(0, 7)}`,
+				placeHolder: 'New branch name',
+				validateInput: (v) => validateRefName(v, 'branch'),
+			});
 			if (!name || !name.trim()) {
 				return;
 			}
@@ -595,7 +613,11 @@ export function registerHistoryCommands(
 			if (node?.kind !== 'commit') {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: `Create a new tag at ${node.commit.hash.slice(0, 7)}`, placeHolder: 'e.g. v1.0.0' });
+			const name = await vscode.window.showInputBox({
+				prompt: `Create a new tag at ${node.commit.hash.slice(0, 7)}`,
+				placeHolder: 'e.g. v1.0.0',
+				validateInput: (v) => validateRefName(v, 'tag'),
+			});
 			if (!name || !name.trim()) {
 				return;
 			}

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { showGitError } from './notify';
+import { validateRefName } from '../engine/ref/ref-name';
 import type { GitRepositoryService } from './git-repository-service';
 import type { WorktreeNode, WorktreeTreeProvider } from './tree/worktree-tree';
 import { parseWorktreeList } from '../engine/worktree/worktree-list';
@@ -44,11 +45,21 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 			let branch: string | undefined;
 			let sourceRef: string | undefined;
 			if (modePick.mode === 'new') {
-				branch = await vscode.window.showInputBox({ prompt: 'New branch name', placeHolder: 'feature/y' });
+				// 多步输入（分支名 → 起点 → 路径）不因失焦丢失（ignoreFocusOut；step/totalSteps 仅 createInputBox 支持）。
+				branch = await vscode.window.showInputBox({
+					prompt: 'New branch name',
+					placeHolder: 'feature/y',
+					validateInput: (v) => validateRefName(v, 'branch'),
+					ignoreFocusOut: true,
+				});
 				if (!branch?.trim()) {
 					return;
 				}
-				const start = await vscode.window.showInputBox({ prompt: 'Start point (leave empty = HEAD)', placeHolder: 'HEAD / main / abc1234' });
+				const start = await vscode.window.showInputBox({
+					prompt: 'Start point (leave empty = HEAD)',
+					placeHolder: 'HEAD / main / abc1234',
+					ignoreFocusOut: true,
+				});
 				if (start === undefined) {
 					return; // Esc 取消；空字符串 = HEAD（允许）
 				}
@@ -81,6 +92,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				prompt: 'Worktree path (relative to repo root / absolute)',
 				value: `../${safeName}-wt`,
 				placeHolder: '../feature-y-wt',
+				ignoreFocusOut: true,
 			});
 			if (!wtPath?.trim()) {
 				return;

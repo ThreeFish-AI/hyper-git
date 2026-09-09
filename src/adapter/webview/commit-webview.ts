@@ -93,14 +93,15 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 		if (!change) {
 			return;
 		}
+		// QuickPick label 支持 $(codicon) 内联图标（与 changelist 菜单对齐）。
 		const actions: ReadonlyArray<{ readonly label: string; readonly command: string }> = [
-			{ label: 'Open Diff', command: 'hyperGit.openDiff' },
-			{ label: 'Move to Changelist…', command: 'hyperGit.moveChangelist' },
-			{ label: 'Show History', command: 'hyperGit.showHistory' },
-			{ label: 'Stage Hunks…', command: 'hyperGit.partialStage' },
-			{ label: 'Unstage Hunks…', command: 'hyperGit.partialUnstage' },
-			{ label: 'Add to .gitignore', command: 'hyperGit.ignorePath' },
-			{ label: 'Discard Changes', command: 'hyperGit.discardChanges' },
+			{ label: '$(diff) Open Diff', command: 'hyperGit.openDiff' },
+			{ label: '$(symbol-enum) Move to Changelist…', command: 'hyperGit.moveChangelist' },
+			{ label: '$(history) Show History', command: 'hyperGit.showHistory' },
+			{ label: '$(diff-added) Stage Hunks…', command: 'hyperGit.partialStage' },
+			{ label: '$(diff-removed) Unstage Hunks…', command: 'hyperGit.partialUnstage' },
+			{ label: '$(diff-ignored) Add to .gitignore', command: 'hyperGit.ignorePath' },
+			{ label: '$(discard) Discard Changes', command: 'hyperGit.discardChanges' },
 		];
 		const pick = await vscode.window.showQuickPick(actions.slice(), { placeHolder: relativePath });
 		if (!pick) {

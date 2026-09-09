@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { showGitError } from './notify';
 import { runWithProgress } from './task-progress';
+import { validateRefName } from '../engine/ref/ref-name';
 import type { BranchNode, BranchesTreeProvider } from './tree/branches-tree';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
 import type { LogFilterControl, LogNode } from './webview/log-webview';
@@ -110,7 +111,11 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 				return;
 			}
 			const oldName = node.ref.shortName;
-			const newName = await vscode.window.showInputBox({ prompt: `Rename branch "${oldName}"`, value: oldName });
+			const newName = await vscode.window.showInputBox({
+				prompt: `Rename branch "${oldName}"`,
+				value: oldName,
+				validateInput: (v) => validateRefName(v, 'branch'),
+			});
 			if (!newName || !newName.trim() || newName === oldName) {
 				return;
 			}
@@ -206,7 +211,8 @@ async function pickCommitHash(service: GitRepositoryService): Promise<string | u
 		description: `${c.authorName ?? ''} · ${c.hash.slice(0, 7)}`,
 		hash: c.hash,
 	}));
-	const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select a commit' });
+	// matchOnDescription：description 含短 hash，输入 hash 前缀可直接命中。
+	const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select a commit', matchOnDescription: true, matchOnDetail: true });
 	return pick?.hash;
 }
 
@@ -231,6 +237,6 @@ async function pickResetTarget(service: GitRepositoryService): Promise<string | 
 		description: `${c.hash.slice(0, 7)}${i === 0 ? ' · HEAD' : ''}`,
 		hash: c.hash,
 	}));
-	const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select reset target commit' });
+	const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select reset target commit', matchOnDescription: true, matchOnDetail: true });
 	return pick?.hash;
 }
