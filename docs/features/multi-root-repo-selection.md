@@ -1,6 +1,6 @@
 # 多根工作区仓库切换（Multi-root Repository Selection）
 
-> 多根工作区（multi-root）含多个 Git 仓库时，**Graph 工具栏仓库名升级为可切换按钮**（对标 Git Graph 的 repo selector），Command Palette 亦可直达。切换的是**全局活跃仓库**：Graph / Branches / Commit（changelist）/ Stash / Shelf / Worktrees / 未提交角标**全部视图跟随**，changelist 分配、分支收藏、分支分组偏好、Shelf 存储、最近提交消息**按仓库隔离记忆**，重开窗口回到上次操作的仓库。
+> 多根工作区（multi-root）含多个 Git 仓库时，**Graph 标题栏出现「切换仓库」图标按钮**（`$(repo)`，对标 Git Graph 的 repo selector；仓库路径常驻 `WebviewView.description` 副标题），Command Palette 亦可直达。切换的是**全局活跃仓库**：Graph / Branches / Commit（changelist）/ Stash / Shelf / Worktrees / 未提交角标**全部视图跟随**，changelist 分配、分支收藏、分支分组偏好、Shelf 存储、最近提交消息**按仓库隔离记忆**，重开窗口回到上次操作的仓库。
 
 ## 交互形态
 
@@ -17,7 +17,7 @@ flowchart LR
   style E fill:#8957e5,color:#fff
 ```
 
-- **入口一（主）**：Graph 工具栏右侧仓库名按钮——多仓库时显示 `basename ▾`、hover 高亮，单仓库退化为纯文本（现状观感，多数用户零感知）；
+- **入口一（主）**：Graph 标题栏右侧「切换仓库」图标按钮（`when: hyperGit.log.multiRepo` 显隐；原 webview 工具栏仓库名按钮上移，省一行竖直空间）；
 - **入口二**：Command Palette → `Hyper Git: Select Repository…`（单仓库时提示 no-op）；
 - **持久化**：活跃仓库记于 `workspaceState`（`hyperGit.activeRepoRoot`，per-workspace 天然隔离），重开窗口恢复。
 
