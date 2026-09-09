@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { showGitError } from './notify';
+import { runWithProgress } from './task-progress';
 import type { BranchNode, BranchesTreeProvider } from './tree/branches-tree';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
 import type { LogFilterControl, LogNode } from './webview/log-webview';
@@ -26,13 +28,13 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 				return;
 			}
 			try {
-				await service.execGit(['cherry-pick', hash]);
+				await runWithProgress(`Cherry-picking ${hash.slice(0, 7)}…`, () => service.execGit(['cherry-pick', hash]));
 				branchesTree.refresh();
 				logTree.refresh();
 				void vscode.window.showInformationMessage(`Cherry-pick ${hash.slice(0, 7)} complete`);
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Cherry-pick'))) {
-					void vscode.window.showErrorMessage(`Cherry-pick failed: ${errMsg(e)}`);
+					void showGitError(`Cherry-pick failed: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -49,13 +51,13 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 				return;
 			}
 			try {
-				await service.execGit(['revert', '--no-edit', hash]);
+				await runWithProgress(`Reverting ${hash.slice(0, 7)}…`, () => service.execGit(['revert', '--no-edit', hash]));
 				branchesTree.refresh();
 				logTree.refresh();
 				void vscode.window.showInformationMessage(`Revert ${hash.slice(0, 7)} complete`);
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Revert'))) {
-					void vscode.window.showErrorMessage(`Revert failed: ${errMsg(e)}`);
+					void showGitError(`Revert failed: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -91,12 +93,12 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 				}
 			}
 			try {
-				await service.execGit(['reset', `--${pick.label}`, target]);
+				await runWithProgress(`Resetting to ${target.slice(0, 7)}…`, () => service.execGit(['reset', `--${pick.label}`, target]));
 				branchesTree.refresh();
 				logTree.refresh();
 				void vscode.window.showInformationMessage(`Reset (--${pick.label} ${target.slice(0, 7)}) complete`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Reset failed: ${errMsg(e)}`);
+				void showGitError(`Reset failed: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -116,7 +118,7 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 				await service.execGit(['branch', '-m', oldName, newName.trim()]);
 				branchesTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Rename failed: ${errMsg(e)}`);
+				void showGitError(`Rename failed: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -138,7 +140,7 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 				});
 				void vscode.window.showInformationMessage(`Added to .gitignore: ${rel}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Ignore failed: ${errMsg(e)}`);
+				void showGitError(`Ignore failed: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -166,7 +168,7 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 				const doc = await vscode.workspace.openTextDocument({ content: `$ git diff --stat ${base}...${target}\n\n${out}`, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Compare failed: ${errMsg(e)}`);
+				void showGitError(`Compare failed: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -185,7 +187,7 @@ export function registerGitCliCommands(service: GitRepositoryService, branchesTr
 				await repo.commit(message.trim(), { amend: true });
 				void vscode.window.showInformationMessage('Rewrote latest commit');
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Rewrite failed: ${errMsg(e)}`);
+				void showGitError(`Rewrite failed: ${errMsg(e)}`);
 			}
 		}),
 	);

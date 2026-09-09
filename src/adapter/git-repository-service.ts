@@ -183,13 +183,17 @@ export class GitRepositoryService implements vscode.Disposable {
 	async execGit(args: string[], options?: { env?: NodeJS.ProcessEnv }): Promise<string> {
 		const repo = this._repo;
 		if (!repo) {
-			throw new Error('未找到 Git 仓库');
+			throw new Error('No Git repository found');
 		}
 		return new Promise((resolve, reject) => {
-			execFile(this.api.git.path, args, { cwd: repo.rootUri.fsPath, maxBuffer: 20 * 1024 * 1024, encoding: 'utf8', env: options?.env }, (err, stdout) => {
+			execFile(this.api.git.path, args, { cwd: repo.rootUri.fsPath, maxBuffer: 20 * 1024 * 1024, encoding: 'utf8', env: options?.env }, (err, stdout, stderr) => {
 				if (err) {
-					logGit(args, undefined, err.message);
-					reject(err);
+					// execFile 的 err.message 是通用串；真实失败原因在 stderr——透传挂到错误对象并记入 Console，
+					// 否则 CLI 通道失败在通知与日志中均不可诊断（与 API 通道 GitError.stderr 提取对齐）。
+					const gitErr = err as NodeJS.ErrnoException & { stderr?: string };
+					gitErr.stderr = stderr?.trim() || undefined;
+					logGit(args, undefined, gitErr.stderr ? `${err.message}\n${gitErr.stderr}` : err.message);
+					reject(gitErr);
 				} else {
 					logGit(args, stdout);
 					resolve(stdout);

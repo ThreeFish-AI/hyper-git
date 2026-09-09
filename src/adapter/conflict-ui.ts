@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
+import { showGitError } from './notify';
 import { parseConflictState, type OngoingOperation } from '../engine/git-state/conflict-detector';
 import type { GitRepositoryService } from './git-repository-service';
 
@@ -48,7 +49,7 @@ export async function handleGitConflict(service: GitRepositoryService, opName: s
 				await service.execGit(ABORT_ARGS[op]);
 				void vscode.window.showInformationMessage(`${op} aborted, working tree restored`);
 			} catch {
-				void vscode.window.showErrorMessage('Failed to abort, please handle manually');
+				void showGitError('Failed to abort, please handle manually');
 			}
 		} else if (choice === 'Resolve conflicts') {
 			// 打开自绘 3-way merge editor（resolveConflicts 列出冲突文件供选择）

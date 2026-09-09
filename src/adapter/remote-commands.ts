@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { showGitError } from './notify';
+import { runWithProgress } from './task-progress';
 import { selectedBranchRefs } from './branch-selection';
 import { handleGitConflict } from './conflict-ui';
 import type { BranchNode, BranchesTreeProvider } from './tree/branches-tree';
@@ -70,16 +72,18 @@ export function registerRemoteCommands(
 				return;
 			}
 			try {
-				await repo.push(remote, undefined, false, mode.force);
-				if (tags === 'Yes') {
-					await service.execGit(['push', remote, '--tags']);
-				}
+				await runWithProgress('Pushing…', async () => {
+					await repo.push(remote, undefined, false, mode.force);
+					if (tags === 'Yes') {
+						await service.execGit(['push', remote, '--tags']);
+					}
+				});
 				branchesTree.refresh();
 				logTree.refresh();
 				void vscode.window.showInformationMessage(`Pushed to ${remote} ${previewCount}`.trim());
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Push'))) {
-					void vscode.window.showErrorMessage(`Push failed: ${errMsg(e)}`);
+					void showGitError(`Push failed: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -102,13 +106,15 @@ export function registerRemoteCommands(
 				return;
 			}
 			try {
-				await service.execGit(pick.args);
+				await runWithProgress(`Updating project (${pick.args.join(' ')})…`, () => service.execGit(pick.args), {
+					location: vscode.ProgressLocation.Notification,
+				});
 				branchesTree.refresh();
 				logTree.refresh();
 				void vscode.window.showInformationMessage('Update Project complete');
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Update'))) {
-					void vscode.window.showErrorMessage(`Update failed: ${errMsg(e)}`);
+					void showGitError(`Update failed: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -144,13 +150,13 @@ export function registerRemoteCommands(
 				}
 			}
 			try {
-				await service.execGit(['merge', ...mode.args, ...msgArgs, target]);
+				await runWithProgress(`Merging ${target}…`, () => service.execGit(['merge', ...mode.args, ...msgArgs, target]));
 				branchesTree.refresh();
 				logTree.refresh();
 				void vscode.window.showInformationMessage(`Merged ${target}`);
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Merge'))) {
-					void vscode.window.showErrorMessage(`Merge failed: ${errMsg(e)}`);
+					void showGitError(`Merge failed: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -195,7 +201,8 @@ export function registerRemoteCommands(
 				protectedTargets.length > 0
 					? `${detail}\n\nAutomatically skipped protected branches: ${truncateNames(protectedTargets.map((t) => t.shortName))}`
 					: detail;
-			const choice = await vscode.window.showWarningMessage(fullDetail, { modal: true }, confirmLabel);
+			// 多行明细走 MessageOptions.detail（模态框次要文字载体），标题保持单行。
+			const choice = await vscode.window.showWarningMessage('Delete remote branch(es)?', { modal: true, detail: fullDetail }, confirmLabel);
 			if (choice !== confirmLabel) {
 				return;
 			}

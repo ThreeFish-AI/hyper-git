@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { showGitError } from '../notify';
 import type { GitRepositoryService } from '../git-repository-service';
 import { diff3, type MergeHunk } from '../../engine/merge/diff3';
 import { parseConflictState } from '../../engine/git-state/conflict-detector';
@@ -34,7 +35,7 @@ export class MergeEditorWebview {
 				service.execGit(['show', `:3:${filePath}`]),
 			]);
 		} catch (e) {
-			void vscode.window.showErrorMessage(`Failed to read conflict stages (file may have no conflicts): ${errMsg(e)}`);
+			void showGitError(`Failed to read conflict stages (file may have no conflicts): ${errMsg(e)}`);
 			return;
 		}
 		const hunks = diff3(splitLines(base), splitLines(ours), splitLines(theirs));
@@ -151,7 +152,7 @@ p { color: var(--vscode-descriptionForeground); }
 			await service.execGit(['add', '--', filePath]);
 			void vscode.window.showInformationMessage(`"${filePath}" saved and marked resolved`);
 		} catch (e) {
-			void vscode.window.showErrorMessage(`Failed to save: ${errMsg(e)}`);
+			void showGitError(`Failed to save: ${errMsg(e)}`);
 		}
 	}
 
@@ -381,7 +382,7 @@ export function registerMergeCommands(service: GitRepositoryService): vscode.Dis
 				await service.execGit(['add', '--', file]);
 				void vscode.window.showInformationMessage(`"${file}" resolved with ours`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed: ${errMsg(e)}`);
+				void showGitError(`Failed: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -401,7 +402,7 @@ export function registerMergeCommands(service: GitRepositoryService): vscode.Dis
 				await service.execGit(['add', '--', file]);
 				void vscode.window.showInformationMessage(`"${file}" resolved with theirs`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed: ${errMsg(e)}`);
+				void showGitError(`Failed: ${errMsg(e)}`);
 			}
 		}),
 	);

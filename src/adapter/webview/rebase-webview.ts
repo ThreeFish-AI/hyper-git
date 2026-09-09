@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { showGitError } from '../notify';
+import { runWithProgress } from '../task-progress';
 import type { GitRepositoryService } from '../git-repository-service';
 import { handleGitConflict } from '../conflict-ui';
 import { type RebaseTodoItem, isValidAction, serializeTodo } from '../../engine/rebase/todo';
@@ -89,7 +91,7 @@ export class RebaseWebview {
 					return { hash, subject: subj.join('|') };
 				});
 		} catch (e) {
-			void vscode.window.showErrorMessage(`Failed to load commits: ${errMsg(e)}`);
+			void showGitError(`Failed to load commits: ${errMsg(e)}`);
 			return;
 		}
 		if (rebaseCommits.length === 0) {
@@ -217,7 +219,12 @@ p { color: var(--vscode-descriptionForeground); }
 		}
 
 		try {
-			await service.execGit(['rebase', '-i', base], { env });
+			// 交互 rebase 可能耗时较长且无中间输出：Notification 进度显式告知（避免 UI 疑似冻结）。
+			await runWithProgress(
+				`Rebasing onto ${base}…`,
+				() => service.execGit(['rebase', '-i', base], { env }),
+				{ location: vscode.ProgressLocation.Notification },
+			);
 			// rebase 可能因 edit / squash 暂停（exit 0 但 rebase-merge 仍在）：检测并提示
 			const gitDir = (await service.execGit(['rev-parse', '--absolute-git-dir'])).trim();
 			if (fs.existsSync(path.join(gitDir, 'rebase-merge'))) {
@@ -230,7 +237,7 @@ p { color: var(--vscode-descriptionForeground); }
 			}
 		} catch (e) {
 			if (!(await handleGitConflict(service, 'Rebase'))) {
-				void vscode.window.showErrorMessage(`Rebase failed: ${errMsg(e)}`);
+				void showGitError(`Rebase failed: ${errMsg(e)}`);
 			}
 		} finally {
 			for (const f of [tmpTodo, tmpEditor, tmpState]) {
