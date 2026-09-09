@@ -6,35 +6,88 @@ import type { CommitRequest } from '../commit/commit-service';
 import type { ChangelistRegistry } from '../changelist-registry';
 import type { ChangeItem, GitRepositoryService } from '../git-repository-service';
 import type {
-	CommitChangelistItem,
 	CommitFileItem,
 	CommitViewState,
 	HostToWebviewMessage,
 	WebviewToHostMessage,
 } from '../../shared/protocol';
 import type { CommitService } from '../commit/commit-service';
-import { getBaseStyles, ICON_CHEVRON_DOWN, ICON_ELLIPSIS } from './shared-styles';
+import { getBaseStyles, ICON_CHEVRON_DOWN } from './shared-styles';
 import { getNonce } from './nonce';
 
 /**
  * Commit 提交窗口（WebviewView，自绘提交面板）。
  *
- * 承载活动 changelist 文件列表（平铺 / 目录树两态可切）+ 文件单击看 diff + 单文件右键操作 +
- * changelist 切换与管理（由原 Changes 视图平移而来）+ 多行 Commit Message 编辑器 +
- * Amend/sign-off/skip-hooks 选项 + Commit/Commit and Push 按钮 + Conventional Commits 实时校验 +
- * 最近消息复用。选中态由 webview 端管理（host 不回写，避免覆盖用户操作）。
+ * 承载活动 changelist 文件列表（平铺 / 目录树两态，切换上移标题栏互斥图标）+ 文件单击看 diff +
+ * 单文件右键操作 + 多行 Commit Message 编辑器 + Amend/sign-off/skip-hooks 选项 +
+ * Commit/Commit and Push 按钮 + Conventional Commits 实时校验 + 最近消息复用。
+ * changelist 切换与管理（New/Rename/Delete）由标题栏 $(checklist) 图标 → setActiveChangelist
+ * QuickPick 承载，活动列表名常驻 view.description 副标题；Select All 吸顶于文件列表容器内首行。
+ * 选中态由 webview 端管理（host 不回写，避免覆盖用户操作）。
  * 注：活动栏未提交数角标已迁至隐藏的 hyperGit.changesBadge TreeView 承载（见 extension.ts）。
  */
-export class CommitWebviewProvider implements vscode.WebviewViewProvider {
+export class CommitWebviewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
 	public static readonly viewType = 'hyperGit.commit';
 	private view?: vscode.WebviewView;
 	private currentMessage = '';
+	/** 文件列表展示模式（List/Tree，标题栏图标切换）：host 为事实源，随 state 整态下发。 */
+	private detailMode: 'flat' | 'tree' = 'flat';
+	private readonly disposables: vscode.Disposable[] = [];
+
+	/** List/Tree 偏好按仓库持久化 key（issue #107 同 log.dmode 范式；第三视图复用时提炼共享 helper）。 */
+	private static dmodeKey(root: string): string {
+		return `hyperGit.commit.dmode:${root}`;
+	}
+	/** context key 同步（标题栏互斥按钮显隐由 when 子句驱动）。 */
+	private static setCtx(key: string, value: string | boolean): void {
+		void vscode.commands.executeCommand('setContext', key, value);
+	}
 
 	constructor(
 		private readonly service: GitRepositoryService,
 		private readonly registry: ChangelistRegistry,
 		private readonly commit: CommitService,
-	) {}
+		private readonly workspaceState: vscode.Memento,
+	) {
+		// 激活即恢复当前仓库的 List/Tree 记忆并同步 context key（标题栏控件先于视图解析渲染）；
+		// 活跃仓库切换（issue #107）：恢复该仓库的记忆值（无记忆回退 'flat'），
+		// 文件列表刷新由 extension 的 onDidChange → refreshAll 驱动。
+		this.loadRepoScopedPrefs();
+		this.disposables.push(
+			service.onDidChangeRepository(() => {
+				this.loadRepoScopedPrefs();
+			}),
+		);
+	}
+
+	dispose(): void {
+		for (const d of this.disposables) {
+			d.dispose();
+		}
+		this.disposables.length = 0;
+	}
+
+	/** 装载当前仓库的 List/Tree 偏好（memento → 内存 + context key）。 */
+	private loadRepoScopedPrefs(): void {
+		const root = this.service.repoRoot;
+		this.detailMode =
+			(root ? this.workspaceState.get<'flat' | 'tree'>(CommitWebviewProvider.dmodeKey(root)) : undefined) ?? 'flat';
+		CommitWebviewProvider.setCtx('hyperGit.commit.tree', this.detailMode === 'tree');
+	}
+
+	/** 标题栏 List/Tree 互斥图标切换（同 Graph/Branches 范式）：pushState 全同步且幂等，整态重发即达。 */
+	setDetailMode(mode: 'flat' | 'tree'): void {
+		if (this.detailMode === mode) {
+			return;
+		}
+		const root = this.service.repoRoot;
+		if (root) {
+			void this.workspaceState.update(CommitWebviewProvider.dmodeKey(root), mode);
+		}
+		this.detailMode = mode;
+		CommitWebviewProvider.setCtx('hyperGit.commit.tree', mode === 'tree');
+		this.pushState();
+	}
 
 	resolveWebviewView(view: vscode.WebviewView): void {
 		this.view = view;
@@ -74,12 +127,6 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 			case 'commit/fileMenu':
 				void this.handleFileMenu(msg.payload.path);
 				break;
-			case 'commit/setActive':
-				void vscode.commands.executeCommand('hyperGit.setActiveChangelist', msg.payload.id);
-				break;
-			case 'commit/changelistMenu':
-				void this.handleChangelistMenu(msg.payload.id);
-				break;
 		}
 	}
 
@@ -93,7 +140,7 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 		if (!change) {
 			return;
 		}
-		// QuickPick label 支持 $(codicon) 内联图标（与 changelist 菜单对齐）。
+		// QuickPick label 支持 $(codicon) 内联图标（与 changelist 标题栏 QuickPick 对齐）。
 		const actions: ReadonlyArray<{ readonly label: string; readonly command: string }> = [
 			{ label: '$(diff) Open Diff', command: 'hyperGit.openDiff' },
 			{ label: '$(symbol-enum) Move to Changelist…', command: 'hyperGit.moveChangelist' },
@@ -108,30 +155,6 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 		await vscode.commands.executeCommand(pick.command, change);
-	}
-
-	/** changelist 头部 ⋯ 菜单：新建 / 重命名 / 删除（默认列表不可改名删除，复用既有命令）。 */
-	private async handleChangelistMenu(id: string): Promise<void> {
-		const def = this.registry.getDef(id);
-		const canModify = Boolean(def) && id !== 'default';
-		const items: Array<{ label: string; op: 'new' | 'rename' | 'delete' }> = [
-			{ label: '$(add) New Changelist…', op: 'new' },
-		];
-		if (canModify && def) {
-			items.push({ label: `$(edit) Rename "${def.name}"…`, op: 'rename' });
-			items.push({ label: `$(trash) Delete "${def.name}"…`, op: 'delete' });
-		}
-		const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Changelist actions' });
-		if (!pick) {
-			return;
-		}
-		if (pick.op === 'new') {
-			await vscode.commands.executeCommand('hyperGit.newChangelist');
-		} else if (pick.op === 'rename') {
-			await vscode.commands.executeCommand('hyperGit.renameChangelist', id);
-		} else {
-			await vscode.commands.executeCommand('hyperGit.deleteChangelist', id);
-		}
 	}
 
 	private sendValidation(): void {
@@ -169,21 +192,20 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 		const changes = this.service.getChanges();
 		const groups = this.registry.getGroups(changes, (c) => c.relativePath);
 		const activeId = this.registry.activeChangelistId;
-		const changelists: CommitChangelistItem[] = groups.map((g) => ({ id: g.id, name: g.name, count: g.items.length }));
 		const activeGroup = groups.find((g) => g.id === activeId) ?? groups.find((g) => g.active) ?? groups[0];
 		const files = (activeGroup?.items ?? []).map((c) => this.toFileItem(c));
 		const state: CommitViewState = {
 			template: this.commit.getTemplate(),
 			recentMessages: this.commit.getRecentMessages(),
-			activeChangelistName: this.registry.getDef(activeId)?.name ?? 'Default',
-			activeChangelistId: activeId,
-			changelists,
+			mode: this.detailMode,
 			files,
 			tree: buildFileTree(files.map((f) => f.path)),
 			conventionalEnabled: this.commit.conventionalEnabled(),
 			busy: false,
 			repoRoot: this.service.repoRoot ?? '',
 		};
+		// 标题栏副标题 = 活动 changelist 名（原 webview 头部切换行上移，省一行竖直空间）。
+		this.view.description = this.registry.getDef(activeId)?.name ?? 'Default';
 		this.post({ type: 'state', payload: state });
 		this.sendValidation();
 	}
@@ -204,14 +226,9 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 <style>
 ${getBaseStyles()}
 body { margin: 0; padding: var(--hg-space-2); font-family: var(--vscode-font-family); color: var(--vscode-foreground); font-size: var(--vscode-font-size); background: var(--vscode-sideBar-background); }
-.cl-bar { display: flex; align-items: center; gap: 6px; margin-bottom: var(--hg-space-1); }
-.cl-bar .cl-label { flex: 0 0 auto; font-weight: 600; }
-#cl-switch { flex: 1 1 auto; min-width: 0; } /* 视觉走共享 .hg-select（dropdown token 单一事实源） */
-.cl-menu-btn { flex: 0 0 auto; padding: 1px 7px; }
-.seg { display: inline-flex; border: 1px solid var(--vscode-input-border, transparent); border-radius: 3px; overflow: hidden; }
-.seg button { background: transparent; color: var(--vscode-foreground); border: none; padding: 2px 8px; font-size: calc(var(--vscode-font-size) - 2px); cursor: pointer; opacity: 0.7; }
-.seg button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); opacity: 1; }
-.seg button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+/* Select All 吸顶行（List/Tree 切换上移标题栏后由 files-header 行迁入列表容器）：背景必须不透明（防行内容透出）。 */
+.files-selectall { position: sticky; top: 0; z-index: 1; background: var(--vscode-sideBar-background); border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.3)); padding: 1px 6px; }
+.file, .tree-dir { scroll-margin-top: 22px; } /* 键盘导航 scrollIntoView 补偿：防止首行被吸顶行遮挡 */
 .files { max-height: 260px; overflow-y: auto; border: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.3)); border-radius: var(--hg-radius-control); margin-bottom: var(--hg-space-2); }
 .files:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 .file.kb-focus, .tree-dir.kb-focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
@@ -239,7 +256,6 @@ textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .opt { display: block; font-size: calc(var(--vscode-font-size) - 1px); margin: 3px 2px; }
 .buttons { display: flex; gap: 6px; margin-top: var(--hg-space-2); }
 .buttons .hg-btn { flex: 1; }
-.files-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; padding: 0 6px; color: var(--vscode-descriptionForeground); }
 .files-empty { padding: 14px 8px; text-align: center; color: var(--vscode-descriptionForeground); font-size: calc(var(--vscode-font-size) - 1px); }
 .spinner { display: inline-block; width: 12px; height: 12px; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: hg-spin 0.8s linear infinite; vertical-align: -2px; margin-right: 5px; }
 @keyframes hg-spin { to { transform: rotate(360deg); } }
@@ -256,19 +272,12 @@ details.advanced[open] summary { margin-bottom: 4px; }
 </style>
 </head>
 <body>
-<div class="cl-bar">
-  <span class="cl-label">Active Changelist:</span>
-  <select id="cl-switch" class="hg-select" title="Switch active changelist"></select>
-  <button id="cl-menu" class="hg-btn hg-btn--secondary hg-btn--sm cl-menu-btn" title="Changelist actions" aria-label="Changelist actions">${ICON_ELLIPSIS}</button>
+<div class="files" id="files" tabindex="0">
+  <div class="files-selectall" id="files-selectall" style="display:none">
+    <label class="opt" style="margin:0"><input type="checkbox" id="select-all"> Select All</label>
+  </div>
+  <div id="files-rows" role="tree" aria-label="Changed files"></div>
 </div>
-<div class="files-header" id="files-header" style="display:none">
-  <label class="opt" style="margin:0"><input type="checkbox" id="select-all"> Select All</label>
-  <span class="seg" role="group" aria-label="File view mode">
-    <button id="mode-flat" class="active" aria-pressed="true" title="Flat list">List</button>
-    <button id="mode-tree" aria-pressed="false" title="Group by directory">Tree</button>
-  </span>
-</div>
-<div class="files" id="files" tabindex="0" role="tree" aria-label="Changed files"></div>
 <textarea id="message" class="hg-input" rows="4" placeholder="Commit message (Conventional Commits: type(scope): description)" spellcheck="false"></textarea>
 <div id="validation" class="validation" role="status" aria-live="polite"></div>
 <div class="recent" id="recent"></div>
@@ -286,20 +295,21 @@ details.advanced[open] summary { margin-bottom: 4px; }
 
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
-// ── 勾选集/视图模式/提交草稿按仓库分区（v3，issue #107）：勾选是相对路径集合，跨仓库本就错位；
+// ── 勾选集/折叠集/提交草稿按仓库分区（v3，issue #107）：勾选是相对路径集合，跨仓库本就错位；
 // 切换仓库换装载互不串扰；v3 起 draft（message + amend/signoff/skipHooks）一并入 state——
 // 视图隐藏销毁 / 窗口 reload 后草稿可恢复（对齐内置 SCM 输入框草稿语义），提交成功即清空。
-// 旧版 state（v2 byRepo / v1 平铺）无感升级，draft 缺省为空。──
+// 旧版 state（v2 byRepo / v1 平铺）无感升级，draft 缺省为空；
+// mode 自标题栏迁移（host workspaceState 持久化）后废弃，webview 不再读写。──
 const persistedRaw = vscode.getState() || {};
 let persistedRepo = '';
 let persistedByRepo = {};
 if ((persistedRaw.v === 2 || persistedRaw.v === 3) && persistedRaw.byRepo) {
   persistedByRepo = persistedRaw.byRepo;
-} else if (persistedRaw.checked || persistedRaw.mode || persistedRaw.collapsed) {
-  persistedByRepo = { '': { checked: persistedRaw.checked, mode: persistedRaw.mode, collapsed: persistedRaw.collapsed } };
+} else if (persistedRaw.checked || persistedRaw.collapsed) {
+  persistedByRepo = { '': { checked: persistedRaw.checked, collapsed: persistedRaw.collapsed } };
 }
 let checked = new Set();
-let mode = 'flat';
+let mode = 'flat'; // 渲染模式：host 经 state 下发（标题栏 List/Tree 图标切换），webview 不再持久化
 let collapsed = new Set();
 let draft = null; // 当前仓库的草稿快照（loadPersistedFor 装载；仅 webview 重建/切仓库时回灌 DOM）
 let stateV3Written = false; // 本会话是否已落盘 v3 state：true 后 '' 兜底关闭（见 loadPersistedFor）
@@ -312,7 +322,6 @@ function loadPersistedFor(repoRoot) {
   const fallback = persistedRaw.v === 3 || stateV3Written ? undefined : persistedByRepo[''];
   const s = persistedByRepo[repoRoot] || fallback || {};
   checked = new Set(s.checked || []);
-  mode = s.mode === 'tree' ? 'tree' : 'flat';
   collapsed = new Set(s.collapsed || []);
   draft = s.draft || null;
 }
@@ -320,7 +329,6 @@ function loadPersistedFor(repoRoot) {
 function saveState() {
   persistedByRepo[persistedRepo] = {
     checked: Array.from(checked),
-    mode: mode,
     collapsed: Array.from(collapsed),
     draft: { message: msgEl.value, amend: amendEl.checked, signoff: signoffEl.checked, skipHooks: skipHooksEl.checked }
   };
@@ -346,11 +354,8 @@ const signoffEl = document.getElementById('signoff');
 const skipHooksEl = document.getElementById('skipHooks');
 const toastEl = document.getElementById('toast');
 const selectAllEl = document.getElementById('select-all');
-const filesHeaderEl = document.getElementById('files-header');
-const clSwitchEl = document.getElementById('cl-switch');
-const clMenuEl = document.getElementById('cl-menu');
-const modeFlatEl = document.getElementById('mode-flat');
-const modeTreeEl = document.getElementById('mode-tree');
+const filesSelectAllEl = document.getElementById('files-selectall');
+const filesRowsEl = document.getElementById('files-rows');
 
 let msgTimer = null;
 msgEl.addEventListener('input', function () {
@@ -455,13 +460,13 @@ function makeLeafRow(f, depth) {
 function renderFlat(files) {
   const frag = document.createDocumentFragment();
   files.forEach(function (f) { frag.appendChild(makeLeafRow(f, 0)); });
-  filesEl.appendChild(frag);
+  filesRowsEl.appendChild(frag);
 }
 
 function renderTree(tree, files) {
   const frag = document.createDocumentFragment();
   tree.forEach(function (n) { renderNode(n, 0, frag, files); });
-  filesEl.appendChild(frag);
+  filesRowsEl.appendChild(frag);
   updateDirStates();
 }
 
@@ -533,13 +538,13 @@ function toggleCollapse(p) {
 
 function renderList() {
   kbIdx = -1;
-  filesEl.innerHTML = '';
+  filesRowsEl.innerHTML = '';
   if (!curFiles || curFiles.length === 0) {
-    filesHeaderEl.style.display = 'none';
-    filesEl.innerHTML = EMPTY_HTML;
+    filesSelectAllEl.style.display = 'none';
+    filesRowsEl.innerHTML = EMPTY_HTML;
     return;
   }
-  filesHeaderEl.style.display = '';
+  filesSelectAllEl.style.display = '';
   if (mode === 'tree') { renderTree(curTree, curFiles); } else { renderFlat(curFiles); }
   syncSelectAll();
 }
@@ -577,35 +582,12 @@ filesEl.addEventListener('keydown', function (e) {
 });
 filesEl.addEventListener('focus', function () { if (kbIdx < 0) { kbApply(0); } });
 
-function updateModeButtons() {
-  modeFlatEl.classList.toggle('active', mode === 'flat');
-  modeTreeEl.classList.toggle('active', mode === 'tree');
-  modeFlatEl.setAttribute('aria-pressed', String(mode === 'flat'));
-  modeTreeEl.setAttribute('aria-pressed', String(mode === 'tree'));
-}
-function setMode(m) { if (mode === m) return; mode = m; saveState(); updateModeButtons(); renderList(); }
-modeFlatEl.addEventListener('click', function () { setMode('flat'); });
-modeTreeEl.addEventListener('click', function () { setMode('tree'); });
-
 selectAllEl.addEventListener('change', function () {
   const want = selectAllEl.checked;
   curFiles.forEach(function (f) { if (want) checked.add(f.path); else checked.delete(f.path); });
   filesEl.querySelectorAll('.file-cb').forEach(function (cb) { cb.checked = want; });
   saveState(); updateDirStates();
 });
-
-function renderChangelists(list, activeId) {
-  clSwitchEl.innerHTML = '';
-  (list || []).forEach(function (c) {
-    const opt = document.createElement('option');
-    opt.value = c.id;
-    opt.textContent = c.name + ' (' + c.count + ')';
-    if (c.id === activeId) opt.selected = true;
-    clSwitchEl.appendChild(opt);
-  });
-}
-clSwitchEl.addEventListener('change', function () { vscode.postMessage({ type: 'commit/setActive', payload: { id: clSwitchEl.value } }); });
-clMenuEl.addEventListener('click', function () { vscode.postMessage({ type: 'commit/changelistMenu', payload: { id: clSwitchEl.value } }); });
 
 function renderRecent(messages) {
   recentEl.innerHTML = '';
@@ -674,10 +656,9 @@ window.addEventListener('message', function (e) {
     draftRestored = true;
     curFiles = p.files || [];
     curTree = p.tree || [];
+    mode = p.mode === 'tree' ? 'tree' : 'flat';
     reconcileChecked(curFiles);
     pruneCollapsed(curTree);
-    renderChangelists(p.changelists, p.activeChangelistId);
-    updateModeButtons();
     renderList();
     renderRecent(p.recentMessages);
     conventionalEnabled = p.conventionalEnabled;

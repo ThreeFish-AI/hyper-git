@@ -204,8 +204,9 @@
 			},
 			{
 				"command": "hyperGit.setActiveChangelist",
-				"title": "Set Active Changelist",
-				"category": "Hyper Git"
+				"title": "Set Active Changelist…",
+				"category": "Hyper Git",
+				"icon": "$(checklist)"
 			},
 			{
 				"command": "hyperGit.renameChangelist",
@@ -268,6 +269,18 @@
 			},
 			{
 				"command": "hyperGit.log.detailFlat",
+				"title": "Show Changed Files as Flat List",
+				"category": "Hyper Git",
+				"icon": "$(list-flat)"
+			},
+			{
+				"command": "hyperGit.commit.detailTree",
+				"title": "Group Changed Files by Directory",
+				"category": "Hyper Git",
+				"icon": "$(list-tree)"
+			},
+			{
+				"command": "hyperGit.commit.detailFlat",
 				"title": "Show Changed Files as Flat List",
 				"category": "Hyper Git",
 				"icon": "$(list-flat)"
@@ -817,6 +830,21 @@
 			],
 			"view/title": [
 				{
+					"command": "hyperGit.setActiveChangelist",
+					"when": "view == hyperGit.commit",
+					"group": "navigation@0.5"
+				},
+				{
+					"command": "hyperGit.commit.detailTree",
+					"when": "view == hyperGit.commit && !hyperGit.commit.tree",
+					"group": "navigation@0.75"
+				},
+				{
+					"command": "hyperGit.commit.detailFlat",
+					"when": "view == hyperGit.commit && hyperGit.commit.tree",
+					"group": "navigation@0.75"
+				},
+				{
 					"command": "hyperGit.refresh",
 					"when": "view == hyperGit.commit",
 					"group": "navigation@1"
@@ -1153,7 +1181,7 @@
 				},
 				{
 					"command": "hyperGit.setActiveChangelist",
-					"when": "false"
+					"when": "view == hyperGit.commit"
 				},
 				{
 					"command": "hyperGit.renameChangelist",
@@ -1374,6 +1402,14 @@
 				{
 					"command": "hyperGit.log.detailFlat",
 					"when": "view == hyperGit.log"
+				},
+				{
+					"command": "hyperGit.commit.detailTree",
+					"when": "view == hyperGit.commit"
+				},
+				{
+					"command": "hyperGit.commit.detailFlat",
+					"when": "view == hyperGit.commit"
 				},
 				{
 					"command": "hyperGit.acceptOurs",

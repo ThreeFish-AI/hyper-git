@@ -21,7 +21,8 @@ function asId(arg: unknown): string | undefined {
  * 注册 Changes / Commit 相关命令（M1；原 Changes 树移除后由 Commit webview 复用）。
  *
  * 文件级命令统一接受 `ChangeItem | 路径字符串`：webview 传路径，host 经 {@link resolveChange}
- * 回落到 `service.getChanges()` 解析为 ChangeItem（单一事实源）。视图刷新由 registry/service
+ * 回落到 `service.getChanges()` 解析为 ChangeItem（单一事实源）。changelist 切换与管理由
+ * 标题栏 $(checklist) 图标进入 setActiveChangelist QuickPick 承载。视图刷新由 registry/service
  * 的 onDidChange → extension.refreshAll → commitView.refresh() 驱动，命令内不再直接刷新视图。
  */
 export function registerChangesCommands(
@@ -57,10 +58,48 @@ export function registerChangesCommands(
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.setActiveChangelist', (arg: unknown) => {
+		vscode.commands.registerCommand('hyperGit.setActiveChangelist', async (arg?: unknown) => {
+			// 带参 = 程序化切换；无参 = QuickPick（标题栏 $(checklist) 图标与命令面板共用入口）。
 			const id = asId(arg);
 			if (id) {
 				registry.setActive(id);
+				return;
+			}
+			const active = registry.activeChangelistId;
+			// 计数取 getGroups（含空列表，未显式分配项归活动列表——见 engine/changelist/grouper）。
+			const groups = registry.getGroups(service.getChanges(), (c) => c.relativePath);
+			type SetActiveItem =
+				| { label: string; description: string; picked: boolean; setId: string }
+				| { label: string; kind: vscode.QuickPickItemKind }
+				| { label: string; op: 'new' | 'rename' | 'delete'; targetId?: string };
+			const items: SetActiveItem[] = groups.map((g) => ({
+				label: g.name,
+				description: `${g.items.length} file${g.items.length === 1 ? '' : 's'}`,
+				picked: g.id === active, // 预选当前活动项（对齐 selectRepository 的 picked 范式）
+				setId: g.id,
+			}));
+			// 分隔线后并入原 webview「⋯」菜单管理操作（default 不可改名/删除，镜像原 handleChangelistMenu 语义）。
+			items.push({ label: 'Actions', kind: vscode.QuickPickItemKind.Separator });
+			items.push({ label: '$(add) New Changelist…', op: 'new' });
+			const def = active !== 'default' ? registry.getDef(active) : undefined;
+			if (def) {
+				items.push({ label: `$(edit) Rename "${def.name}"…`, op: 'rename', targetId: active });
+				items.push({ label: `$(trash) Delete "${def.name}"…`, op: 'delete', targetId: active });
+			}
+			const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select Active Changelist' });
+			if (!pick) {
+				return;
+			}
+			if ('setId' in pick) {
+				registry.setActive(pick.setId); // 视图刷新经 registry.onDidChange → refreshAll 驱动
+			} else if ('op' in pick) {
+				if (pick.op === 'new') {
+					await vscode.commands.executeCommand('hyperGit.newChangelist');
+				} else if (pick.op === 'rename') {
+					await vscode.commands.executeCommand('hyperGit.renameChangelist', pick.targetId);
+				} else {
+					await vscode.commands.executeCommand('hyperGit.deleteChangelist', pick.targetId);
+				}
 			}
 		}),
 	);

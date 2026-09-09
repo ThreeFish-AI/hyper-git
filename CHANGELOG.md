@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Commit 视图头部两行 UI 上移 VS Code 标题栏（省两行竖直空间）**：① 「Active Changelist」下拉与 `⋯` 管理菜单合并为标题栏 Refresh 图标左侧的 `$(checklist)` 图标按钮——点击弹出 QuickPick：各列表带文件计数、当前活动项预选，分隔线后并入 New / Rename / Delete Changelist… 操作（默认列表不可改名/删除）；活动 changelist 名常驻视图副标题（标题「Commit」同行右侧）。② 文件列表 List ⇄ Tree 段控改为标题栏 `$(list-tree)`/`$(list-flat)` 互斥图标（交互同 Graph/Branches 切换范式），偏好移交 host `workspaceState` 按仓库持久化（`hyperGit.commit.dmode:<repo>`）——**原 webview state 中的旧 List/Tree 偏好一次性重置为默认 flat**（勾选集、目录折叠与提交草稿不受影响）。③ Select All 复选框吸顶于文件列表容器内首行（列表为空时随空态隐藏），原 `.cl-bar` 与 files-header 两行整体移除。
+
 ## [0.0.17] - 2026-09-09 — Log 提交详情常驻面板 · VS Code 1.136 最佳实践对齐 · 稳定性与体验修复
 
 自 v0.0.16 以来的积累（PR #115 / #116）。核心变更：**Log 提交详情由悬停浮层改为右侧常驻面板**（三区可拖拽分割线、窄视图自适应堆叠），并全面对齐 VS Code 1.136 控件 / 交互 / API 最佳实践（修复 9 项缺陷、Webview 控件全面主题化、能力声明与设置治理）；新增长时 git 操作进度反馈、入门导览与默认键位、Stash / Worktrees 批量操作、分支 / 标签名即时校验等体验增强。完整用户视角叙述见 [Release Note v0.0.17](./docs/releases/v0.0.17.md)。

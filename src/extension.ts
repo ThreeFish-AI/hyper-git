@@ -113,7 +113,7 @@ export async function activate(
 		grouper: new NullChangelistGrouper(),
 		conflict: new NullConflictResolver(),
 	});
-	const commitView = new CommitWebviewProvider(service, registry, commit);
+	const commitView = new CommitWebviewProvider(service, registry, commit, context.workspaceState);
 	const logTree = new LogWebviewProvider(service, ciService, context.workspaceState);
 	const branchesTree = new BranchesTreeProvider(
 		service,
@@ -196,6 +196,7 @@ export async function activate(
 		favorites,
 		commit,
 		ciService,
+		commitView,
 		logTree,
 		branchesTree,
 		stashTree,
@@ -238,6 +239,10 @@ export async function activate(
 		vscode.commands.registerCommand('hyperGit.log.scopeCheckpointer', () => logTree.setScope('checkpointer')),
 		vscode.commands.registerCommand('hyperGit.log.detailTree', () => logTree.setDetailMode('tree')),
 		vscode.commands.registerCommand('hyperGit.log.detailFlat', () => logTree.setDetailMode('flat')),
+		// Commit 标题栏 List/Tree 互斥图标切换（镜像 Graph 范式，context key hyperGit.commit.tree 驱动显隐；
+		// commitView 的 onDidChangeRepository 订阅先于 refreshAll 注册，切库时 dmode 重载先于视图刷新）。
+		vscode.commands.registerCommand('hyperGit.commit.detailTree', () => commitView.setDetailMode('tree')),
+		vscode.commands.registerCommand('hyperGit.commit.detailFlat', () => commitView.setDetailMode('flat')),
 		vscode.commands.registerCommand('hyperGit.showConsole', () => showGitConsole()),
 		vscode.commands.registerCommand('hyperGit.startRebase', () => RebaseWebview.open(service)),
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, inlineLens),
