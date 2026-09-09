@@ -159,6 +159,7 @@ export async function activate(
 		worktreeTree,
 		shelfTree,
 		blame,
+		inlineLens,
 		branchesView,
 		badgeView,
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),

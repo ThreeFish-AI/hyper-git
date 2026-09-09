@@ -30,18 +30,18 @@ export const ALLOWED_COMMIT_TYPES = ALLOWED_TYPES;
 export function validateConventional(message: string): ConventionalValidation {
 	const trimmed = message.trim();
 	if (!trimmed) {
-		return { severity: 'error', reason: '提交信息不能为空' };
+		return { severity: 'error', reason: 'Commit message cannot be empty' };
 	}
 	const subject = message.split(/\r?\n/, 1)[0] ?? '';
 	if (!subject.trim()) {
-		return { severity: 'error', reason: '主题行（首行）不能为空' };
+		return { severity: 'error', reason: 'The subject line (first line) cannot be empty' };
 	}
 	if (!SUBJECT_RE.test(subject)) {
 		const allowed = ALLOWED_TYPES.join('/');
-		return { severity: 'error', reason: `首行需形如 "type(scope): description"，type ∈ ${allowed}` };
+		return { severity: 'error', reason: `The subject line must look like "type(scope): description", where type is one of ${allowed}` };
 	}
 	if (subject.length > SUBJECT_MAX_LENGTH) {
-		return { severity: 'warning', reason: `主题行 ${subject.length} 字符，建议 ≤ ${SUBJECT_MAX_LENGTH}` };
+		return { severity: 'warning', reason: `Subject line is ${subject.length} characters; keep it within ${SUBJECT_MAX_LENGTH}` };
 	}
 	return { severity: 'ok' };
 }

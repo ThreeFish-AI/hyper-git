@@ -689,9 +689,11 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 const LANE_FALLBACK = ${laneFallback};
-// 启动期解析泳道色：优先主题 --vscode-charts-* 令牌（深/浅主题自适应），缺失或与其它 lane 撞色时
+// 泳道色解析：优先主题 --vscode-charts-* 令牌（深/浅主题自适应），缺失或与其它 lane 撞色时
 // 回落 DEFAULT_LANE_PALETTE 原始 distinct hex，保底相邻 lane 可区分（对齐 graph-color 设计注释）。
-const PALETTE = (function () {
+// 主题热切换监听：webview 不随换主题重载，CSS 变量热更但 JS 快照不会——MutationObserver 观察
+// body 属性（VS Code 换主题时更新 class/data-vscode-theme-*），rAF 节流重算并全量重渲可见行。
+function computePalette() {
 	const cs = getComputedStyle(document.body);
 	const hues = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'cyan', 'orange'];
 	const resolved = hues.map(function (hue, i) {
@@ -704,7 +706,21 @@ const PALETTE = (function () {
 		if (seen[key] === undefined) { seen[key] = true; return c; }
 		return LANE_FALLBACK[i];
 	});
-})();
+}
+let PALETTE = computePalette();
+let themeRaf = 0;
+new MutationObserver(function () {
+	if (themeRaf) { return; }
+	themeRaf = requestAnimationFrame(function () {
+		themeRaf = 0;
+		const next = computePalette();
+		if (next.join(',') !== PALETTE.join(',')) {
+			PALETTE = next;
+			renderedFirst = -1; // 强制重渲可见行（泳道色/chip 已随旧色内联注入）
+			scheduleRender();
+		}
+	});
+}).observe(document.body, { attributes: true });
 const ROW_H = 24, LANE_W = 14, NODE_R = 4, GUTTER = 10, OVERSCAN = 8, LOAD_THRESHOLD = 40;
 // ── 视图状态按仓库分区（v2，issue #107）：选中/目录折叠/分栏比例记忆跟随仓库，切换仓库换装载互不串扰；
 // scope 与 List/Tree 模式已上移标题栏（host workspaceState 为事实源，随 graphData 下发），不再入 webview state；
