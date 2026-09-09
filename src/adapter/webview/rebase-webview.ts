@@ -264,7 +264,7 @@ p { color: var(--vscode-descriptionForeground); }
 					.join('');
 				return `<tr draggable="true" data-hash="${escapeHtml(r.hash)}">
 <td class="drag" title="Drag to reorder"><svg class="grip" width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="2" cy="13" r="1.3"/><circle cx="7" cy="3" r="1.3"/><circle cx="7" cy="8" r="1.3"/><circle cx="7" cy="13" r="1.3"/></svg></td>
-<td><select class="action">${options}</select></td>
+<td><select class="action hg-select">${options}</select></td>
 <td class="hash">${escapeHtml(r.hash.slice(0, 7))}</td>
 <td><input class="subject" value="${escapeHtml(r.subject)}"${action === 'reword' ? '' : ' disabled'} spellcheck="false"></td>
 </tr>`;
@@ -279,31 +279,31 @@ p { color: var(--vscode-descriptionForeground); }
 ${getBaseStyles()}
 body { margin: 0; padding: 12px 16px; font-family: var(--vscode-font-family); color: var(--vscode-foreground); font-size: var(--vscode-font-size); background: var(--vscode-editor-background); }
 h3 { margin: 0 0 4px; font-weight: 600; }
-.legend { margin: 0 0 8px; font-size: 11px; color: var(--vscode-descriptionForeground); line-height: 1.6; }
+.legend { margin: 0 0 8px; font-size: calc(var(--vscode-font-size) - 2px); color: var(--vscode-descriptionForeground); line-height: 1.6; }
 .legend code { font-family: var(--vscode-editor-font-family); color: var(--vscode-textPreformat-foreground, var(--vscode-foreground)); }
-.summary { margin: 0 0 10px; font-size: 11px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); }
+.summary { margin: 0 0 10px; font-size: calc(var(--vscode-font-size) - 2px); color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 4px 6px; border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.2)); text-align: left; vertical-align: middle; }
-th { font-weight: 600; font-size: 12px; color: var(--vscode-descriptionForeground); }
+th { font-weight: 600; font-size: calc(var(--vscode-font-size) - 1px); color: var(--vscode-descriptionForeground); }
 td.drag { color: var(--vscode-descriptionForeground); cursor: grab; user-select: none; width: 18px; }
 td.drag .grip { display: inline-block; pointer-events: none; }
-td.hash { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 12px; width: 70px; }
+td.hash { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: calc(var(--vscode-font-size) - 1px); width: 70px; }
 tr { background: transparent; }
 tr.action-drop { opacity: 0.5; }
 tr.action-drop input.subject { text-decoration: line-through; }
 tr.action-squash, tr.action-fixup { background: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,.12)); }
 tr.dragging { opacity: 0.4; }
 tr.drop-target { border-top: 2px solid var(--vscode-focusBorder, #007fd4); }
-select, input.subject { background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); padding: 2px 4px; font-size: 12px; font-family: var(--vscode-font-family); }
+input.subject { background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); padding: 2px 4px; font-size: calc(var(--vscode-font-size) - 1px); font-family: var(--vscode-font-family); } /* select 视觉走共享 .hg-select（dropdown token） */
 select { width: 92px; }
 input.subject { width: 100%; }
 input.subject:disabled { color: var(--vscode-descriptionForeground); opacity: 0.85; }
 input.subject:not(:disabled) { border-color: var(--vscode-focusBorder, #007fd4); }
 .row-actions { margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end; }
 .confirm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); align-items: center; justify-content: center; z-index: 100; }
-.confirm-box { background: var(--vscode-editorWidget-background, var(--vscode-editor-background)); color: var(--vscode-editorWidget-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.4)); border-radius: 6px; padding: 16px 20px; max-width: 440px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
-.confirm-box .confirm-count { font-size: 13px; margin-bottom: 6px; }
-.confirm-box .confirm-summary { font-family: var(--vscode-editor-font-family); font-size: 11px; color: var(--vscode-descriptionForeground); margin-bottom: 14px; }
+.confirm-box { background: var(--vscode-editorWidget-background, var(--vscode-editor-background)); color: var(--vscode-editorWidget-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.4)); border-radius: 6px; padding: 16px 20px; max-width: 440px; box-shadow: 0 4px 16px var(--vscode-widget-shadow, rgba(0,0,0,.4)); }
+.confirm-box .confirm-count { font-size: var(--vscode-font-size); margin-bottom: 6px; }
+.confirm-box .confirm-summary { font-family: var(--vscode-editor-font-family); font-size: calc(var(--vscode-font-size) - 2px); color: var(--vscode-descriptionForeground); margin-bottom: 14px; }
 .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
 </style>
 </head>

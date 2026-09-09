@@ -202,45 +202,48 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>
 ${getBaseStyles()}
-body { margin: 0; padding: var(--hg-space-2); font-family: var(--vscode-font-family); color: var(--vscode-foreground); font-size: var(--vscode-font-size); }
+body { margin: 0; padding: var(--hg-space-2); font-family: var(--vscode-font-family); color: var(--vscode-foreground); font-size: var(--vscode-font-size); background: var(--vscode-sideBar-background); }
 .cl-bar { display: flex; align-items: center; gap: 6px; margin-bottom: var(--hg-space-1); }
 .cl-bar .cl-label { flex: 0 0 auto; font-weight: 600; }
-#cl-switch { flex: 1 1 auto; min-width: 0; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, transparent)); border-radius: var(--hg-radius-control); padding: 2px 4px; font-size: 12px; }
+#cl-switch { flex: 1 1 auto; min-width: 0; } /* 视觉走共享 .hg-select（dropdown token 单一事实源） */
 .cl-menu-btn { flex: 0 0 auto; padding: 1px 7px; }
 .seg { display: inline-flex; border: 1px solid var(--vscode-input-border, transparent); border-radius: 3px; overflow: hidden; }
-.seg button { background: transparent; color: var(--vscode-foreground); border: none; padding: 2px 8px; font-size: 11px; cursor: pointer; opacity: 0.7; }
+.seg button { background: transparent; color: var(--vscode-foreground); border: none; padding: 2px 8px; font-size: calc(var(--vscode-font-size) - 2px); cursor: pointer; opacity: 0.7; }
 .seg button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); opacity: 1; }
 .files { max-height: 260px; overflow-y: auto; border: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.3)); border-radius: var(--hg-radius-control); margin-bottom: var(--hg-space-2); }
 .file { display: flex; align-items: center; gap: 6px; padding: 2px 6px; cursor: pointer; }
 .file:hover { background: var(--vscode-list-hoverBackground); }
-.file .dot { font-size: 14px; line-height: 1; flex: 0 0 auto; }
+.file .dot { font-size: calc(var(--vscode-font-size) + 1px); line-height: 1; flex: 0 0 auto; }
 .file .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.file .dir { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: 11px; white-space: nowrap; padding-left: 8px; }
+.file .dir { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: calc(var(--vscode-font-size) - 2px); white-space: nowrap; padding-left: 8px; }
 .tree-dir { display: flex; align-items: center; gap: 6px; padding: 2px 6px; cursor: pointer; user-select: none; }
 .tree-dir:hover { background: var(--vscode-list-hoverBackground); }
-.tree-twist { flex: 0 0 12px; text-align: center; font-size: 10px; opacity: 0.8; }
+.tree-twist { flex: 0 0 12px; text-align: center; font-size: calc(var(--vscode-font-size) - 3px); opacity: 0.8; }
 .tree-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--vscode-descriptionForeground); }
 textarea { width: 100%; box-sizing: border-box; resize: vertical; }
-.validation { font-size: 11px; min-height: 16px; margin: 4px 2px; }
+.validation { font-size: calc(var(--vscode-font-size) - 2px); min-height: 16px; margin: 4px 2px; }
 .validation.ok { color: var(--vscode-testing-iconPassed, #3fb950); }
 .validation.warning { color: var(--vscode-editorWarning-foreground, #d29922); }
 .validation.error { color: var(--vscode-errorForeground, #f85149); }
 .recent { margin: 4px 0 var(--hg-space-2); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.recent-label { color: var(--vscode-descriptionForeground); font-size: 11px; }
-.chip { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: none; border-radius: 9px; padding: 1px 8px; font-size: 11px; cursor: pointer; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chip:hover { opacity: 0.85; }
-.opt { display: block; font-size: 12px; margin: 3px 2px; }
+.recent-label { color: var(--vscode-descriptionForeground); font-size: calc(var(--vscode-font-size) - 2px); }
+.hg-chip { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: none; border-radius: 9px; padding: 1px 8px; font-size: calc(var(--vscode-font-size) - 2px); cursor: pointer; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hg-chip:hover { opacity: 0.85; }
+.opt { display: block; font-size: calc(var(--vscode-font-size) - 1px); margin: 3px 2px; }
 .buttons { display: flex; gap: 6px; margin-top: var(--hg-space-2); }
 .buttons .hg-btn { flex: 1; }
 .files-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; padding: 0 6px; color: var(--vscode-descriptionForeground); }
-.files-empty { padding: 14px 8px; text-align: center; color: var(--vscode-descriptionForeground); font-size: 12px; }
+.files-empty { padding: 14px 8px; text-align: center; color: var(--vscode-descriptionForeground); font-size: calc(var(--vscode-font-size) - 1px); }
 .spinner { display: inline-block; width: 12px; height: 12px; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: hg-spin 0.8s linear infinite; vertical-align: -2px; margin-right: 5px; }
 @keyframes hg-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+	.spinner { animation-duration: 1.6s; } /* 前庭安全：降频保留进行中指示（与 Graph .ci-spin 同策略） */
+}
 details.advanced { margin: 6px 0 var(--hg-space-2); }
-details.advanced summary { cursor: pointer; font-size: 12px; color: var(--vscode-descriptionForeground); }
+details.advanced summary { cursor: pointer; font-size: calc(var(--vscode-font-size) - 1px); color: var(--vscode-descriptionForeground); }
 details.advanced summary:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; border-radius: 2px; }
 details.advanced[open] summary { margin-bottom: 4px; }
-.toast { font-size: 12px; margin-top: var(--hg-space-2); min-height: 16px; }
+.toast { font-size: calc(var(--vscode-font-size) - 1px); margin-top: var(--hg-space-2); min-height: 16px; }
 .toast.ok { color: var(--vscode-testing-iconPassed, #3fb950); }
 .toast.err { color: var(--vscode-errorForeground, #f85149); }
 </style>
@@ -248,7 +251,7 @@ details.advanced[open] summary { margin-bottom: 4px; }
 <body>
 <div class="cl-bar">
   <span class="cl-label">Active Changelist:</span>
-  <select id="cl-switch" title="Switch active changelist"></select>
+  <select id="cl-switch" class="hg-select" title="Switch active changelist"></select>
   <button id="cl-menu" class="hg-btn hg-btn--secondary hg-btn--sm cl-menu-btn" title="Changelist actions" aria-label="Changelist actions">⋯</button>
 </div>
 <div class="files-header" id="files-header" style="display:none">
@@ -563,7 +566,7 @@ function renderRecent(messages) {
   recentEl.appendChild(label);
   messages.slice(0, 5).forEach(function (m) {
     const chip = document.createElement('button');
-    chip.className = 'chip';
+    chip.className = 'hg-chip';
     chip.textContent = m.split('\\n')[0].slice(0, 40);
     chip.title = m;
     chip.addEventListener('click', function () {

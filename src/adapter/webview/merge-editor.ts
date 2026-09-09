@@ -171,27 +171,27 @@ p { color: var(--vscode-descriptionForeground); }
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'">
 <style>
 ${getBaseStyles()}
-body { margin: 0; padding: 10px 14px; font-family: var(--vscode-font-family); font-size: 12px; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
+body { margin: 0; padding: 10px 14px; font-family: var(--vscode-font-family); font-size: calc(var(--vscode-font-size) - 1px); color: var(--vscode-foreground); background: var(--vscode-editor-background); }
 .bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .bar .path { font-weight: 600; }
 .bar .count { color: var(--vscode-editorWarning-foreground, #d29922); }
 .bar .spacer { flex: 1; }
 .bar .nav { display: inline-flex; align-items: center; gap: 2px; }
-.bar .nav #conflict-pos { font-size: 11px; min-width: 46px; text-align: center; color: var(--vscode-descriptionForeground); }
-.remaining { font-size: 11px; opacity: 0.75; margin-left: 6px; }
+.bar .nav #conflict-pos { font-size: calc(var(--vscode-font-size) - 2px); min-width: 46px; text-align: center; color: var(--vscode-descriptionForeground); }
+.remaining { font-size: calc(var(--vscode-font-size) - 2px); opacity: 0.75; margin-left: 6px; }
 .remaining.has-unresolved { color: var(--vscode-editorWarning-foreground, #d29922); opacity: 1; }
 .hunk { margin-bottom: 10px; }
 .stable { background: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,.12)); border-left: 3px solid transparent; padding: 2px 8px; white-space: pre-wrap; font-family: var(--vscode-editor-font-family); }
 .conflict { border: 1px solid var(--vscode-inputOption-activeBorder, #d29922); border-radius: 3px; }
 .conflict-head { display: flex; align-items: center; gap: 8px; background: var(--vscode-editorWarning-background, rgba(210,153,34,.15)); padding: 3px 8px; font-weight: 600; }
-.c-badge { margin-left: auto; font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 9px; border: 1px solid transparent; }
+.c-badge { margin-left: auto; font-size: calc(var(--vscode-font-size) - 3px); font-weight: 600; padding: 1px 7px; border-radius: 9px; border: 1px solid transparent; }
 .c-badge.unresolved { color: var(--vscode-editorWarning-foreground, #d29922); border-color: var(--vscode-editorWarning-foreground, #d29922); }
 .c-badge.resolved { color: var(--vscode-testing-iconPassed, #3fb950); border-color: var(--vscode-testing-iconPassed, #3fb950); }
 .c3 { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 1px; background: var(--vscode-editorWidget-border, rgba(128,128,128,.3)); }
 .col { background: var(--vscode-editor-background); padding: 4px 8px; }
-.col-label { font-size: 10px; opacity: 0.7; margin-bottom: 3px; text-transform: uppercase; }
+.col-label { font-size: calc(var(--vscode-font-size) - 3px); opacity: 0.7; margin-bottom: 3px; text-transform: uppercase; }
 .col pre { white-space: pre; overflow-x: auto; font-family: var(--vscode-editor-font-family); margin: 0; min-height: 14px; }
-.col textarea { width: 100%; min-height: 60px; resize: vertical; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); font-family: var(--vscode-editor-font-family); font-size: 12px; padding: 4px; box-sizing: border-box; }
+.col textarea { width: 100%; min-height: 60px; resize: vertical; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); font-family: var(--vscode-editor-font-family); font-size: calc(var(--vscode-font-size) - 1px); padding: 4px; box-sizing: border-box; }
 .col-actions { margin-top: 4px; display: flex; gap: 4px; }
 </style>
 </head>

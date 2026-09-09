@@ -1,11 +1,11 @@
-import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import type { GitRepositoryService } from '../git-repository-service';
 import { parseNameStatus, statusLabel, parseShortStat } from '../../engine/log/commit-files';
 import { applyClientFilters, toClientFilter, type LogFilter } from '../../engine/log/log-filter';
 import { DEFAULT_LANE_PALETTE } from '../../engine/log/graph-color';
 import { computeGraphLayout, maxLanes } from '../../engine/log/graph-layout';
-import { getBaseStyles } from './shared-styles';
+import { getBaseStyles, GRAPH_ROW_H, GRAPH_LANE_W } from './shared-styles';
+import { getNonce } from './nonce';
 import { parseLogLines } from '../../engine/log/log-line';
 import { buildLogArgs, type LogScope } from '../../engine/log/log-query';
 import { buildFileTree } from '../../engine/tree/file-tree';
@@ -531,7 +531,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 	// ─── HTML 渲染 ──────────────────────────────────────────────────────────────
 
 	private renderHtml(): string {
-		const nonce = crypto.randomBytes(16).toString('base64');
+		const nonce = getNonce();
 		const laneFallback = JSON.stringify(DEFAULT_LANE_PALETTE);
 		const csp = ['default-src \'none\'', 'style-src \'unsafe-inline\'', `script-src 'nonce-${nonce}'`].join('; ');
 		return `<!DOCTYPE html>
@@ -541,7 +541,6 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>
 ${getBaseStyles()}
-:root { --hg-row: 24px; --hg-lane: 14px; }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-sideBar-background); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 #viewport { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; position: relative; outline: none; }
@@ -564,8 +563,8 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 .chip .chip-ico { flex: 0 0 auto; width: 11px; height: 11px; display: inline-flex; }
 .chip .chip-ico svg { width: 11px; height: 11px; display: block; }
 .chip .chip-nm { overflow: hidden; text-overflow: ellipsis; }
-.author { flex: 0 0 auto; font-size: 11px; opacity: 0.7; max-width: 110px; overflow: hidden; text-overflow: ellipsis; padding-left: 8px; }
-.date { flex: 0 0 auto; font-size: 11px; opacity: 0.55; padding-left: 8px; }
+.author { flex: 0 0 auto; font-size: calc(var(--vscode-font-size) - 2px); opacity: 0.7; max-width: 110px; overflow: hidden; text-overflow: ellipsis; padding-left: 8px; }
+.date { flex: 0 0 auto; font-size: calc(var(--vscode-font-size) - 2px); opacity: 0.55; padding-left: 8px; }
 #viewport.narrow .author, #viewport.narrow .date { display: none; }
 /* ── 图 + 右侧详情面板水平分栏（panel 容器无法并排子视图 → webview 内自分栏）──
    工具栏整体上移 VS Code 标题栏（scope 子菜单 / List-Tree 图标 / 仓库切换 / CI 登录），
@@ -587,21 +586,21 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #main.stacked #gutter-main { cursor: row-resize; }
 #details { flex: 0 0 55%; min-height: 0; overflow-y: auto; }
 #commit-meta { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-.panel-loading { padding: 10px 12px; font-size: 12px; color: var(--vscode-descriptionForeground); }
-#details .dh { position: sticky; top: 0; display: flex; align-items: center; gap: 6px; background: var(--vscode-sideBar-background); padding: 4px 8px; font-size: 11px; color: var(--vscode-descriptionForeground); border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.15)); }
+.panel-loading { padding: 10px 12px; font-size: calc(var(--vscode-font-size) - 1px); color: var(--vscode-descriptionForeground); }
+#details .dh { position: sticky; top: 0; display: flex; align-items: center; gap: 6px; background: var(--vscode-sideBar-background); padding: 4px 8px; font-size: calc(var(--vscode-font-size) - 2px); color: var(--vscode-descriptionForeground); border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.15)); }
 #details .dh #details-title { flex: 1 1 auto; }
 .dh-close { flex: 0 0 auto; background: transparent; border: none; color: var(--vscode-descriptionForeground); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; border-radius: var(--hg-radius-control); }
 .dh-close:hover { color: var(--vscode-foreground); background: var(--vscode-list-hoverBackground); }
 .dh-close:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
-#details .file { display: flex; align-items: center; gap: 6px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
+#details .file { display: flex; align-items: center; gap: 6px; padding: 2px 10px; font-size: calc(var(--vscode-font-size) - 1px); cursor: pointer; }
 #details .file:hover { background: var(--vscode-list-hoverBackground); }
 #details .file .dot { font-size: 13px; line-height: 1; }
 #details .file .nm { overflow: hidden; text-overflow: ellipsis; }
-#empty, #error { padding: 28px 16px; text-align: center; color: var(--vscode-descriptionForeground); font-size: 12px; }
+#empty, #error { padding: 28px 16px; text-align: center; color: var(--vscode-descriptionForeground); font-size: calc(var(--vscode-font-size) - 1px); }
 #empty .empty-icon { font-size: 30px; opacity: 0.4; margin-bottom: 8px; }
 .empty-title { font-size: 13px; color: var(--vscode-foreground); margin-bottom: 3px; }
-.empty-hint { font-size: 11px; }
-#spinner { position: absolute; bottom: 6px; right: 8px; font-size: 11px; opacity: 0.6; display: none; }
+.empty-hint { font-size: calc(var(--vscode-font-size) - 2px); }
+#spinner { position: absolute; bottom: 6px; right: 8px; font-size: calc(var(--vscode-font-size) - 2px); opacity: 0.6; display: none; }
 /* ── CI 状态图标（提交行最右侧，固定 16px 槽位，保证 author/date 列对齐）── */
 .ci { flex: 0 0 16px; width: 16px; display: inline-flex; align-items: center; justify-content: center; }
 .ci svg { display: block; shape-rendering: geometricPrecision; pointer-events: none; }
@@ -616,7 +615,7 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 .ci-spin { transform-origin: 50% 50%; animation: ci-rot 1s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .ci-spin { animation: none; } }
 /* ── CI Tooltip（自定义浮层，置于 #rows 之外，虚拟滚动重写不销毁）── */
-#ci-tip { position: fixed; z-index: 50; display: none; max-width: 360px; min-width: 220px; max-height: 320px; overflow: hidden; background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background)); color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, rgba(128,128,128,.3))); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.35); font-size: 12px; }
+#ci-tip { position: fixed; z-index: 50; display: none; max-width: 360px; min-width: 220px; max-height: 320px; overflow: hidden; background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background)); color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, rgba(128,128,128,.3))); border-radius: 4px; box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0,0,0,.35)); font-size: calc(var(--vscode-font-size) - 1px); }
 #ci-tip.show { display: flex; flex-direction: column; }
 #ci-tip .tip-h { padding: 7px 10px; font-weight: 600; border-bottom: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); display: flex; align-items: center; gap: 6px; }
 #ci-tip .tip-h .g { flex: 0 0 14px; display: inline-flex; }
@@ -625,14 +624,14 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #ci-tip .tip-row:hover { background: var(--vscode-list-hoverBackground); }
 #ci-tip .tip-row .g { flex: 0 0 14px; display: inline-flex; margin-top: 1px; }
 #ci-tip .tip-row .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; }
-#ci-tip .tip-row .nm .desc { display: block; font-size: 11px; opacity: 0.7; white-space: normal; word-break: break-word; margin-top: 1px; }
+#ci-tip .tip-row .nm .desc { display: block; font-size: calc(var(--vscode-font-size) - 2px); opacity: 0.7; white-space: normal; word-break: break-word; margin-top: 1px; }
 #ci-tip .tip-foot { padding: 6px 10px; border-top: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); }
 #ci-tip .tip-foot a { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: none; }
 #ci-tip .tip-foot a:hover { text-decoration: underline; }
 #ci-tip .g-success { color: var(--vscode-testing-iconPassed, #3fb950); }
 #ci-tip .g-failure { color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground, #f85149)); }
 #ci-tip .g-pending { color: var(--vscode-testing-iconQueued, var(--vscode-editorWarning-foreground, #d29922)); }
-#ci-tip .g-skipped, #ci-tip .g-unknown { color: var(--vscode-descriptionForeground, #8b949e); }
+#ci-tip .g-skipped, #ci-tip .g-unknown { color: var(--vscode-descriptionForeground); }
 /* ── 提交详情面板下半区（#commit-meta，复用 .ct-* 视觉语言；editorHoverWidget 语义令牌与 CI 浮层同源）── */
 #commit-meta .ct-scroll { padding: 12px 14px; }
 #commit-meta .ct-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -640,17 +639,23 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #commit-meta .ct-avatar svg { width: 16px; height: 16px; opacity: 0.85; }
 #commit-meta .ct-who { display: flex; flex-direction: column; min-width: 0; }
 #commit-meta .ct-author { font-weight: 600; font-size: 13px; }
-#commit-meta .ct-time { font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 1px; }
+#commit-meta .ct-time { font-size: calc(var(--vscode-font-size) - 2px); color: var(--vscode-descriptionForeground); margin-top: 1px; }
 #commit-meta .ct-msg { margin-bottom: 10px; }
 #commit-meta .ct-subj { font-size: 13px; font-weight: 600; line-height: 1.4; word-break: break-word; }
-#commit-meta .ct-body { margin-top: 6px; white-space: pre-wrap; word-break: break-word; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; line-height: 1.5; opacity: 0.9; }
+#commit-meta .ct-body { margin-top: 6px; white-space: pre-wrap; word-break: break-word; font-family: var(--vscode-editor-font-family, var(--vscode-font-family)); font-size: calc(var(--vscode-font-size) - 1px); line-height: 1.5; opacity: 0.9; }
 #commit-meta .ct-refs-wrap { margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
-#commit-meta .ct-sec { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+#commit-meta .ct-sec { display: flex; gap: 8px; align-items: baseline; font-size: calc(var(--vscode-font-size) - 1px); }
 #commit-meta .ct-sec .ct-k { flex: 0 0 66px; color: var(--vscode-descriptionForeground); font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
 #commit-meta .ct-sec .ct-v { flex: 1 1 auto; min-width: 0; word-break: break-word; }
 #commit-meta .ct-refs { display: flex; flex-wrap: wrap; gap: 4px; }
 /* 面板内引用胶囊完整显示（覆盖行内 .chip 的 max-width/省略号截断）：换行不截断，空间由面板承载。 */
 #commit-meta .chip { max-width: none; }
+/* 高对比度主题：避免大面积彩色填充——chip 改 contrastBorder 描边 + 主题前景色（!important 覆盖行内样式）。 */
+body[data-vscode-theme-kind~='high-contrast'] .chip {
+	color: var(--vscode-foreground) !important;
+	background: transparent !important;
+	border: 1px solid var(--vscode-contrastBorder);
+}
 #commit-meta .chip .chip-nm { overflow: visible; text-overflow: clip; white-space: normal; word-break: break-all; }
 #commit-meta .ct-dim { color: var(--vscode-descriptionForeground); }
 #commit-meta .ct-stat { display: flex; gap: 12px; padding: 8px 0; border-top: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); border-bottom: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -658,8 +663,8 @@ body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscod
 #commit-meta .ct-stat .ins { color: var(--vscode-gitDecoration-addedResourceForeground, #3fb950); }
 #commit-meta .ct-stat .del { color: var(--vscode-gitDecoration-deletedResourceForeground, #f14c4c); }
 #commit-meta .ct-foot { display: flex; align-items: center; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
-#commit-meta .ct-sha { font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; color: var(--vscode-descriptionForeground); word-break: break-all; }
-#commit-meta .ct-gh { color: var(--vscode-textLink-foreground); cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+#commit-meta .ct-sha { font-family: var(--vscode-editor-font-family, var(--vscode-font-family)); font-size: calc(var(--vscode-font-size) - 2px); color: var(--vscode-descriptionForeground); word-break: break-all; }
+#commit-meta .ct-gh { color: var(--vscode-textLink-foreground); cursor: pointer; font-size: calc(var(--vscode-font-size) - 1px); display: inline-flex; align-items: center; gap: 4px; }
 #commit-meta .ct-gh:hover { text-decoration: underline; }
 #commit-meta .ct-gh:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; border-radius: 2px; }
 #commit-meta .ct-gh svg { width: 13px; height: 13px; }
@@ -721,7 +726,7 @@ new MutationObserver(function () {
 		}
 	});
 }).observe(document.body, { attributes: true });
-const ROW_H = 24, LANE_W = 14, NODE_R = 4, GUTTER = 10, OVERSCAN = 8, LOAD_THRESHOLD = 40;
+const ROW_H = ${GRAPH_ROW_H}, LANE_W = ${GRAPH_LANE_W}, NODE_R = 4, GUTTER = 10, OVERSCAN = 8, LOAD_THRESHOLD = 40; // ROW_H/LANE_W 与 CSS --hg-row/--hg-lane 同源（shared-styles 常量注入）
 // ── 视图状态按仓库分区（v2，issue #107）：选中/目录折叠/分栏比例记忆跟随仓库，切换仓库换装载互不串扰；
 // scope 与 List/Tree 模式已上移标题栏（host workspaceState 为事实源，随 graphData 下发），不再入 webview state；
 // 无 v2 时从旧平铺结构一次性升级（旧值归首个见到的仓库，不丢偏好）。──
