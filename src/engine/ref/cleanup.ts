@@ -80,13 +80,13 @@ export function truncateNames(names: readonly string[], max = 8): string {
 	if (names.length <= max) {
 		return names.join(', ');
 	}
-	return `${names.slice(0, max).join(', ')} …还有 ${names.length - max} 个`;
+	return `${names.slice(0, max).join(', ')} … and ${names.length - max} more`;
 }
 
 /**
  * 生成批量删除本地分支的确认文案与确认按钮文本（纯逻辑）。
  * 诚实呈现强制删除风险：混合时分栏列出，确保 force 删除不被隐藏。
- * 单个目标保留原有针对性文案以维持既有体验。
+ * 单个目标保留原有针对性文案以维持既有体验。文案统一英文（对齐全扩展 UI 语言）。
  */
 export function formatBranchDeleteConfirm(
 	merged: readonly string[],
@@ -96,22 +96,22 @@ export function formatBranchDeleteConfirm(
 	if (total === 1) {
 		const name = merged[0] ?? unmerged[0] ?? '';
 		return merged.length === 1
-			? { detail: `分支「${name}」已合并，可安全删除。`, confirmLabel: '删除' }
-			: { detail: `分支「${name}」未合并，强制删除将丢失其独有提交！`, confirmLabel: '强制删除' };
+			? { detail: `Branch "${name}" is fully merged and safe to delete.`, confirmLabel: 'Delete' }
+			: { detail: `Branch "${name}" is NOT merged. Force-deleting will lose its unique commits!`, confirmLabel: 'Force Delete' };
 	}
 	if (unmerged.length === 0) {
-		return { detail: `将删除 ${total} 个已合并的本地分支：${truncateNames(merged)}`, confirmLabel: '删除' };
+		return { detail: `Delete ${total} merged local branch(es): ${truncateNames(merged)}`, confirmLabel: 'Delete' };
 	}
 	if (merged.length === 0) {
 		return {
-			detail: `将强制删除 ${total} 个未合并的本地分支：${truncateNames(unmerged)}（将丢失它们的独有提交！）`,
-			confirmLabel: '强制删除',
+			detail: `Force-delete ${total} unmerged local branch(es): ${truncateNames(unmerged)} (their unique commits will be lost!)`,
+			confirmLabel: 'Force Delete',
 		};
 	}
 	const detail = [
-		`将删除 ${total} 个本地分支：`,
-		`· 已合并（安全删除）：${truncateNames(merged)}`,
-		`· 未合并（强制删除，丢失提交）：${truncateNames(unmerged)}`,
+		`Delete ${total} local branches:`,
+		`· Merged (safe to delete): ${truncateNames(merged)}`,
+		`· Unmerged (force-delete, commits will be lost): ${truncateNames(unmerged)}`,
 	].join('\n');
-	return { detail, confirmLabel: '全部删除' };
+	return { detail, confirmLabel: 'Delete All' };
 }

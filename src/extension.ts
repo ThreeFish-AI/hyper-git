@@ -20,12 +20,12 @@ import { StashTreeProvider } from './adapter/tree/stash-tree';
 import { WorktreeTreeProvider } from './adapter/tree/worktree-tree';
 import { registerWorktreeCommands } from './adapter/worktree-commands';
 import { CommitWebviewProvider } from './adapter/webview/commit-webview';
-import { showGitConsole } from './infra/git-console';
+import { showGitConsole, disposeGitConsole } from './infra/git-console';
 import { InlineCommitCodeLensProvider, registerInlineCommitCommand } from './adapter/editor/inline-commit-codelens';
 import { BlameAnnotationController } from './adapter/editor/blame-annotation';
 import { ShelfService, ShelfTreeProvider, registerShelfCommands } from './adapter/shelf';
 import { RebaseWebview } from './adapter/webview/rebase-webview';
-import { registerMergeCommands } from './adapter/webview/merge-editor';
+import { MergeEditorWebview, registerMergeCommands } from './adapter/webview/merge-editor';
 import { registerMiscCommands } from './adapter/misc-commands';
 import { registerClaudeCommands } from './adapter/claude-commands';
 import { registerRepositorySelectionCommand } from './adapter/repository-selection';
@@ -45,6 +45,21 @@ class EmptyTreeProvider implements vscode.TreeDataProvider<never> {
 	}
 }
 
+/** git 扩展不可用时 webview 视图（Commit/Graph）的占位 provider：静态说明页（无脚本，CSP 最小化）。 */
+class UnavailableViewProvider implements vscode.WebviewViewProvider {
+	constructor(private readonly viewName: string) {}
+	resolveWebviewView(view: vscode.WebviewView): void {
+		view.webview.options = { enableScripts: false, localResourceRoots: [] };
+		view.webview.html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'">
+<style>body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-sideBar-background); padding: 14px 16px; font-size: var(--vscode-font-size); }</style>
+</head>
+<body><strong>${this.viewName}</strong><p style="color: var(--vscode-descriptionForeground)">The built-in Git extension is unavailable, so ${this.viewName} cannot load. Enable the Git extension and reload the window.</p></body>
+</html>`;
+	}
+}
+
 /**
  * 扩展入口。仅做装配（DI 注册），业务逻辑下沉到 engine/adapter 层。
  * 返回 `{ service }` 供集成测试程序化驱动仓库切换（vscode.git 同款导出模式）。
@@ -53,6 +68,8 @@ export async function activate(
 	context: vscode.ExtensionContext,
 ): Promise<{ service: GitRepositoryService } | void> {
 	const logger = createLogger();
+	// LogOutputChannel 随扩展释放（懒创建，无日志的会话零开销）。
+	context.subscriptions.push(logger, new vscode.Disposable(disposeGitConsole));
 	logger.info('Hyper Git activated');
 
 	const llm = new NullLlmProvider();
@@ -68,7 +85,16 @@ export async function activate(
 	if (!api) {
 		logger.warn('vscode.git API 不可用，视图保持空状态');
 		const empty = new EmptyTreeProvider();
-		context.subscriptions.push(vscode.window.registerTreeDataProvider('hyperGit.worktrees', empty));
+		context.subscriptions.push(
+			// 全部声明的树视图注册空 provider：未注册的视图显示 "no tree view registered" 报错而非 viewsWelcome。
+			vscode.window.registerTreeDataProvider('hyperGit.branches', empty),
+			vscode.window.registerTreeDataProvider('hyperGit.stash', empty),
+			vscode.window.registerTreeDataProvider('hyperGit.worktrees', empty),
+			vscode.window.createTreeView('hyperGit.shelf', { treeDataProvider: empty }),
+			// webview 视图渲染静态占位说明页。
+			vscode.window.registerWebviewViewProvider('hyperGit.commit', new UnavailableViewProvider('Commit')),
+			vscode.window.registerWebviewViewProvider('hyperGit.log', new UnavailableViewProvider('Graph')),
+		);
 		return;
 	}
 
@@ -88,7 +114,7 @@ export async function activate(
 		conflict: new NullConflictResolver(),
 	});
 	const commitView = new CommitWebviewProvider(service, registry, commit);
-	const logTree = new LogWebviewProvider(service, ciService);
+	const logTree = new LogWebviewProvider(service, ciService, context.workspaceState);
 	const branchesTree = new BranchesTreeProvider(
 		service,
 		favorites,
@@ -96,10 +122,11 @@ export async function activate(
 		service.repoRoot ?? workspaceRoot,
 	);
 	// Branches 视图启用多选（canSelectMany 仅 createTreeView 支持，registerTreeDataProvider 不支持）；
-	// 多选后批量操作（删除分支/标签、复制引用、收藏）作用于整个选区。
+	// 多选后批量操作（删除分支/标签、复制引用、收藏）作用于整个选区。showCollapseAll 供前缀分组树一键折叠。
 	const branchesView = vscode.window.createTreeView('hyperGit.branches', {
 		treeDataProvider: branchesTree,
 		canSelectMany: true,
+		showCollapseAll: true,
 	});
 	const stashTree = new StashTreeProvider(service);
 	const worktreeTree = new WorktreeTreeProvider(service);
@@ -114,6 +141,22 @@ export async function activate(
 	// 复用占位 EmptyTreeProvider（空树）。
 	const badgeView = vscode.window.createTreeView('hyperGit.changesBadge', {
 		treeDataProvider: new EmptyTreeProvider(),
+	});
+	// Stash/Worktrees 统一 createTreeView（原 registerTreeDataProvider 拿不到 TreeView 句柄）：
+	// canSelectMany 启用批量 Drop/Remove；provider 加载失败经 TreeView.message 以视图内联错误呈现。
+	const stashView = vscode.window.createTreeView('hyperGit.stash', {
+		treeDataProvider: stashTree,
+		canSelectMany: true,
+	});
+	const worktreesView = vscode.window.createTreeView('hyperGit.worktrees', {
+		treeDataProvider: worktreeTree,
+		canSelectMany: true,
+	});
+	stashTree.setViewMessageSink((message) => {
+		stashView.message = message;
+	});
+	worktreeTree.setViewMessageSink((message) => {
+		worktreesView.message = message;
 	});
 	const focusCommitView = (): void => {
 		void vscode.commands.executeCommand('hyperGit.commit.focus');
@@ -159,13 +202,14 @@ export async function activate(
 		worktreeTree,
 		shelfTree,
 		blame,
+		inlineLens,
 		branchesView,
 		badgeView,
 		vscode.window.registerWebviewViewProvider(CommitWebviewProvider.viewType, commitView),
 		vscode.window.registerWebviewViewProvider(LogWebviewProvider.viewType, logTree),
-		vscode.window.registerTreeDataProvider('hyperGit.stash', stashTree),
+		stashView,
 		vscode.window.createTreeView('hyperGit.shelf', { treeDataProvider: shelfTree }),
-		vscode.window.registerTreeDataProvider('hyperGit.worktrees', worktreeTree),
+		worktreesView,
 		...registerChangesCommands(service, registry),
 		...registerHistoryCommands(service, logTree, branchesTree, favorites),
 		...registerGitCliCommands(service, branchesTree, logTree),
@@ -173,6 +217,9 @@ export async function activate(
 		...registerAdvancedCommands(service, branchesTree),
 		...registerRemoteCommands(service, branchesTree, logTree),
 		...registerMergeCommands(service),
+		// 窗口 reload 后 rebase/merge 面板恢复（retainContextWhenHidden 仅保活不跨 reload，serializer 补齐）。
+		RebaseWebview.registerSerializer(service),
+		MergeEditorWebview.registerSerializer(service),
 		...registerMiscCommands(service, branchesTree, logTree),
 		...registerClaudeCommands(),
 		registerRepositorySelectionCommand(service),
@@ -185,6 +232,12 @@ export async function activate(
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.ci.signIn', () => ciService.signIn()),
+		// Graph 标题栏视图级控件（原 webview 工具栏上移）：Scope 下拉子菜单 + Changed Files List/Tree 互斥图标。
+		vscode.commands.registerCommand('hyperGit.log.scopeAll', () => logTree.setScope('all')),
+		vscode.commands.registerCommand('hyperGit.log.scopeCurrent', () => logTree.setScope('current')),
+		vscode.commands.registerCommand('hyperGit.log.scopeCheckpointer', () => logTree.setScope('checkpointer')),
+		vscode.commands.registerCommand('hyperGit.log.detailTree', () => logTree.setDetailMode('tree')),
+		vscode.commands.registerCommand('hyperGit.log.detailFlat', () => logTree.setDetailMode('flat')),
 		vscode.commands.registerCommand('hyperGit.showConsole', () => showGitConsole()),
 		vscode.commands.registerCommand('hyperGit.startRebase', () => RebaseWebview.open(service)),
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, inlineLens),
@@ -197,6 +250,14 @@ export async function activate(
 	const updateBadge = (): void => {
 		const n = service.getChangeCount();
 		badgeView.badge = n > 0 ? { value: n, tooltip: `${n} uncommitted change(s)` } : undefined;
+		// 冲突存在性 context key：acceptOurs/acceptTheirs 等命令在 commandPalette 的显隐依据（见 package.json）。
+		// 事实源用 vscode.git 的 mergeChanges——7 种 unmerged 状态只进该数组，index/workingTree 变更永不承载
+		// 冲突（getChanges 的 status 映射因此恒判不出冲突，曾致 context key 恒 false、palette 命令永久隐藏）。
+		void vscode.commands.executeCommand(
+			'setContext',
+			'hyperGit.hasConflicts',
+			(service.repo?.state.mergeChanges.length ?? 0) > 0,
+		);
 	};
 
 	// 角标走独立快路径（~40ms 微防抖）：即便视图未 resolve / Panel 未激活也近实时更新计数（Panel 展开即呈现），

@@ -3,33 +3,52 @@
  *
  * 4 个自绘 Webview（Commit / Log / Merge / Rebase）共享同一套：
  * - 设计 Token（spacing/radius，对齐 VS Code 语义）；
- * - 基础组件类（`.hg-btn` / `.hg-btn--secondary` / `.hg-btn--sm` / `.hg-input` / `.hg-row`）
+ * - 基础组件类（`.hg-btn` / `.hg-btn--secondary` / `.hg-btn--sm` / `.hg-input` / `.hg-select`）
  *   统一交互态（hover / active / focus-visible / disabled），消除各 Webview 各自硬编码导致的
- *   「按钮无 hover」「`:last-child` 脆弱选择器」「无 focus ring」等熵增。
+ *   「按钮无 hover」「`:last-child` 脆弱选择器」「无 focus ring」等熵增；
+ * - 全局控件基线：滚动条（`--vscode-scrollbarSlider-*`）、checkbox（accent-color）、
+ *   forced-colors（高对比度/Windows 高对比模式回退系统配色）。
  *
  * 设计原则：纯字符串、零 vscode 依赖（可单测）；每个 Webview 在 `<style>` 首行注入
  * {@link getBaseStyles}，再追加本地视图专属规则。本地规则可在必要时覆盖 token 派生值。
  *
- * 主题策略：颜色一律走 `--vscode-*` 语义令牌（深/浅主题自适应），不硬编码 hex。
+ * 主题策略：颜色一律走 `--vscode-*` 语义令牌（深/浅主题自适应），不硬编码 hex；
+ * 字号以 `var(--vscode-font-size)`（默认 13px，随用户设置缩放）为基准 calc 派生。
  */
+
+/** Graph 虚拟滚动行高（px）：CSS 变量与内联 JS 常量同源注入，消除双源漂移。 */
+export const GRAPH_ROW_H = 24;
+/** Graph 泳道列宽（px）：同上。 */
+export const GRAPH_LANE_W = 14;
 
 /** 按钮视觉变体。 */
 export type ButtonVariant = 'primary' | 'secondary' | 'sm';
 
+// ── 共享内联 SVG 图标（fill/stroke currentColor 随主题前景色；webview 不引 codicon 字体的替代方案） ──
+
+/** 12px 折叠 chevron（向下；折叠态由 CSS rotate(-90deg) 旋转）。 */
+export const ICON_CHEVRON_DOWN =
+	'<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M4 6l4 4 4-4"/></svg>';
+/** 11px 关闭 X。 */
+export const ICON_CLOSE =
+	'<svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8"/></svg>';
+/** 12px 水平省略号（⋯ 菜单）。 */
+export const ICON_ELLIPSIS =
+	'<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>';
+
 /**
- * 基础样式：`:root` Token + 通用组件类 + 统一交互态。
+ * 基础样式：`:root` Token + 通用组件类 + 全局控件基线 + 统一交互态。
  * 返回纯 CSS 字符串，供 Webview 在 `<style>` 首行注入。
  */
 export function getBaseStyles(): string {
 	return `:root {
 	--hg-space-1: 4px;
 	--hg-space-2: 8px;
-	--hg-space-3: 12px;
-	--hg-space-4: 16px;
-	--hg-space-6: 24px;
 	--hg-radius-control: var(--vscode-button-borderRadius, 3px);
-	--hg-radius-panel: 4px;
+	--hg-row: ${GRAPH_ROW_H}px;
+	--hg-lane: ${GRAPH_LANE_W}px;
 }
+body { line-height: 1.4; }
 .hg-btn {
 	padding: 6px 10px;
 	border: none;
@@ -37,7 +56,7 @@ export function getBaseStyles(): string {
 	cursor: pointer;
 	background: var(--vscode-button-background);
 	color: var(--vscode-button-foreground);
-	font-size: 13px;
+	font-size: var(--vscode-font-size);
 	font-family: var(--vscode-font-family);
 	transition: background-color .12s ease, filter .12s ease, opacity .12s ease;
 }
@@ -51,22 +70,43 @@ export function getBaseStyles(): string {
 	border: 1px solid var(--vscode-button-border, transparent);
 }
 .hg-btn--secondary:hover { background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-secondaryBackground)); }
-.hg-btn--sm { padding: 2px 8px; font-size: 11px; }
+.hg-btn--sm { padding: 2px 8px; font-size: calc(var(--vscode-font-size) - 2px); }
 .hg-input {
 	background: var(--vscode-input-background);
 	color: var(--vscode-input-foreground);
 	border: 1px solid var(--vscode-input-border, transparent);
 	border-radius: var(--hg-radius-control);
 	padding: 6px;
-	font-family: var(--vscode-editor-font-family);
+	font-family: var(--vscode-font-family);
 	font-size: var(--vscode-font-size);
 }
 .hg-input:focus { border-color: var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder)); }
 .hg-input:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: -1px; }
-.hg-row { display: flex; align-items: center; gap: 6px; padding: 2px 8px; cursor: pointer; }
-.hg-row:hover { background: var(--vscode-list-hoverBackground); }
+.hg-select {
+	background: var(--vscode-dropdown-background);
+	color: var(--vscode-dropdown-foreground);
+	border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, transparent));
+	border-radius: var(--hg-radius-control);
+	padding: 2px 4px;
+	font-size: calc(var(--vscode-font-size) - 1px);
+	font-family: var(--vscode-font-family);
+}
+.hg-select:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+input[type='checkbox'] { accent-color: var(--vscode-checkbox-background, var(--vscode-button-background)); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+	background: var(--vscode-scrollbarSlider-background, rgba(121,121,121,.4));
+	border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground, rgba(100,100,100,.7)); }
+::-webkit-scrollbar-thumb:active { background: var(--vscode-scrollbarSlider-activeBackground, rgba(191,191,191,.4)); }
+::-webkit-scrollbar-corner { background: transparent; }
 @media (prefers-reduced-motion: reduce) {
 	.hg-btn { transition: none; }
+}
+@media (forced-colors: active) {
+	.hg-btn, .hg-btn--secondary { border: 1px solid ButtonText; }
+	.hg-input, .hg-select { border: 1px solid ButtonText; }
 }`;
 }
 

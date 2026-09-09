@@ -1,11 +1,12 @@
-import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { showGitError } from '../notify';
 import type { GitRepositoryService } from '../git-repository-service';
 import { diff3, type MergeHunk } from '../../engine/merge/diff3';
 import { parseConflictState } from '../../engine/git-state/conflict-detector';
-import { getBaseStyles } from './shared-styles';
+import { getBaseStyles, ICON_CHEVRON_DOWN } from './shared-styles';
+import { getNonce } from './nonce';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -34,7 +35,7 @@ export class MergeEditorWebview {
 				service.execGit(['show', `:3:${filePath}`]),
 			]);
 		} catch (e) {
-			void vscode.window.showErrorMessage(`Failed to read conflict stages (file may have no conflicts): ${errMsg(e)}`);
+			void showGitError(`Failed to read conflict stages (file may have no conflicts): ${errMsg(e)}`);
 			return;
 		}
 		const hunks = diff3(splitLines(base), splitLines(ours), splitLines(theirs));
@@ -53,8 +54,19 @@ export class MergeEditorWebview {
 			vscode.ViewColumn.Active,
 			{ enableScripts: true, retainContextWhenHidden: true },
 		);
+		MergeEditorWebview.attachPanel(service, panel, filePath, hunks, conflicts);
+	}
+
+	/** 面板装配：渲染 HTML + 消息接线（订阅随 panel dispose 释放）。 */
+	private static attachPanel(
+		service: GitRepositoryService,
+		panel: vscode.WebviewPanel,
+		filePath: string,
+		hunks: readonly MergeHunk[],
+		conflicts: number,
+	): void {
 		panel.webview.html = MergeEditorWebview.renderHtml(filePath, hunks, conflicts);
-		panel.webview.onDidReceiveMessage(async (msg) => {
+		const msgSub = panel.webview.onDidReceiveMessage(async (msg) => {
 			if (msg?.type === 'save' && typeof msg.content === 'string') {
 				await MergeEditorWebview.saveResult(service, filePath, msg.content);
 				panel.dispose();
@@ -62,6 +74,61 @@ export class MergeEditorWebview {
 				panel.dispose();
 			}
 		});
+		panel.onDidDispose(() => msgSub.dispose());
+	}
+
+	/**
+	 * 窗口 reload 后的面板恢复：按 state 中的 filePath 重拉三阶段冲突数据重渲染。
+	 * 已编辑未保存的 Result 不随 state 保留（known limitation）；若冲突已在他处解决则直接关闭恢复的面板。
+	 */
+	static registerSerializer(service: GitRepositoryService): vscode.Disposable {
+		return vscode.window.registerWebviewPanelSerializer('hyperGit.mergeEditor', {
+			async deserializeWebviewPanel(panel, state) {
+				const filePath = (state as { filePath?: unknown } | undefined)?.filePath;
+				if (typeof filePath !== 'string' || !service.repo) {
+					panel.webview.html = MergeEditorWebview.renderStaleHtml();
+					return;
+				}
+				try {
+					const [base, ours, theirs] = await Promise.all([
+						service.execGit(['show', `:1:${filePath}`]),
+						service.execGit(['show', `:2:${filePath}`]),
+						service.execGit(['show', `:3:${filePath}`]),
+					]);
+					const hunks = diff3(splitLines(base), splitLines(ours), splitLines(theirs));
+					const conflicts = hunks.filter((h) => h.kind === 'conflict').length;
+					if (conflicts === 0) {
+						// reload 前冲突已被解决：恢复无意义，直接关闭。
+						void vscode.window.showInformationMessage(`"${filePath}" has no unresolved conflicts; the restored merge editor was closed.`);
+						panel.dispose();
+						return;
+					}
+					MergeEditorWebview.attachPanel(service, panel, filePath, hunks, conflicts);
+				} catch {
+					panel.webview.html = MergeEditorWebview.renderStaleHtml();
+				}
+			},
+		});
+	}
+
+	/** 面板过期（无有效 state / 冲突数据已不可读）时的占位页。 */
+	private static renderStaleHtml(): string {
+		return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<style>
+${getBaseStyles()}
+body { margin: 0; padding: 16px 20px; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-editor-background); }
+p { color: var(--vscode-descriptionForeground); }
+</style>
+</head>
+<body>
+<h3>Merge</h3>
+<p>This merge session is no longer available. Close this tab and re-open it from <strong>Resolve Conflicts…</strong> if needed.</p>
+</body>
+</html>`;
 	}
 
 	private static async saveResult(service: GitRepositoryService, filePath: string, content: string): Promise<void> {
@@ -85,12 +152,12 @@ export class MergeEditorWebview {
 			await service.execGit(['add', '--', filePath]);
 			void vscode.window.showInformationMessage(`"${filePath}" saved and marked resolved`);
 		} catch (e) {
-			void vscode.window.showErrorMessage(`Failed to save: ${errMsg(e)}`);
+			void showGitError(`Failed to save: ${errMsg(e)}`);
 		}
 	}
 
 	private static renderHtml(filePath: string, hunks: readonly MergeHunk[], conflicts: number): string {
-		const nonce = crypto.randomBytes(16).toString('base64');
+		const nonce = getNonce();
 		// JSON 注入 <script> 内的 JS 字符串上下文：按 JS-string 转义（反斜杠/引号）+ < → < 防 </script> 破出。
 		// 不可用 escapeHtml——其产出 &quot; 在 <script> raw-text 中不被解码，会令 JSON.parse 失败。
 		const dataJson = JSON.stringify(hunks)
@@ -104,27 +171,31 @@ export class MergeEditorWebview {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'">
 <style>
 ${getBaseStyles()}
-body { margin: 0; padding: 10px 14px; font-family: var(--vscode-font-family); font-size: 12px; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
+body { margin: 0; padding: 10px 14px; font-family: var(--vscode-font-family); font-size: calc(var(--vscode-font-size) - 1px); color: var(--vscode-foreground); background: var(--vscode-editor-background); }
 .bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .bar .path { font-weight: 600; }
 .bar .count { color: var(--vscode-editorWarning-foreground, #d29922); }
 .bar .spacer { flex: 1; }
 .bar .nav { display: inline-flex; align-items: center; gap: 2px; }
-.bar .nav #conflict-pos { font-size: 11px; min-width: 46px; text-align: center; color: var(--vscode-descriptionForeground); }
-.remaining { font-size: 11px; opacity: 0.75; margin-left: 6px; }
+.bar .nav #conflict-pos { font-size: calc(var(--vscode-font-size) - 2px); min-width: 46px; text-align: center; color: var(--vscode-descriptionForeground); }
+.nav-ico { display: inline-flex; align-items: center; }
+.nav-ico svg { display: block; }
+.nav-ico--prev svg { transform: rotate(90deg); }
+.nav-ico--next svg { transform: rotate(-90deg); }
+.remaining { font-size: calc(var(--vscode-font-size) - 2px); opacity: 0.75; margin-left: 6px; }
 .remaining.has-unresolved { color: var(--vscode-editorWarning-foreground, #d29922); opacity: 1; }
 .hunk { margin-bottom: 10px; }
 .stable { background: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,.12)); border-left: 3px solid transparent; padding: 2px 8px; white-space: pre-wrap; font-family: var(--vscode-editor-font-family); }
 .conflict { border: 1px solid var(--vscode-inputOption-activeBorder, #d29922); border-radius: 3px; }
 .conflict-head { display: flex; align-items: center; gap: 8px; background: var(--vscode-editorWarning-background, rgba(210,153,34,.15)); padding: 3px 8px; font-weight: 600; }
-.c-badge { margin-left: auto; font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 9px; border: 1px solid transparent; }
+.c-badge { margin-left: auto; font-size: calc(var(--vscode-font-size) - 3px); font-weight: 600; padding: 1px 7px; border-radius: 9px; border: 1px solid transparent; }
 .c-badge.unresolved { color: var(--vscode-editorWarning-foreground, #d29922); border-color: var(--vscode-editorWarning-foreground, #d29922); }
 .c-badge.resolved { color: var(--vscode-testing-iconPassed, #3fb950); border-color: var(--vscode-testing-iconPassed, #3fb950); }
 .c3 { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 1px; background: var(--vscode-editorWidget-border, rgba(128,128,128,.3)); }
 .col { background: var(--vscode-editor-background); padding: 4px 8px; }
-.col-label { font-size: 10px; opacity: 0.7; margin-bottom: 3px; text-transform: uppercase; }
+.col-label { font-size: calc(var(--vscode-font-size) - 3px); opacity: 0.7; margin-bottom: 3px; text-transform: uppercase; }
 .col pre { white-space: pre; overflow-x: auto; font-family: var(--vscode-editor-font-family); margin: 0; min-height: 14px; }
-.col textarea { width: 100%; min-height: 60px; resize: vertical; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); font-family: var(--vscode-editor-font-family); font-size: 12px; padding: 4px; box-sizing: border-box; }
+.col textarea { width: 100%; min-height: 60px; resize: vertical; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); font-family: var(--vscode-editor-font-family); font-size: calc(var(--vscode-font-size) - 1px); padding: 4px; box-sizing: border-box; }
 .col-actions { margin-top: 4px; display: flex; gap: 4px; }
 </style>
 </head>
@@ -134,15 +205,19 @@ body { margin: 0; padding: 10px 14px; font-family: var(--vscode-font-family); fo
   <span class="count">${conflicts} conflict${conflicts === 1 ? '' : 's'}</span>
   <span class="spacer"></span>
   <span class="nav" id="conflict-nav" role="group" aria-label="Conflict navigation">
-    <button class="hg-btn hg-btn--sm" id="prev-conflict" title="Previous conflict" aria-label="Previous conflict">‹</button>
+    <button class="hg-btn hg-btn--sm" id="prev-conflict" title="Previous conflict" aria-label="Previous conflict"><span class="nav-ico nav-ico--prev">${ICON_CHEVRON_DOWN}</span></button>
     <span id="conflict-pos" aria-live="polite">—</span>
-    <button class="hg-btn hg-btn--sm" id="next-conflict" title="Next conflict" aria-label="Next conflict">›</button>
+    <button class="hg-btn hg-btn--sm" id="next-conflict" title="Next conflict" aria-label="Next conflict"><span class="nav-ico nav-ico--next">${ICON_CHEVRON_DOWN}</span></button>
   </span>
   <button class="hg-btn hg-btn--secondary" id="cancel">Cancel</button>
   <button class="hg-btn" id="save">Save &amp; Mark Resolved<span class="remaining" id="remaining"></span></button>
 </div>
 <div id="hunks"></div>
 <script nonce="${nonce}">
+// acquireVsCodeApi 每个 webview 仅可调用一次：顶部获取后全程复用（回调内重复调用会抛异常）。
+var vscode = acquireVsCodeApi();
+// 窗口 reload 后的面板恢复：state 仅存 filePath（host 侧重拉三阶段，编辑中内容不保留）。
+vscode.setState({ filePath: ${JSON.stringify(filePath).replace(/</g, '\\u003c')} });
 var HUNKS = JSON.parse("${dataJson}");
 function lines(pre){ return (pre||[]); }
 function markerText(h){
@@ -243,9 +318,9 @@ document.getElementById('save').onclick = function(){
     if (h.kind === 'stable') { result.push.apply(result, h.content||[]); }
     else { ci += 1; result.push(document.getElementById('result-' + ci).value); }
   });
-  acquireVsCodeApi().postMessage({ type: 'save', content: result.join('\\n') + '\\n' });
+  vscode.postMessage({ type: 'save', content: result.join('\\n') + '\\n' });
 };
-document.getElementById('cancel').onclick = function(){ acquireVsCodeApi().postMessage({ type: 'cancel' }); };
+document.getElementById('cancel').onclick = function(){ vscode.postMessage({ type: 'cancel' }); };
 </script>
 </body>
 </html>`;
@@ -311,7 +386,7 @@ export function registerMergeCommands(service: GitRepositoryService): vscode.Dis
 				await service.execGit(['add', '--', file]);
 				void vscode.window.showInformationMessage(`"${file}" resolved with ours`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed: ${errMsg(e)}`);
+				void showGitError(`Failed: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -331,7 +406,7 @@ export function registerMergeCommands(service: GitRepositoryService): vscode.Dis
 				await service.execGit(['add', '--', file]);
 				void vscode.window.showInformationMessage(`"${file}" resolved with theirs`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed: ${errMsg(e)}`);
+				void showGitError(`Failed: ${errMsg(e)}`);
 			}
 		}),
 	);

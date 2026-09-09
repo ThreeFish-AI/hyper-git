@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
+import { showGitError } from './notify';
+import { validateRefName } from '../engine/ref/ref-name';
 import type { GitRepositoryService } from './git-repository-service';
-import type { StashNode, StashTreeProvider } from './tree/stash-tree';
+import type { StashEntryNode, StashNode, StashTreeProvider } from './tree/stash-tree';
 import { handleGitConflict } from './conflict-ui';
 
 /**
@@ -30,7 +32,7 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 				const doc = await vscode.workspace.openTextDocument({ content: patch, language: 'diff' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to show stash: ${errMsg(e)}`);
+				void showGitError(`Failed to show stash: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -45,8 +47,10 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 			try {
 				await repo.createStash({ message: message && message.trim() ? message.trim() : undefined, includeUntracked: true });
 				stashTree.refresh();
+				// Stash 视图默认隐藏：创建后聚焦引导定位。
+				void vscode.commands.executeCommand('hyperGit.stash.focus');
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to create stash: ${errMsg(e)}`);
+				void showGitError(`Failed to create stash: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -62,7 +66,7 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 				await repo.applyStash(index);
 				stashTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to apply stash: ${errMsg(e)}`);
+				void showGitError(`Failed to apply stash: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -79,27 +83,44 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 				stashTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Stash pop'))) {
-					void vscode.window.showErrorMessage(`Failed to pop stash: ${errMsg(e)}`);
+					void showGitError(`Failed to pop stash: ${errMsg(e)}`);
 				}
 			}
 		}),
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.stashDrop', async (node?: StashNode) => {
+		vscode.commands.registerCommand('hyperGit.stashDrop', async (node?: StashNode, nodes?: StashNode[]) => {
 			const repo = service.repo;
 			if (!repo) {
 				return;
 			}
-			const index = node?.kind === 'stash' ? node.index : 0;
-			const choice = await vscode.window.showWarningMessage(`Drop stash@{${index}}?`, { modal: true }, 'Drop');
-			if (choice === 'Drop') {
+			// 多选批量（canSelectMany）：drop stash@{n} 会使更高序号前移，按 index 降序删除防位移错删。
+			const targets = (nodes?.length ? nodes : node ? [node] : [])
+				.filter((n): n is StashEntryNode => n?.kind === 'stash')
+				.sort((a, b) => b.index - a.index);
+			if (targets.length === 0) {
+				return;
+			}
+			const label =
+				targets.length === 1
+					? `Drop stash@{${targets[0].index}}?`
+					: `Drop ${targets.length} stashes?`;
+			const choice = await vscode.window.showWarningMessage(label, { modal: true }, 'Drop');
+			if (choice !== 'Drop') {
+				return;
+			}
+			const failures: string[] = [];
+			for (const t of targets) {
 				try {
-					await repo.dropStash(index);
-					stashTree.refresh();
-				} catch (e) {
-					void vscode.window.showErrorMessage(`Failed to drop stash: ${errMsg(e)}`);
+					await repo.dropStash(t.index);
+				} catch {
+					failures.push(`stash@{${t.index}}`);
 				}
+			}
+			stashTree.refresh();
+			if (failures.length > 0) {
+				void vscode.window.showWarningMessage(`Dropped ${targets.length - failures.length} stash(es), ${failures.length} failed: ${failures.join(', ')}`);
 			}
 		}),
 	);
@@ -122,7 +143,7 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 				stashTree.refresh();
 				void vscode.window.showInformationMessage('Stashed (index kept)');
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to stash: ${errMsg(e)}`);
+				void showGitError(`Failed to stash: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -142,7 +163,7 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 				stashTree.refresh();
 				void vscode.window.showInformationMessage('Cleared all stashes');
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to clear stashes: ${errMsg(e)}`);
+				void showGitError(`Failed to clear stashes: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -176,11 +197,15 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 					}
 					index = pick.index;
 				} catch (e) {
-					void vscode.window.showErrorMessage(`Failed to read stash list: ${errMsg(e)}`);
+					void showGitError(`Failed to read stash list: ${errMsg(e)}`);
 					return;
 				}
 			}
-			const name = await vscode.window.showInputBox({ prompt: `Create and checkout a new branch from stash@{${index}}`, placeHolder: 'New branch name' });
+			const name = await vscode.window.showInputBox({
+				prompt: `Create and checkout a new branch from stash@{${index}}`,
+				placeHolder: 'New branch name',
+				validateInput: (v) => validateRefName(v, 'branch'),
+			});
 			if (!name || !name.trim()) {
 				return;
 			}
@@ -189,7 +214,7 @@ export function registerStashCommands(service: GitRepositoryService, stashTree: 
 				stashTree.refresh();
 				void vscode.window.showInformationMessage(`Created branch ${name.trim()} from stash@{${index}}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to create branch: ${errMsg(e)}`);
+				void showGitError(`Failed to create branch: ${errMsg(e)}`);
 			}
 		}),
 	);

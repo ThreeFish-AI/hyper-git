@@ -22,8 +22,14 @@ export type StashNode = StashEntryNode;
 export class StashTreeProvider implements vscode.TreeDataProvider<StashNode>, vscode.Disposable {
 	private readonly _onDidChange = new vscode.EventEmitter<StashNode | undefined>();
 	readonly onDidChangeTreeData = this._onDidChange.event;
+	private viewMessageSink?: (message: string | undefined) => void;
 
 	constructor(private readonly service: GitRepositoryService) {}
+
+	/** 视图内联消息通道（extension.ts 接线到 TreeView.message；加载失败不再静默成空树）。 */
+	setViewMessageSink(sink: (message: string | undefined) => void): void {
+		this.viewMessageSink = sink;
+	}
 
 	refresh(): void {
 		this._onDidChange.fire(undefined);
@@ -35,6 +41,7 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashNode>, vs
 			return [];
 		}
 		try {
+			this.viewMessageSink?.(undefined);
 			const out = await this.service.execGit(['stash', 'list', '--date=relative']);
 			return out
 				.split('\n')
@@ -52,15 +59,16 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashNode>, vs
 					}
 					return { kind: 'stash', index, message: rest, date };
 				});
-		} catch {
+		} catch (e) {
+			this.viewMessageSink?.(`Failed to list stashes: ${(e as Error).message}`);
 			return [];
 		}
 	}
 
 	getTreeItem(node: StashNode): vscode.TreeItem {
+		// label 不预截断：VS Code 树渲染自带省略，完整 subject 保留给 tooltip。
 		const subject = node.message.split(':').slice(1).join(':').trim() || node.message;
-		const trimmed = subject.length > 60 ? `${subject.slice(0, 60)}…` : subject;
-		const item = new vscode.TreeItem(trimmed, vscode.TreeItemCollapsibleState.None);
+		const item = new vscode.TreeItem(subject, vscode.TreeItemCollapsibleState.None);
 		item.id = `stash:${node.index}`;
 		item.description = node.date || `stash@{${node.index}}`;
 		item.contextValue = 'hyperGit.stash';

@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getDecoration } from '../../engine/scm-mapping/status-decoration';
@@ -14,7 +13,8 @@ import type {
 	WebviewToHostMessage,
 } from '../../shared/protocol';
 import type { CommitService } from '../commit/commit-service';
-import { getBaseStyles } from './shared-styles';
+import { getBaseStyles, ICON_CHEVRON_DOWN, ICON_ELLIPSIS } from './shared-styles';
+import { getNonce } from './nonce';
 
 /**
  * Commit 提交窗口（WebviewView，自绘提交面板）。
@@ -93,14 +93,15 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 		if (!change) {
 			return;
 		}
+		// QuickPick label 支持 $(codicon) 内联图标（与 changelist 菜单对齐）。
 		const actions: ReadonlyArray<{ readonly label: string; readonly command: string }> = [
-			{ label: 'Open Diff', command: 'hyperGit.openDiff' },
-			{ label: 'Move to Changelist…', command: 'hyperGit.moveChangelist' },
-			{ label: 'Show History', command: 'hyperGit.showHistory' },
-			{ label: 'Stage Hunks…', command: 'hyperGit.partialStage' },
-			{ label: 'Unstage Hunks…', command: 'hyperGit.partialUnstage' },
-			{ label: 'Add to .gitignore', command: 'hyperGit.ignorePath' },
-			{ label: 'Discard Changes', command: 'hyperGit.discardChanges' },
+			{ label: '$(diff) Open Diff', command: 'hyperGit.openDiff' },
+			{ label: '$(symbol-enum) Move to Changelist…', command: 'hyperGit.moveChangelist' },
+			{ label: '$(history) Show History', command: 'hyperGit.showHistory' },
+			{ label: '$(diff-added) Stage Hunks…', command: 'hyperGit.partialStage' },
+			{ label: '$(diff-removed) Unstage Hunks…', command: 'hyperGit.partialUnstage' },
+			{ label: '$(diff-ignored) Add to .gitignore', command: 'hyperGit.ignorePath' },
+			{ label: '$(discard) Discard Changes', command: 'hyperGit.discardChanges' },
 		];
 		const pick = await vscode.window.showQuickPick(actions.slice(), { placeHolder: relativePath });
 		if (!pick) {
@@ -157,6 +158,7 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 			label: path.basename(c.relativePath),
 			dir: path.dirname(c.relativePath),
 			themeColor: decoration.themeColor,
+			letter: decoration.letter,
 		};
 	}
 
@@ -201,45 +203,54 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>
 ${getBaseStyles()}
-body { margin: 0; padding: var(--hg-space-2); font-family: var(--vscode-font-family); color: var(--vscode-foreground); font-size: var(--vscode-font-size); }
+body { margin: 0; padding: var(--hg-space-2); font-family: var(--vscode-font-family); color: var(--vscode-foreground); font-size: var(--vscode-font-size); background: var(--vscode-sideBar-background); }
 .cl-bar { display: flex; align-items: center; gap: 6px; margin-bottom: var(--hg-space-1); }
 .cl-bar .cl-label { flex: 0 0 auto; font-weight: 600; }
-#cl-switch { flex: 1 1 auto; min-width: 0; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, transparent)); border-radius: var(--hg-radius-control); padding: 2px 4px; font-size: 12px; }
+#cl-switch { flex: 1 1 auto; min-width: 0; } /* 视觉走共享 .hg-select（dropdown token 单一事实源） */
 .cl-menu-btn { flex: 0 0 auto; padding: 1px 7px; }
 .seg { display: inline-flex; border: 1px solid var(--vscode-input-border, transparent); border-radius: 3px; overflow: hidden; }
-.seg button { background: transparent; color: var(--vscode-foreground); border: none; padding: 2px 8px; font-size: 11px; cursor: pointer; opacity: 0.7; }
+.seg button { background: transparent; color: var(--vscode-foreground); border: none; padding: 2px 8px; font-size: calc(var(--vscode-font-size) - 2px); cursor: pointer; opacity: 0.7; }
 .seg button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); opacity: 1; }
+.seg button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 .files { max-height: 260px; overflow-y: auto; border: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.3)); border-radius: var(--hg-radius-control); margin-bottom: var(--hg-space-2); }
+.files:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.file.kb-focus, .tree-dir.kb-focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 .file { display: flex; align-items: center; gap: 6px; padding: 2px 6px; cursor: pointer; }
 .file:hover { background: var(--vscode-list-hoverBackground); }
-.file .dot { font-size: 14px; line-height: 1; flex: 0 0 auto; }
+.file .dot { flex: 0 0 1.2em; text-align: center; font-weight: 600; font-size: calc(var(--vscode-font-size) - 1px); line-height: 1; }
 .file .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.file .dir { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: 11px; white-space: nowrap; padding-left: 8px; }
+.file .dir { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: calc(var(--vscode-font-size) - 2px); white-space: nowrap; padding-left: 8px; }
 .tree-dir { display: flex; align-items: center; gap: 6px; padding: 2px 6px; cursor: pointer; user-select: none; }
 .tree-dir:hover { background: var(--vscode-list-hoverBackground); }
-.tree-twist { flex: 0 0 12px; text-align: center; font-size: 10px; opacity: 0.8; }
+.tree-twist { flex: 0 0 14px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.8; }
+.tree-twist svg { display: block; }
+.tree-twist.collapsed svg { transform: rotate(-90deg); }
 .tree-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--vscode-descriptionForeground); }
 textarea { width: 100%; box-sizing: border-box; resize: vertical; }
-.validation { font-size: 11px; min-height: 16px; margin: 4px 2px; }
+.validation { font-size: calc(var(--vscode-font-size) - 2px); min-height: 16px; margin: 4px 2px; }
 .validation.ok { color: var(--vscode-testing-iconPassed, #3fb950); }
 .validation.warning { color: var(--vscode-editorWarning-foreground, #d29922); }
 .validation.error { color: var(--vscode-errorForeground, #f85149); }
 .recent { margin: 4px 0 var(--hg-space-2); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.recent-label { color: var(--vscode-descriptionForeground); font-size: 11px; }
-.chip { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: none; border-radius: 9px; padding: 1px 8px; font-size: 11px; cursor: pointer; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chip:hover { opacity: 0.85; }
-.opt { display: block; font-size: 12px; margin: 3px 2px; }
+.recent-label { color: var(--vscode-descriptionForeground); font-size: calc(var(--vscode-font-size) - 2px); }
+.hg-chip { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: none; border-radius: 9px; padding: 1px 8px; font-size: calc(var(--vscode-font-size) - 2px); cursor: pointer; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hg-chip:hover { opacity: 0.85; }
+.hg-chip:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.opt { display: block; font-size: calc(var(--vscode-font-size) - 1px); margin: 3px 2px; }
 .buttons { display: flex; gap: 6px; margin-top: var(--hg-space-2); }
 .buttons .hg-btn { flex: 1; }
 .files-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; padding: 0 6px; color: var(--vscode-descriptionForeground); }
-.files-empty { padding: 14px 8px; text-align: center; color: var(--vscode-descriptionForeground); font-size: 12px; }
+.files-empty { padding: 14px 8px; text-align: center; color: var(--vscode-descriptionForeground); font-size: calc(var(--vscode-font-size) - 1px); }
 .spinner { display: inline-block; width: 12px; height: 12px; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: hg-spin 0.8s linear infinite; vertical-align: -2px; margin-right: 5px; }
 @keyframes hg-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+	.spinner { animation-duration: 1.6s; } /* 前庭安全：降频保留进行中指示（与 Graph .ci-spin 同策略） */
+}
 details.advanced { margin: 6px 0 var(--hg-space-2); }
-details.advanced summary { cursor: pointer; font-size: 12px; color: var(--vscode-descriptionForeground); }
+details.advanced summary { cursor: pointer; font-size: calc(var(--vscode-font-size) - 1px); color: var(--vscode-descriptionForeground); }
 details.advanced summary:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; border-radius: 2px; }
 details.advanced[open] summary { margin-bottom: 4px; }
-.toast { font-size: 12px; margin-top: var(--hg-space-2); min-height: 16px; }
+.toast { font-size: calc(var(--vscode-font-size) - 1px); margin-top: var(--hg-space-2); min-height: 16px; }
 .toast.ok { color: var(--vscode-testing-iconPassed, #3fb950); }
 .toast.err { color: var(--vscode-errorForeground, #f85149); }
 </style>
@@ -247,8 +258,8 @@ details.advanced[open] summary { margin-bottom: 4px; }
 <body>
 <div class="cl-bar">
   <span class="cl-label">Active Changelist:</span>
-  <select id="cl-switch" title="Switch active changelist"></select>
-  <button id="cl-menu" class="hg-btn hg-btn--secondary hg-btn--sm cl-menu-btn" title="Changelist actions" aria-label="Changelist actions">⋯</button>
+  <select id="cl-switch" class="hg-select" title="Switch active changelist"></select>
+  <button id="cl-menu" class="hg-btn hg-btn--secondary hg-btn--sm cl-menu-btn" title="Changelist actions" aria-label="Changelist actions">${ICON_ELLIPSIS}</button>
 </div>
 <div class="files-header" id="files-header" style="display:none">
   <label class="opt" style="margin:0"><input type="checkbox" id="select-all"> Select All</label>
@@ -257,7 +268,7 @@ details.advanced[open] summary { margin-bottom: 4px; }
     <button id="mode-tree" aria-pressed="false" title="Group by directory">Tree</button>
   </span>
 </div>
-<div class="files" id="files"></div>
+<div class="files" id="files" tabindex="0" role="tree" aria-label="Changed files"></div>
 <textarea id="message" class="hg-input" rows="4" placeholder="Commit message (Conventional Commits: type(scope): description)" spellcheck="false"></textarea>
 <div id="validation" class="validation" role="status" aria-live="polite"></div>
 <div class="recent" id="recent"></div>
@@ -275,12 +286,14 @@ details.advanced[open] summary { margin-bottom: 4px; }
 
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
-// ── 勾选集/视图模式按仓库分区（v2，issue #107）：勾选是相对路径集合，跨仓库本就错位；
-// 切换仓库换装载互不串扰；无 v2 时从旧平铺结构一次性升级（旧值归首个见到的仓库）。──
+// ── 勾选集/视图模式/提交草稿按仓库分区（v3，issue #107）：勾选是相对路径集合，跨仓库本就错位；
+// 切换仓库换装载互不串扰；v3 起 draft（message + amend/signoff/skipHooks）一并入 state——
+// 视图隐藏销毁 / 窗口 reload 后草稿可恢复（对齐内置 SCM 输入框草稿语义），提交成功即清空。
+// 旧版 state（v2 byRepo / v1 平铺）无感升级，draft 缺省为空。──
 const persistedRaw = vscode.getState() || {};
 let persistedRepo = '';
 let persistedByRepo = {};
-if (persistedRaw.v === 2 && persistedRaw.byRepo) {
+if ((persistedRaw.v === 2 || persistedRaw.v === 3) && persistedRaw.byRepo) {
   persistedByRepo = persistedRaw.byRepo;
 } else if (persistedRaw.checked || persistedRaw.mode || persistedRaw.collapsed) {
   persistedByRepo = { '': { checked: persistedRaw.checked, mode: persistedRaw.mode, collapsed: persistedRaw.collapsed } };
@@ -288,22 +301,39 @@ if (persistedRaw.v === 2 && persistedRaw.byRepo) {
 let checked = new Set();
 let mode = 'flat';
 let collapsed = new Set();
+let draft = null; // 当前仓库的草稿快照（loadPersistedFor 装载；仅 webview 重建/切仓库时回灌 DOM）
+let stateV3Written = false; // 本会话是否已落盘 v3 state：true 后 '' 兜底关闭（见 loadPersistedFor）
 function loadPersistedFor(repoRoot) {
   persistedRepo = repoRoot;
-  const s = persistedByRepo[repoRoot] || persistedByRepo[''] || {};
+  // '' 条目兜底仅用于旧版 state（v1 平铺 / v2 迁移语义）；v3 起按仓严格隔离——
+  // 无本仓条目即空对象，避免无仓库会话期（repoRoot=''）写入的草稿回灌到其他仓库。
+  // persistedRaw.v 是启动快照、saveState 后不更新：stateV3Written 补位——本会话首写 v3 后
+  // 即关闭兜底，升级/全新会话内同样保持隔离，无需等下一次 webview 重建。
+  const fallback = persistedRaw.v === 3 || stateV3Written ? undefined : persistedByRepo[''];
+  const s = persistedByRepo[repoRoot] || fallback || {};
   checked = new Set(s.checked || []);
   mode = s.mode === 'tree' ? 'tree' : 'flat';
   collapsed = new Set(s.collapsed || []);
+  draft = s.draft || null;
 }
+// saveState 从 DOM 现值取 draft（草稿写点统一收敛于此）：输入即时保存，彻底消除 200ms debounce 尾丢。
 function saveState() {
-  persistedByRepo[persistedRepo] = { checked: Array.from(checked), mode: mode, collapsed: Array.from(collapsed) };
-  vscode.setState({ v: 2, byRepo: persistedByRepo });
+  persistedByRepo[persistedRepo] = {
+    checked: Array.from(checked),
+    mode: mode,
+    collapsed: Array.from(collapsed),
+    draft: { message: msgEl.value, amend: amendEl.checked, signoff: signoffEl.checked, skipHooks: skipHooksEl.checked }
+  };
+  vscode.setState({ v: 3, byRepo: persistedByRepo });
+  stateV3Written = true;
 }
+let draftRestored = false;
 let conventionalEnabled = true;
 let templateApplied = false;
 let curFiles = [];
 let curTree = [];
 const INDENT = 14;
+const ICON_CHEVRON = ${JSON.stringify(ICON_CHEVRON_DOWN)};
 const EMPTY_HTML = '<div class="files-empty">No changes in this changelist.<br>Edit files in your workspace and they will appear here.</div>';
 const filesEl = document.getElementById('files');
 const msgEl = document.getElementById('message');
@@ -324,11 +354,15 @@ const modeTreeEl = document.getElementById('mode-tree');
 
 let msgTimer = null;
 msgEl.addEventListener('input', function () {
+  saveState(); // 草稿即时持久化（防抖前落盘，视图销毁不丢尾部输入）
   clearTimeout(msgTimer);
   msgTimer = setTimeout(function () {
     vscode.postMessage({ type: 'messageChanged', payload: { message: msgEl.value } });
   }, 200);
 });
+amendEl.addEventListener('change', saveState);
+signoffEl.addEventListener('change', saveState);
+skipHooksEl.addEventListener('change', saveState);
 
 // Ctrl/Cmd+Enter 提交（业界通用快捷键：VS Code/GitHub/JetBrains 一致）。
 msgEl.addEventListener('keydown', function (e) {
@@ -391,10 +425,11 @@ function makeLeafRow(f, depth) {
     if (cb.checked) checked.add(f.path); else checked.delete(f.path);
     saveState(); syncSelectAll(); updateDirStates();
   });
+  // 状态字母标记（M/A/U/R/D/C…）替代色点：色盲可辨、对齐官方 SCM 角标（兜底空串）。
   const dot = document.createElement('span');
   dot.className = 'dot';
   dot.style.color = 'var(--vscode-' + f.themeColor.replace(/\\./g, '-') + ')';
-  dot.textContent = '\\u25CF';
+  dot.textContent = f.letter || '';
   const name = document.createElement('span');
   name.className = 'name';
   name.textContent = f.label;
@@ -438,8 +473,8 @@ function renderNode(node, depth, parent, files) {
     dirRow.style.paddingLeft = (depth * INDENT + 6) + 'px';
     dirRow.dataset.dir = node.path;
     const tw = document.createElement('span');
-    tw.className = 'tree-twist';
-    tw.textContent = isCol ? '\\u25B8' : '\\u25BE';
+    tw.className = 'tree-twist' + (isCol ? ' collapsed' : '');
+    tw.innerHTML = ICON_CHEVRON;
     const cb = document.createElement('input');
     cb.type = 'checkbox'; cb.className = 'dir-cb'; cb.dataset.dir = node.path;
     cb.addEventListener('click', function (e) { e.stopPropagation(); });
@@ -497,6 +532,7 @@ function toggleCollapse(p) {
 }
 
 function renderList() {
+  kbIdx = -1;
   filesEl.innerHTML = '';
   if (!curFiles || curFiles.length === 0) {
     filesHeaderEl.style.display = 'none';
@@ -507,6 +543,39 @@ function renderList() {
   if (mode === 'tree') { renderTree(curTree, curFiles); } else { renderFlat(curFiles); }
   syncSelectAll();
 }
+
+// ── 键盘可达性（复刻 Graph #viewport 模式）：容器级焦点，ArrowUp/Down/Home/End 移动、Enter 触发行、Escape 归还 ──
+let kbIdx = -1;
+function kbRows() { return Array.from(filesEl.querySelectorAll('.file, .tree-dir')); }
+function kbApply(idx) {
+  const rows = kbRows();
+  kbRows().forEach(function (r) { r.classList.remove('kb-focus'); });
+  kbIdx = idx;
+  if (kbIdx >= 0 && kbIdx < rows.length) {
+    rows[kbIdx].classList.add('kb-focus');
+    rows[kbIdx].scrollIntoView({ block: 'nearest' });
+  }
+}
+filesEl.addEventListener('keydown', function (e) {
+  const rows = kbRows();
+  if (rows.length === 0) { return; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (kbIdx < 0) { kbApply(e.key === 'ArrowDown' ? 0 : rows.length - 1); return; }
+    kbApply(Math.max(0, Math.min(rows.length - 1, kbIdx + (e.key === 'ArrowDown' ? 1 : -1))));
+  } else if (e.key === 'Home') {
+    e.preventDefault(); kbApply(0);
+  } else if (e.key === 'End') {
+    e.preventDefault(); kbApply(rows.length - 1);
+  } else if (e.key === 'Enter' && kbIdx >= 0) {
+    e.preventDefault();
+    rows[kbIdx].click();
+  } else if (e.key === 'Escape') {
+    kbApply(-1);
+    filesEl.blur();
+  }
+});
+filesEl.addEventListener('focus', function () { if (kbIdx < 0) { kbApply(0); } });
 
 function updateModeButtons() {
   modeFlatEl.classList.toggle('active', mode === 'flat');
@@ -547,11 +616,12 @@ function renderRecent(messages) {
   recentEl.appendChild(label);
   messages.slice(0, 5).forEach(function (m) {
     const chip = document.createElement('button');
-    chip.className = 'chip';
+    chip.className = 'hg-chip';
     chip.textContent = m.split('\\n')[0].slice(0, 40);
     chip.title = m;
     chip.addEventListener('click', function () {
       msgEl.value = m;
+      saveState();
       vscode.postMessage({ type: 'messageChanged', payload: { message: msgEl.value } });
     });
     recentEl.appendChild(chip);
@@ -560,10 +630,20 @@ function renderRecent(messages) {
 
 function showValidation(v) {
   valEl.className = 'validation ' + v.severity;
+  valEl.textContent = '';
+  // 图标字符单独 aria-hidden（不进读屏播报）；\\uFE0E 强制文本呈现（防 ⚠/ℹ 在部分平台渲染为彩色 emoji）。
+  function iconSpan(ch) {
+    const el = document.createElement('span');
+    el.setAttribute('aria-hidden', 'true');
+    el.textContent = ch + '\\uFE0E';
+    el.style.marginRight = '4px';
+    return el;
+  }
   if (v.severity === 'ok') {
-    valEl.textContent = conventionalEnabled ? '\\u2713 Valid Conventional Commits' : '';
+    if (conventionalEnabled) { valEl.appendChild(iconSpan('\\u2713')); valEl.appendChild(document.createTextNode('Valid Conventional Commits')); }
   } else {
-    valEl.textContent = (v.severity === 'error' ? '\\u26A0 ' : '\\u2139 ') + (v.reason || '');
+    valEl.appendChild(iconSpan(v.severity === 'error' ? '\\u26A0' : '\\u2139'));
+    valEl.appendChild(document.createTextNode(v.reason || ''));
   }
 }
 
@@ -577,7 +657,21 @@ window.addEventListener('message', function (e) {
   const m = e.data;
   if (m.type === 'state') {
     const p = m.payload;
-    loadPersistedFor(p.repoRoot || '');
+    const repoRoot = p.repoRoot || '';
+    // 草稿回灌仅两种时机：webview 重建后首帧、活跃仓库切换（loadPersistedFor 会改写 persistedRepo，先判定）。
+    // 必须先于 reconcileChecked/saveState——saveState 从 DOM 取草稿，先回灌才能在后续保存中保住草稿。
+    // 回灌必须无条件同步 DOM（目标仓库无草稿则清空）：否则旧仓库的 message/amend 残留 DOM，
+    // 随后被 saveState 落盘为新仓库草稿（跨仓串扰；amend=true 泄漏会静默改写新仓库 HEAD）。
+    const restoreDraft = !draftRestored || repoRoot !== persistedRepo;
+    loadPersistedFor(repoRoot);
+    if (restoreDraft) {
+      msgEl.value = (draft && draft.message) || '';
+      amendEl.checked = Boolean(draft && draft.amend);
+      signoffEl.checked = Boolean(draft && draft.signoff);
+      skipHooksEl.checked = Boolean(draft && draft.skipHooks);
+      vscode.postMessage({ type: 'messageChanged', payload: { message: msgEl.value } });
+    }
+    draftRestored = true;
     curFiles = p.files || [];
     curTree = p.tree || [];
     reconcileChecked(curFiles);
@@ -589,6 +683,7 @@ window.addEventListener('message', function (e) {
     conventionalEnabled = p.conventionalEnabled;
     if (!templateApplied && p.template && !msgEl.value) {
       msgEl.value = p.template;
+      saveState();
       vscode.postMessage({ type: 'messageChanged', payload: { message: msgEl.value } });
     }
     templateApplied = true;
@@ -600,6 +695,7 @@ window.addEventListener('message', function (e) {
       toast(m.payload.warning || 'Commit succeeded', Boolean(m.payload.warning));
       msgEl.value = '';
       amendEl.checked = false; signoffEl.checked = false; skipHooksEl.checked = false;
+      saveState(); // 提交成功清空草稿（失败保留，供修改重试）
       vscode.postMessage({ type: 'messageChanged', payload: { message: '' } });
     } else {
       toast(m.payload.error || 'Commit failed', true);
@@ -612,8 +708,4 @@ vscode.postMessage({ type: 'requestState' });
 </body>
 </html>`;
 	}
-}
-
-function getNonce(): string {
-	return crypto.randomBytes(16).toString('base64');
 }

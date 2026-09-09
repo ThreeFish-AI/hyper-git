@@ -34,6 +34,12 @@ export class WorktreeTreeProvider implements vscode.TreeDataProvider<WorktreeNod
 	private readonly disposables: vscode.Disposable[] = [];
 	private cache: WorktreeNode[] | undefined;
 	private inFlight: Promise<WorktreeNode[]> | undefined;
+	private viewMessageSink?: (message: string | undefined) => void;
+
+	/** 视图内联消息通道（extension.ts 接线到 TreeView.message；加载失败不再静默成空树）。 */
+	setViewMessageSink(sink: (message: string | undefined) => void): void {
+		this.viewMessageSink = sink;
+	}
 
 	constructor(private readonly service: GitRepositoryService) {
 		this.disposables.push(service.onDidChange(() => this.refresh()));
@@ -60,8 +66,10 @@ export class WorktreeTreeProvider implements vscode.TreeDataProvider<WorktreeNod
 				const out = await this.service.execGit(['worktree', 'list', '--porcelain', '-z']);
 				const nodes = parseWorktreeList(out).map((p) => this.toNode(p));
 				this.cache = nodes;
+				this.viewMessageSink?.(undefined);
 				return nodes;
-			} catch {
+			} catch (e) {
+				this.viewMessageSink?.(`Failed to list worktrees: ${(e as Error).message}`);
 				return [];
 			} finally {
 				this.inFlight = undefined;
@@ -154,7 +162,10 @@ export class WorktreeTreeProvider implements vscode.TreeDataProvider<WorktreeNod
 /**
  * 工作树路径归一比较：`realpathSync` 规避 macOS `/tmp` ↔ `/private/tmp` 软链漏判；
  * 路径不存在（如 prunable，目录已删除）时退回原值。`path.normalize` 后去尾部分隔符。
+ * 结果按路径记忆化：避免 getTreeItem 每行渲染重复同步 IO（工作树个数少，缓存无界风险可忽略）。
  */
+const normalizedPathCache = new Map<string, string>();
+
 function isSameWorktreePath(a: string, b: string | undefined): boolean {
 	if (!b) {
 		return false;
@@ -163,11 +174,17 @@ function isSameWorktreePath(a: string, b: string | undefined): boolean {
 }
 
 function normalizeWorktreePath(p: string): string {
+	const cached = normalizedPathCache.get(p);
+	if (cached !== undefined) {
+		return cached;
+	}
 	let resolved = p;
 	try {
 		resolved = fs.realpathSync(p);
 	} catch {
 		// 路径不存在（prunable）或不可读 → 用原值（不阻断比较）。
 	}
-	return path.normalize(resolved).replace(/[\\/]+$/, '');
+	const normalized = path.normalize(resolved).replace(/[\\/]+$/, '');
+	normalizedPathCache.set(p, normalized);
+	return normalized;
 }

@@ -6,7 +6,53 @@
 
 ## [Unreleased]
 
-## [0.0.16] - 2026-09-01 — 多根工作区仓库切换 · 分支分组树 · Agentic Git 预置 · 面板布局与 Diff 修复
+## [0.0.17] - 2026-09-09 — Log 提交详情常驻面板 · VS Code 1.136 最佳实践对齐 · 稳定性与体验修复
+
+自 v0.0.16 以来的积累（PR #115 / #116）。核心变更：**Log 提交详情由悬停浮层改为右侧常驻面板**（三区可拖拽分割线、窄视图自适应堆叠），并全面对齐 VS Code 1.136 控件 / 交互 / API 最佳实践（修复 9 项缺陷、Webview 控件全面主题化、能力声明与设置治理）；新增长时 git 操作进度反馈、入门导览与默认键位、Stash / Worktrees 批量操作、分支 / 标签名即时校验等体验增强。完整用户视角叙述见 [Release Note v0.0.17](./docs/releases/v0.0.17.md)。
+
+### Added
+
+- **长时 git 操作进度反馈**：pull/push/fetch/merge/rebase/cherry-pick/reset/updateProject 等以 `withProgress` 呈现（默认标题栏非阻塞，Update Project 与交互 Rebase 用通知位）；git 操作失败通知附 "Show Output" 按钮直达 Console。
+- **入门导览与默认键位**：新增 `walkthroughs` 贡献点（Get Started with Hyper Git，5 步导览）；默认键位 Alt+B 切换 Blame 注解、Alt+G 打开 Graph 过滤（Commit 输入框 Ctrl/Cmd+Enter 提交原有内建保留）。
+- **Stash / Worktrees 批量操作**：两视图启用多选（批量 Drop 按 index 降序防位移、批量 Remove 跳过 main/当前打开项）；新建 stash/worktree/shelf 后聚焦对应视图；provider 加载失败经 `TreeView.message` 内联呈现。
+- **分支/标签名即时校验**：新增 `engine/ref/ref-name.validateRefName` 纯函数（git check-ref-format 的 UI 子集，9 组单测矩阵），挂接全部 8 处分支/标签名输入框。
+- **QuickPick 体验**：提交选择器补 `matchOnDescription/matchOnDetail`（hash 前缀可搜）；Rebase base 与标签目标选择插 `QuickPickItemKind.Separator` 分段；Commit 文件菜单补 `$(codicon)` 图标。
+- **Commit 文件列表键盘导航**：容器级焦点 + ArrowUp/Down/Home/End/Enter/Escape（复刻 Graph 模式）；Rebase 拖拽补 Alt+↑/↓ 键盘替代，确认层补 Escape/焦点圈禁/焦点还原。
+
+### Changed
+
+- **Webview 控件全面主题化**：滚动条走 `--vscode-scrollbarSlider-*`、checkbox `accent-color`、下拉统一 `--vscode-dropdown-*`（`.hg-select` 基类）、阴影 `--vscode-widget-shadow`；字号全线以 `--vscode-font-size` 为基准 calc 派生（随用户字号设置缩放）；高对比度主题下 Graph 彩色胶囊改描边呈现；Graph 行高/泳道列宽常量单源化。
+- **文件状态点改字母标记**：Commit 视图 `●` 色点改为 M/A/U/R/D/C 着色字母（色盲可辨，对齐官方 SCM 与 Graph 面板）；8 处 Unicode 字符图标全部 SVG 化（折叠箭头/省略号/关闭/导航/空态/merge 标记）。
+- **日志通道现代化**：两 OutputChannel 迁 `LogOutputChannel`（自动时间戳与级别、统一日志视图），懒创建并随扩展释放。
+- **确认对话框多行正文迁 `MessageOptions.detail`**（本地/远程分支删除、Worktree 删除/prune）；用户可见文案统一英文（分支删除确认、Conventional Commits 校验提示）。
+- **能力声明与设置治理**：补 `extensionKind: workspace` 与 `untrustedWorkspaces: unsupported`；11 项设置补 `scope`；5 个预留设置（`ai.enabled` + `agent.*`）描述标注 Reserved 且默认值清除个人化内容（**默认值变更**：agent 偏好默认由内置模板改为空，即内置默认——此前内嵌个人签名等内容不再分发）；palette 补 when 限定（Graph scope/List-Tree 切换、Accept Ours/Theirs 按冲突态显隐）。
+- **同步 IO 清理**：Shelf 服务全量迁 `fs.promises`（原 `listShelves` 同步读阻塞 UI 线程）；Worktree 路径归一 realpath 记忆化。
+- **Graph 视图工具栏整体上移 VS Code 标题栏（省一整行竖直空间）**：scope（All / Current / Checkpoints）改为 `$(layers)` 图标下拉子菜单（`toggled` 勾选、默认 All，置于 Refresh Graph 图标左侧）；仓库路径常驻 `WebviewView.description` 副标题（标题「Graph」同行右侧）；多仓库态「切换仓库」`$(repo)` 图标按钮与 CI「登录 GitHub」`$(sign-in)` 图标按钮（授权后自动隐藏）条件显隐；Changed Files 的 List ⇄ Tree 切换改为 `$(list-tree)`/`$(list-flat)` 互斥图标（交互同 Branches 分组切换，文案适配为 "Group Changed Files by Directory" / "Show Changed Files as Flat List"）。scope 与 List/Tree 偏好随之移交 host `workspaceState` 按仓库持久化（`hyperGit.log.scope:<repo>` / `hyperGit.log.dmode:<repo>`）——**原 webview state 中的旧偏好一次性重置为默认**（All / flat；选中与目录折叠不受影响）。
+- **提交详情三区分割线可拖拽**：图 ⇄ 面板（横向面板 ≥200px 且图区 ≥280px、纵向 18%–75%）与面板内 Changed Files ⇄ Commit 信息（15%–85%）两根 gutter，实时调比例、按仓库记忆、键盘可达（方向键 ±2%、Home/End 归边界）。
+- **再次点击已选中的提交行 = 反向操作**：收起该提交的 Changed Files 与 Commit 详情面板（300ms 内双击第二击豁免，保留「双击即打开」语义；方向键/Home/End 边界防抖不误触）。
+- **Log 提交详情由悬停浮层改为右侧常驻面板**：点击 Graph 提交行即在图右侧于 webview 内水平分栏打开详情面板（上半 **Changed Files**——List/Tree 切换、点击打开 Diff；下半**提交信息**——作者/时间、HEAD/分支/远程/标签引用分组、完整消息、提交者（异于作者时）、变更统计、完整 SHA、Open on GitHub），深浅主题自适应。面板可见性 ⟺ 选中态：`×` 或 `Esc` 取消选中即收起，刷新 / webview 重载按仓库记忆恢复选中与面板；`log/selectCommit` 一次并行触达文件 + 详情两路数据（沿用切库竞态守卫，迟到 / 失败回包按 `forHash` 丢弃或显式「Details unavailable」占位，见 [`src/shared/protocol.ts`](./src/shared/protocol.ts)）。原 `#commit-tip` 悬停浮层与 `i` 快捷键整体移除，行悬停不再弹层；底部 Changed Files 区随之并入面板上半区。窄视图（`#main` < 560px）自动退化为上下堆叠（面板 45%、图区保 55%），避免面板 280px 下限把提交图挤成零宽；面板收起守卫同时校验选中态与可见性，切到无记忆选中的仓库不残留上一仓库的面板内容。完整叙述见 [Log 提交详情面板](./docs/features/log-commit-detail-panel.md)。
+
+### Fixed
+
+- **Merge 编辑器「保存→拒绝强制保存→取消」路径失效**：webview 回调内重复调用 `acquireVsCodeApi()`（每个 webview 仅允许调用一次，第二次抛异常），改为脚本顶部获取后全程复用；交互式 Rebase 确认执行同理（[issue #17](./docs/.agents/issue.md)）。
+- **Commit 草稿丢失**：视图隐藏销毁后 message/amend/signoff/skipHooks 全部丢失且模板重灌覆盖。webview state 升 v3 按仓库持久化草稿，输入即时落盘（消除 200ms 防抖尾丢），提交成功清空（[issue #18](./docs/.agents/issue.md)）。
+- **切换深浅主题后 Graph 泳道色/引用胶囊停留旧主题**：泳道色原为启动期一次性快照，补 `MutationObserver` 监听 body 属性热重算并重渲（webview 不随主题切换重载）。
+- **分支树文件夹节点出现分支级菜单**：11 处 `viewItem =~` 正则未锚定误匹配 `hyperGit.branchFolder`（含 `hyperGit.branch` 子串），全部补 `^…$` 锚定。
+- **CLI 通道失败不可诊断**：`execFile` 丢弃 stderr，现透传挂到错误对象并记入 Console（与 vscode.git API 通道的 GitError.stderr 提取对齐）。
+- **交互 Rebase 的 reword 可能拉起新 VS Code 窗口**：`GIT_EDITOR` 经 `process.execPath`（扩展宿主内为 Electron 二进制）运行 helper，补 `ELECTRON_RUN_AS_NODE=1`。
+- **窗口 reload 后 Rebase / Merge 面板空白**：两个 `retainContextWhenHidden` 面板补 `registerWebviewPanelSerializer`（Rebase 按 webview state 恢复用户编辑后的 todo，Merge 按 filePath 重拉冲突三阶段）。
+- **git 扩展不可用时 Branches/Stash/Shelf 视图报 "no tree view registered"**：补空 provider（viewsWelcome 正常触发），Commit/Graph 渲染静态占位说明页。
+- **Blame 注解**：悬浮信息换行折叠（改 MarkdownString）；split 编辑器无注解、已关闭文档条目泄漏（订阅可见编辑器变化统一挂载/清理）。
+
+### Removed
+
+- **Graph 悬停浮层专用消息与死类型**：移除 `log/showCommitDetail`（webview → host，随浮层消亡）与编辑器区 Commit 详情面板实验遗留、全仓零引用的 `CommitDetailHostToWebviewMessage` / `CommitDetailWebviewToHostMessage` 协议类型（[`src/shared/protocol.ts`](./src/shared/protocol.ts)）。
+
+### Docs
+
+- 新增 [Log 提交详情面板](./docs/features/log-commit-detail-panel.md)（布局分栏 / 交互数据流 Mermaid、边缘 Case、`forHash` 守卫语义）；移除被替代的 `docs/features/log-commit-tooltip.md`，同步更新 [知识索引](./docs/.agents/knowledge-map.md)、[文档中心](./docs/README.md) 与 [变更文件目录树](./docs/features/file-list-group-by-directory.md) 表述。
+
+ - 2026-09-01 — 多根工作区仓库切换 · 分支分组树 · Agentic Git 预置 · 面板布局与 Diff 修复
 
 自 v0.0.14 以来的全量积累（承载 0.0.15 版本号预置——该版本号已就位但未单独发布，本版一并发布）。核心新特性：多根工作区多仓库切换、Branches 按 `/` 前缀分组树、Agentic Git 偏好配置与 Claude Code 配置预置（M5 前置铺垫）、Diff 缺失端修复与面板默认布局调整；工程侧升级 pnpm 12 与一批开发依赖。完整用户视角叙述见 [Release Note v0.0.16](./docs/releases/v0.0.16.md)。
 

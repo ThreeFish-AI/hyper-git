@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { showGitError } from './notify';
+import { validateRefName } from '../engine/ref/ref-name';
 import type { GitRepositoryService } from './git-repository-service';
 import type { WorktreeNode, WorktreeTreeProvider } from './tree/worktree-tree';
 import { parseWorktreeList } from '../engine/worktree/worktree-list';
@@ -43,11 +45,21 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 			let branch: string | undefined;
 			let sourceRef: string | undefined;
 			if (modePick.mode === 'new') {
-				branch = await vscode.window.showInputBox({ prompt: 'New branch name', placeHolder: 'feature/y' });
+				// 多步输入（分支名 → 起点 → 路径）不因失焦丢失（ignoreFocusOut；step/totalSteps 仅 createInputBox 支持）。
+				branch = await vscode.window.showInputBox({
+					prompt: 'New branch name',
+					placeHolder: 'feature/y',
+					validateInput: (v) => validateRefName(v, 'branch'),
+					ignoreFocusOut: true,
+				});
 				if (!branch?.trim()) {
 					return;
 				}
-				const start = await vscode.window.showInputBox({ prompt: 'Start point (leave empty = HEAD)', placeHolder: 'HEAD / main / abc1234' });
+				const start = await vscode.window.showInputBox({
+					prompt: 'Start point (leave empty = HEAD)',
+					placeHolder: 'HEAD / main / abc1234',
+					ignoreFocusOut: true,
+				});
 				if (start === undefined) {
 					return; // Esc 取消；空字符串 = HEAD（允许）
 				}
@@ -80,6 +92,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				prompt: 'Worktree path (relative to repo root / absolute)',
 				value: `../${safeName}-wt`,
 				placeHolder: '../feature-y-wt',
+				ignoreFocusOut: true,
 			});
 			if (!wtPath?.trim()) {
 				return;
@@ -102,9 +115,11 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 			try {
 				await service.execGit(args);
 				worktreeTree.refresh();
+				// 创建后聚焦 Worktrees 视图引导定位。
+				void vscode.commands.executeCommand('hyperGit.worktrees.focus');
 				void vscode.window.showInformationMessage(`Worktree created: ${wtPath.trim()}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to create Worktree: ${errMsg(e)}`);
+				void showGitError(`Failed to create Worktree: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -121,17 +136,31 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.worktreeRemove', async (node?: WorktreeNode) => {
+		vscode.commands.registerCommand('hyperGit.worktreeRemove', async (node?: WorktreeNode, nodes?: WorktreeNode[]) => {
 			const repo = service.repo;
-			if (!repo || !node || node.kind !== 'worktree') {
+			if (!repo) {
 				return;
 			}
-			if (node.isMain) {
-				void vscode.window.showWarningMessage('The main worktree cannot be deleted');
+			// 多选批量（canSelectMany）：main 与当前打开的工作树剔除后逐个删除。
+			const targets = (nodes?.length ? nodes : node ? [node] : []).filter((n) => n?.kind === 'worktree');
+			if (targets.length === 0) {
 				return;
 			}
-			if (worktreeTree.isCurrent(node)) {
-				void vscode.window.showWarningMessage('The currently open Worktree cannot be deleted; please switch to another window first');
+			const skipped: string[] = [];
+			const deletable: WorktreeNode[] = [];
+			for (const t of targets) {
+				if (t.isMain) {
+					skipped.push(`${t.name} (main worktree)`);
+				} else if (worktreeTree.isCurrent(t)) {
+					skipped.push(`${t.name} (currently open)`);
+				} else {
+					deletable.push(t);
+				}
+			}
+			if (skipped.length > 0) {
+				void vscode.window.showWarningMessage(`Skipped: ${skipped.join(', ')}`);
+			}
+			if (deletable.length === 0) {
 				return;
 			}
 			const forcePick = await vscode.window.showQuickPick(
@@ -139,30 +168,40 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 					{ label: 'Delete', description: 'Fails if there are uncommitted changes', f: false as const },
 					{ label: 'Force delete', description: 'Ignore uncommitted changes (irreversible)', f: true as const },
 				],
-				{ placeHolder: 'Delete Worktree' },
+				{ placeHolder: deletable.length === 1 ? 'Delete Worktree' : `Delete ${deletable.length} Worktrees` },
 			);
 			if (!forcePick) {
 				return;
 			}
+			// 多行明细走 MessageOptions.detail（模态框次要文字载体），标题保持单行。
 			const ok = await vscode.window.showWarningMessage(
-				`Delete Worktree?\n${node.path}\n(${node.ref})`,
-				{ modal: true },
+				deletable.length === 1 ? 'Delete Worktree?' : `Delete ${deletable.length} Worktrees?`,
+				{ modal: true, detail: deletable.map((t) => `${t.path}\n(${t.ref})`).join('\n\n') },
 				'Delete',
 			);
 			if (ok !== 'Delete') {
 				return;
 			}
-			try {
-				const args = ['worktree', 'remove'];
-				if (forcePick.f) {
-					args.push('--force');
+			const failures: string[] = [];
+			for (const t of deletable) {
+				try {
+					const args = ['worktree', 'remove'];
+					if (forcePick.f) {
+						args.push('--force');
+					}
+					args.push(t.path);
+					await service.execGit(args);
+				} catch {
+					failures.push(t.name);
 				}
-				args.push(node.path);
-				await service.execGit(args);
-				worktreeTree.refresh();
-				void vscode.window.showInformationMessage(`Worktree deleted: ${node.name}`);
-			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to delete Worktree: ${errMsg(e)}`);
+			}
+			worktreeTree.refresh();
+			if (failures.length > 0) {
+				void vscode.window.showWarningMessage(`Deleted ${deletable.length - failures.length} worktree(s), ${failures.length} failed: ${failures.join(', ')}`);
+			} else if (deletable.length === 1) {
+				void vscode.window.showInformationMessage(`Worktree deleted: ${deletable[0].name}`);
+			} else {
+				void vscode.window.showInformationMessage(`Deleted ${deletable.length} worktrees`);
 			}
 		}),
 	);
@@ -197,7 +236,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				worktreeTree.refresh();
 				void vscode.window.showInformationMessage(`Worktree locked: ${node.name}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to lock Worktree: ${errMsg(e)}`);
+				void showGitError(`Failed to lock Worktree: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -213,7 +252,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				worktreeTree.refresh();
 				void vscode.window.showInformationMessage(`Worktree unlocked: ${node.name}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to unlock Worktree: ${errMsg(e)}`);
+				void showGitError(`Failed to unlock Worktree: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -240,7 +279,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				worktreeTree.refresh();
 				void vscode.window.showInformationMessage(`Worktree moved → ${dest.trim()}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to move Worktree: ${errMsg(e)}`);
+				void showGitError(`Failed to move Worktree: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -259,7 +298,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 					.filter((p) => p.prunable)
 					.map((p) => p.path);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to read Worktree list: ${errMsg(e)}`);
+				void showGitError(`Failed to read Worktree list: ${errMsg(e)}`);
 				return;
 			}
 			if (prunablePaths.length === 0) {
@@ -267,8 +306,8 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				return;
 			}
 			const ok = await vscode.window.showWarningMessage(
-				`Prune metadata for ${prunablePaths.length} stale Worktree(s)?\n${prunablePaths.join('\n')}`,
-				{ modal: true },
+				`Prune metadata for ${prunablePaths.length} stale Worktree(s)?`,
+				{ modal: true, detail: prunablePaths.join('\n') },
 				'Prune',
 			);
 			if (ok !== 'Prune') {
@@ -279,7 +318,7 @@ export function registerWorktreeCommands(service: GitRepositoryService, worktree
 				worktreeTree.refresh();
 				void vscode.window.showInformationMessage(`Pruned ${prunablePaths.length} stale Worktree(s)`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to prune Worktrees: ${errMsg(e)}`);
+				void showGitError(`Failed to prune Worktrees: ${errMsg(e)}`);
 			}
 		}),
 	);

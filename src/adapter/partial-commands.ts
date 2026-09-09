@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { showGitError } from './notify';
 import { buildPatch, parseUnifiedDiff } from '../engine/diff/hunk-parser';
 import type { ChangelistRegistry } from './changelist-registry';
 import type { ChangeItem, GitRepositoryService } from './git-repository-service';
@@ -81,7 +82,7 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 				await applyToIndex(buildPatch(file, sel.indices), false);
 				void vscode.window.showInformationMessage(`Staged ${sel.indices.length} hunk(s)`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to stage: ${errMsg(e)}`);
+				void showGitError(`Failed to stage: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -110,7 +111,7 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 				await applyToIndex(buildPatch(file, sel.indices), true);
 				void vscode.window.showInformationMessage(`Unstaged ${sel.indices.length} hunk(s)`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to unstage: ${errMsg(e)}`);
+				void showGitError(`Failed to unstage: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -146,7 +147,7 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 				await applyToIndex(buildPatch(file, overlapping.map((o) => o.i)), false);
 				void vscode.window.showInformationMessage('Staged hunk at cursor');
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to stage: ${errMsg(e)}`);
+				void showGitError(`Failed to stage: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -188,7 +189,7 @@ export function registerPartialCommands(service: GitRepositoryService, registry:
 					void vscode.window.showInformationMessage(`Assigned Hunk ${hunkIdx + 1} (${rel}) to "${pick.label}"`);
 				}
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to assign: ${errMsg(e)}`);
+				void showGitError(`Failed to assign: ${errMsg(e)}`);
 			}
 		}),
 	);

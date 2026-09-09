@@ -72,7 +72,7 @@ describe('truncateNames', () => {
 
 	it('超过上限时截断并标注剩余数量', () => {
 		const names = Array.from({ length: 10 }, (_, i) => `b${i}`);
-		expect(truncateNames(names)).toBe('b0, b1, b2, b3, b4, b5, b6, b7 …还有 2 个');
+		expect(truncateNames(names)).toBe('b0, b1, b2, b3, b4, b5, b6, b7 … and 2 more');
 	});
 });
 
@@ -106,31 +106,34 @@ describe('diffPrunedRefs', () => {
 
 describe('formatBranchDeleteConfirm', () => {
 	it('单个已合并 → 安全删除文案', () => {
-		expect(formatBranchDeleteConfirm(['feat'], [])).toEqual({ detail: '分支「feat」已合并，可安全删除。', confirmLabel: '删除' });
+		expect(formatBranchDeleteConfirm(['feat'], [])).toEqual({
+			detail: 'Branch "feat" is fully merged and safe to delete.',
+			confirmLabel: 'Delete',
+		});
 	});
 
 	it('单个未合并 → 强制删除文案', () => {
 		const r = formatBranchDeleteConfirm([], ['feat']);
-		expect(r.confirmLabel).toBe('强制删除');
-		expect(r.detail).toContain('未合并');
+		expect(r.confirmLabel).toBe('Force Delete');
+		expect(r.detail).toContain('NOT merged');
 	});
 
 	it('多个全已合并 → 删除', () => {
 		const r = formatBranchDeleteConfirm(['a', 'b'], []);
-		expect(r.confirmLabel).toBe('删除');
-		expect(r.detail).toContain('将删除 2 个已合并');
+		expect(r.confirmLabel).toBe('Delete');
+		expect(r.detail).toContain('Delete 2 merged local branch');
 	});
 
 	it('多个全未合并 → 强制删除并警示丢失提交', () => {
 		const r = formatBranchDeleteConfirm([], ['a', 'b']);
-		expect(r.confirmLabel).toBe('强制删除');
-		expect(r.detail).toContain('丢失');
+		expect(r.confirmLabel).toBe('Force Delete');
+		expect(r.detail).toContain('lost');
 	});
 
 	it('混合 → 全部删除并分栏诚实呈现', () => {
 		const r = formatBranchDeleteConfirm(['a'], ['b']);
-		expect(r.confirmLabel).toBe('全部删除');
-		expect(r.detail).toContain('已合并');
-		expect(r.detail).toContain('未合并');
+		expect(r.confirmLabel).toBe('Delete All');
+		expect(r.detail).toContain('Merged');
+		expect(r.detail).toContain('Unmerged');
 	});
 });
