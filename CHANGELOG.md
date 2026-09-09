@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Log 提交详情由悬停浮层改为右侧常驻面板**：点击 Graph 提交行即在图右侧于 webview 内水平分栏打开详情面板（上半 **Changed Files**——List/Tree 切换、点击打开 Diff；下半**提交信息**——作者/时间、HEAD/分支/远程/标签引用分组、完整消息、提交者（异于作者时）、变更统计、完整 SHA、Open on GitHub），深浅主题自适应。面板可见性 ⟺ 选中态：`×` 或 `Esc` 取消选中即收起，刷新 / webview 重载按仓库记忆恢复选中与面板；`log/selectCommit` 一次并行触达文件 + 详情两路数据（沿用切库竞态守卫，迟到 / 失败回包按 `forHash` 丢弃或显式「Details unavailable」占位，见 [`src/shared/protocol.ts`](./src/shared/protocol.ts)）。原 `#commit-tip` 悬停浮层与 `i` 快捷键整体移除，行悬停不再弹层；底部 Changed Files 区随之并入面板上半区。完整叙述见 [Log 提交详情面板](./docs/features/log-commit-detail-panel.md)。
+
+### Removed
+
+- **Graph 悬停浮层专用消息与死类型**：移除 `log/showCommitDetail`（webview → host，随浮层消亡）与编辑器区 Commit 详情面板实验遗留、全仓零引用的 `CommitDetailHostToWebviewMessage` / `CommitDetailWebviewToHostMessage` 协议类型（[`src/shared/protocol.ts`](./src/shared/protocol.ts)）。
+
+### Docs
+
+- 新增 [Log 提交详情面板](./docs/features/log-commit-detail-panel.md)（布局分栏 / 交互数据流 Mermaid、边缘 Case、`forHash` 守卫语义）；移除被替代的 `docs/features/log-commit-tooltip.md`，同步更新 [知识索引](./docs/.agents/knowledge-map.md)、[文档中心](./docs/README.md) 与 [变更文件目录树](./docs/features/file-list-group-by-directory.md) 表述。
+
+
 ## [0.0.16] - 2026-09-01 — 多根工作区仓库切换 · 分支分组树 · Agentic Git 预置 · 面板布局与 Diff 修复
 
 自 v0.0.14 以来的全量积累（承载 0.0.15 版本号预置——该版本号已就位但未单独发布，本版一并发布）。核心新特性：多根工作区多仓库切换、Branches 按 `/` 前缀分组树、Agentic Git 偏好配置与 Claude Code 配置预置（M5 前置铺垫）、Diff 缺失端修复与面板默认布局调整；工程侧升级 pnpm 12 与一批开发依赖。完整用户视角叙述见 [Release Note v0.0.16](./docs/releases/v0.0.16.md)。

@@ -23,7 +23,7 @@ flowchart LR
 
 ## 两视图差异
 
-| | Commit 视图 | Log 视图（详情面板） |
+| | Commit 视图 | Log 视图（右侧详情面板上半区） |
 |---|---|---|
 | 数据源 | 活动 Changelist 的 `CommitFileItem[]` | 选中提交 `diff-tree` 的 `LogCommitFileItem[]` |
 | 建树路径 | 条目 `path`（仓库相对） | `CommitFileChange.path`（干净新路径，重命名归位到新目录） |
