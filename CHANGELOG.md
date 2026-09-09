@@ -8,7 +8,7 @@
 
 ### Changed
 
-- **Log 提交详情由悬停浮层改为右侧常驻面板**：点击 Graph 提交行即在图右侧于 webview 内水平分栏打开详情面板（上半 **Changed Files**——List/Tree 切换、点击打开 Diff；下半**提交信息**——作者/时间、HEAD/分支/远程/标签引用分组、完整消息、提交者（异于作者时）、变更统计、完整 SHA、Open on GitHub），深浅主题自适应。面板可见性 ⟺ 选中态：`×` 或 `Esc` 取消选中即收起，刷新 / webview 重载按仓库记忆恢复选中与面板；`log/selectCommit` 一次并行触达文件 + 详情两路数据（沿用切库竞态守卫，迟到 / 失败回包按 `forHash` 丢弃或显式「Details unavailable」占位，见 [`src/shared/protocol.ts`](./src/shared/protocol.ts)）。原 `#commit-tip` 悬停浮层与 `i` 快捷键整体移除，行悬停不再弹层；底部 Changed Files 区随之并入面板上半区。完整叙述见 [Log 提交详情面板](./docs/features/log-commit-detail-panel.md)。
+- **Log 提交详情由悬停浮层改为右侧常驻面板**：点击 Graph 提交行即在图右侧于 webview 内水平分栏打开详情面板（上半 **Changed Files**——List/Tree 切换、点击打开 Diff；下半**提交信息**——作者/时间、HEAD/分支/远程/标签引用分组、完整消息、提交者（异于作者时）、变更统计、完整 SHA、Open on GitHub），深浅主题自适应。面板可见性 ⟺ 选中态：`×` 或 `Esc` 取消选中即收起，刷新 / webview 重载按仓库记忆恢复选中与面板；`log/selectCommit` 一次并行触达文件 + 详情两路数据（沿用切库竞态守卫，迟到 / 失败回包按 `forHash` 丢弃或显式「Details unavailable」占位，见 [`src/shared/protocol.ts`](./src/shared/protocol.ts)）。原 `#commit-tip` 悬停浮层与 `i` 快捷键整体移除，行悬停不再弹层；底部 Changed Files 区随之并入面板上半区。窄视图（`#main` < 560px）自动退化为上下堆叠（面板 45%、图区保 55%），避免面板 280px 下限把提交图挤成零宽；面板收起守卫同时校验选中态与可见性，切到无记忆选中的仓库不残留上一仓库的面板内容。完整叙述见 [Log 提交详情面板](./docs/features/log-commit-detail-panel.md)。
 
 ### Removed
 

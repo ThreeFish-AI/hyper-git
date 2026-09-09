@@ -542,6 +542,9 @@ button.repo:focus-visible { outline: 1px solid var(--vscode-focusBorder); outlin
 #main { flex: 1 1 auto; display: flex; min-height: 0; }
 #commit-panel { display: none; flex: 0 0 42%; min-width: 280px; max-width: 65%; flex-direction: column; overflow: hidden; border-left: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.25)); }
 #commit-panel.show { display: flex; }
+/* 分栏降级：#main 窄于 560px 时上下堆叠——面板 280px 硬底不可收缩，横向并排会把图区挤成零宽。 */
+#main.stacked { flex-direction: column; }
+#main.stacked #commit-panel { flex: 0 0 45%; min-width: 0; max-width: none; border-left: none; border-top: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.25)); }
 #details { flex: 1 1 55%; min-height: 0; overflow-y: auto; border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.15)); }
 #commit-meta { flex: 1 1 45%; min-height: 0; overflow-y: auto; }
 .panel-loading { padding: 10px 12px; font-size: 12px; color: var(--vscode-descriptionForeground); }
@@ -728,6 +731,7 @@ const detailsTitleEl = document.getElementById('details-title');
 const detailsCloseEl = document.getElementById('details-close');
 const dmodeFlatEl = document.getElementById('dmode-flat');
 const dmodeTreeEl = document.getElementById('dmode-tree');
+const mainEl = document.getElementById('main');
 const commitPanelEl = document.getElementById('commit-panel');
 const commitMetaEl = document.getElementById('commit-meta');
 let curDetailHash = null, curDetailFiles = [], curDetailTree = [];
@@ -1068,7 +1072,8 @@ function requestPanelData(hash) {
 }
 /** 取消选中漏斗（× / Escape / 选中行消失于图）：收面板清内容，焦点回落图区保键盘导航。 */
 function deselectRow() {
-  if (selectedHash === null) return;
+  // 面板可见性纳入守卫：graphData 解析出「无选中」时（如切到无记忆选中的仓库）仍需收起残留面板。
+  if (selectedHash === null && !commitPanelEl.classList.contains('show')) return;
   selectedHash = null;
   persist();
   renderedFirst = -1; scheduleRender();
@@ -1367,6 +1372,10 @@ function updateWidthClass() {
 }
 new ResizeObserver(updateWidthClass).observe(viewport);
 updateWidthClass();
+// 分栏降级观察器：观察 #main（宽度不随面板开合变化）而非 #viewport，杜绝「开面板→变窄→堆叠→变宽」反馈环。
+function updateLayoutClass() { mainEl.classList.toggle('stacked', mainEl.clientWidth < 560); }
+new ResizeObserver(updateLayoutClass).observe(mainEl);
+updateLayoutClass();
 
 vscode.postMessage({ type: 'log/requestState' });
 </script>

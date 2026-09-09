@@ -10,9 +10,9 @@ VS Code 的 panel 视图容器（`hyper-git`）内多视图只能**垂直堆叠*
 flowchart TB
   subgraph body["body（纵向 flex）"]
     T[".toolbar（全宽：scope 切换 / 仓库 / CI 登录）"]
-    subgraph main["#main（横向 flex）"]
+    subgraph main["#main（≥560px：横向 flex / &lt;560px：.stacked 纵向）"]
       VP["#viewport<br/>提交图（flex:1，虚拟滚动）"]
-      subgraph panel["#commit-panel（flex:0 0 42%，280px–65% 钳制）"]
+      subgraph panel["#commit-panel<br/>横向 flex:0 0 42%（min 280px）<br/>纵向 flex:0 0 45%（图区保 55%）"]
         D["#details（55%，独立滚动）<br/>Changed Files + List/Tree + ×"]
         M["#commit-meta（45%，独立滚动）<br/>作者/引用分组/消息/统计/SHA"]
       end
@@ -28,8 +28,8 @@ flowchart TB
   style M fill:#238636,color:#fff
 ```
 
-- **可见性不变式**：`#commit-panel.show` ⟺ `selectedHash !== null`。所有路径经三个漏斗收敛——`requestPanelData(hash)`（开面板 + Loading）、`deselectRow()`（收面板 + 清选中 + 焦点回落图区）、`log/graphData` 的恢复/消失分支。
-- **窄视口自适应**：面板开合改变 `#viewport` 宽度，既有 `ResizeObserver` 自动切 `.narrow`（隐 author/date、留 CI 列）。
+- **可见性不变式**：`#commit-panel.show` ⟺ `selectedHash !== null`。所有路径经三个漏斗收敛——`requestPanelData(hash)`（开面板 + Loading）、`deselectRow()`（收面板 + 清选中 + 焦点回落图区）、`log/graphData` 的恢复/消失分支。`deselectRow()` 的幂等守卫**同时校验选中态与面板可见性**：`graphData` 解析出「无选中」（如切到无记忆选中的仓库）时 `selectedHash` 本已为 `null`，仅按选中态早退会把上一仓库的面板连内容一起留在原地。
+- **窄视口降级**：面板 `min-width: 280px` 不可收缩，横向并排会把 `#viewport` 挤至零宽（`flex: 1` + `min-width: 0`）。故 `#main` 宽度 < 560px 时切 `.stacked` 退化为上下堆叠（面板 45%，图区保 55%）——观察 `#main` 而非 `#viewport`，因后者宽度随面板开合变化会形成「开面板→变窄→堆叠→变宽」反馈环。面板开合引起的 `#viewport` 宽度变化仍由既有 `ResizeObserver` 切 `.narrow`（隐 author/date、留 CI 列）。
 
 ## 交互与数据流
 
@@ -69,6 +69,8 @@ flowchart LR
 | CI 图标 | 点击不选行、CI 浮层原样（原互斥代码随浮层一并消失） |
 | 非 GitHub 远程 | 无 Open on GitHub 链接（host 不下发 `githubUrl`） |
 | 键盘 | 方向键/Home/End 移动选中即更新面板；`Enter` 菜单、右键菜单原样；`Esc` 取消选中 |
+| 切到无记忆选中的仓库 | 面板收起并清空（不残留上一仓库的文件列表 / 详情，杜绝旧 hash 误发 `log/openFile`） |
+| 视图窄于 560px | `.stacked` 上下堆叠，图区恒占满宽、不被面板压缩；`≥560px` 恢复左右分栏 |
 
 ## 实现
 
@@ -80,7 +82,20 @@ flowchart LR
 
 `pnpm run compile` + `pnpm run test:unit` 全绿；Extension Development Host（F5）：点击行开面板（Loading → 文件计数 + 详情）、行悬停无浮层、CI 浮层鼠标/键盘均可用、文件点击开 Diff、List/Tree 切换、同 hash 重点击无闪烁、`×`/`Esc` 收起且方向键仍可用、快速连点终态正确、选中态下 commit 后面板保持且 chips 更新、切分支选中消失自动收起、切库/重载恢复、根/merge 占位、窄面板自适应。
 
+分栏与状态机另经**离屏夹具实测**（抽取本文件真实 CSS + webview 脚本、桩掉 `acquireVsCodeApi` 后在浏览器中量测）：
+
+| 视图宽度 | 降级前图区宽 | 降级后 |
+|---|---|---|
+| 1200px | 696px | 左右分栏，图区 696px |
+| 640px | 360px | 左右分栏，图区 360px |
+| 560px | 280px | 左右分栏，图区 280px（阈值边界） |
+| 480px | 200px | `.stacked`，图区 480px |
+| 320px | 40px | `.stacked`，图区 320px |
+| 280px | **0px** | `.stacked`，图区 280px |
+
+状态机六步序列（repo1 选中 → 切 repo2 无记忆选中 → 迟到 `vm=null` 回包 → 切回 repo1 → `×` 取消 → 重复取消）全部命中预期：面板可见性与 `selectedHash` 始终同步，重复 `deselectRow()` 零额外 `postMessage`，横向无溢出（`scrollWidth - clientWidth === 0`）。
+
 ## 展望
 
-- 面板宽度拖拽分隔条（现 42% + 280px–65% 钳制，YAGNI 暂缓）。
+- 面板宽度拖拽分隔条（现横向 42% + 280px 下限、纵向 45%，560px 处自动降级，YAGNI 暂缓）。
 - 详情区随 `host` 防抖合并（方向键连续导航时减少单提交 `git` 调用，现为每停 2 次，毫秒级可接受）。
