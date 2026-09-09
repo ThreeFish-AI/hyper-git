@@ -30,7 +30,6 @@ import { registerMiscCommands } from './adapter/misc-commands';
 import { registerClaudeCommands } from './adapter/claude-commands';
 import { registerRepositorySelectionCommand } from './adapter/repository-selection';
 import { getGitApi } from './adapter/git-api';
-import { FileStatus } from './engine/model';
 import { GitRepositoryService } from './adapter/git-repository-service';
 import { GitHubAuth } from './adapter/ci/github-auth';
 import { GitHubCiService } from './adapter/ci/github-ci-service';
@@ -252,10 +251,12 @@ export async function activate(
 		const n = service.getChangeCount();
 		badgeView.badge = n > 0 ? { value: n, tooltip: `${n} uncommitted change(s)` } : undefined;
 		// 冲突存在性 context key：acceptOurs/acceptTheirs 等命令在 commandPalette 的显隐依据（见 package.json）。
+		// 事实源用 vscode.git 的 mergeChanges——7 种 unmerged 状态只进该数组，index/workingTree 变更永不承载
+		// 冲突（getChanges 的 status 映射因此恒判不出冲突，曾致 context key 恒 false、palette 命令永久隐藏）。
 		void vscode.commands.executeCommand(
 			'setContext',
 			'hyperGit.hasConflicts',
-			service.getChanges().some((c) => c.status === FileStatus.Conflict),
+			(service.repo?.state.mergeChanges.length ?? 0) > 0,
 		);
 	};
 

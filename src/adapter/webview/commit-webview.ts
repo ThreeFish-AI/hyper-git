@@ -304,7 +304,10 @@ let collapsed = new Set();
 let draft = null; // 当前仓库的草稿快照（loadPersistedFor 装载；仅 webview 重建/切仓库时回灌 DOM）
 function loadPersistedFor(repoRoot) {
   persistedRepo = repoRoot;
-  const s = persistedByRepo[repoRoot] || persistedByRepo[''] || {};
+  // '' 条目兜底仅用于旧版 state（v1 平铺 / v2 迁移语义）；v3 起按仓严格隔离——
+  // 无本仓条目即空对象，避免无仓库会话期（repoRoot=''）写入的草稿回灌到其他仓库。
+  const fallback = persistedRaw.v === 3 ? undefined : persistedByRepo[''];
+  const s = persistedByRepo[repoRoot] || fallback || {};
   checked = new Set(s.checked || []);
   mode = s.mode === 'tree' ? 'tree' : 'flat';
   collapsed = new Set(s.collapsed || []);
@@ -653,16 +656,16 @@ window.addEventListener('message', function (e) {
     const repoRoot = p.repoRoot || '';
     // 草稿回灌仅两种时机：webview 重建后首帧、活跃仓库切换（loadPersistedFor 会改写 persistedRepo，先判定）。
     // 必须先于 reconcileChecked/saveState——saveState 从 DOM 取草稿，先回灌才能在后续保存中保住草稿。
+    // 回灌必须无条件同步 DOM（目标仓库无草稿则清空）：否则旧仓库的 message/amend 残留 DOM，
+    // 随后被 saveState 落盘为新仓库草稿（跨仓串扰；amend=true 泄漏会静默改写新仓库 HEAD）。
     const restoreDraft = !draftRestored || repoRoot !== persistedRepo;
     loadPersistedFor(repoRoot);
-    if (restoreDraft && draft) {
-      msgEl.value = draft.message || '';
-      amendEl.checked = Boolean(draft.amend);
-      signoffEl.checked = Boolean(draft.signoff);
-      skipHooksEl.checked = Boolean(draft.skipHooks);
-      if (draft.message) {
-        vscode.postMessage({ type: 'messageChanged', payload: { message: draft.message } });
-      }
+    if (restoreDraft) {
+      msgEl.value = (draft && draft.message) || '';
+      amendEl.checked = Boolean(draft && draft.amend);
+      signoffEl.checked = Boolean(draft && draft.signoff);
+      skipHooksEl.checked = Boolean(draft && draft.skipHooks);
+      vscode.postMessage({ type: 'messageChanged', payload: { message: msgEl.value } });
     }
     draftRestored = true;
     curFiles = p.files || [];
