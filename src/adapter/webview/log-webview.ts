@@ -96,12 +96,28 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 	private view?: vscode.WebviewView;
 	private filter: LogFilter = {};
 	private scope: LogScope = 'all';
-	/** scope 按仓库记忆（内存级，issue #107）：切回仓库恢复其视图范围，host 侧即事实源随 graphData 下发。 */
-	private readonly scopeByRepo = new Map<string, LogScope>();
+	/** 变更文件展示模式（List/Tree，标题栏图标切换）：host 为事实源，随 graphData / log/detailMode 下发。 */
+	private detailMode: 'flat' | 'tree' = 'flat';
 	private refreshTimer: ReturnType<typeof setTimeout> | undefined;
 	private readonly disposables: vscode.Disposable[] = [];
 
-	constructor(private readonly service: GitRepositoryService, private readonly ciService: GitHubCiService) {
+	/** scope / dmode 按仓库持久化 key（issue #107 同 branchesGrouping 范式：workspaceState 换 key 重绑）。 */
+	private static scopeKey(root: string): string {
+		return `hyperGit.log.scope:${root}`;
+	}
+	private static dmodeKey(root: string): string {
+		return `hyperGit.log.dmode:${root}`;
+	}
+	/** context key 同步（标题栏按钮显隐 / 勾选态由 when 子句驱动）。 */
+	private static setCtx(key: string, value: string | boolean): void {
+		void vscode.commands.executeCommand('setContext', key, value);
+	}
+
+	constructor(
+		private readonly service: GitRepositoryService,
+		private readonly ciService: GitHubCiService,
+		private readonly workspaceState: vscode.Memento,
+	) {
 		// 兜底实时刷新：git 状态变化（commit/checkout 等）防抖重拉首页。
 		let t: ReturnType<typeof setTimeout> | undefined;
 		this.disposables.push(
@@ -110,14 +126,50 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				t = setTimeout(() => this.refresh(), 400);
 			}),
 		);
+		// 激活即恢复当前仓库的 scope/dmode 记忆并同步 context key（标题栏控件先于视图解析渲染）。
+		this.loadRepoScopedPrefs();
 		// 活跃仓库切换（issue #107）：host 级过滤条件是旧仓库语境的产物，跨仓库无意义 → 清空；
-		// scope 恢复该仓库的记忆值（无记忆回退 'all'）；图数据重拉由上方 onDidChange 订阅驱动。
+		// scope/dmode 恢复该仓库的记忆值（无记忆回退 'all'/'flat'）；图数据重拉由上方 onDidChange 订阅驱动。
 		this.disposables.push(
-			service.onDidChangeRepository((e) => {
+			service.onDidChangeRepository(() => {
 				this.filter = {};
-				this.scope = (e.root ? this.scopeByRepo.get(e.root) : undefined) ?? 'all';
+				this.loadRepoScopedPrefs();
 			}),
 		);
+	}
+
+	/** 装载当前仓库的 scope / dmode 偏好（memento → 内存 + context key）。 */
+	private loadRepoScopedPrefs(): void {
+		const root = this.service.repoRoot;
+		this.scope = (root ? this.workspaceState.get<LogScope>(LogWebviewProvider.scopeKey(root)) : undefined) ?? 'all';
+		this.detailMode = (root ? this.workspaceState.get<'flat' | 'tree'>(LogWebviewProvider.dmodeKey(root)) : undefined) ?? 'flat';
+		LogWebviewProvider.setCtx('hyperGit.log.scope', this.scope);
+		LogWebviewProvider.setCtx('hyperGit.log.tree', this.detailMode === 'tree');
+	}
+
+	/** 标题栏 Scope 子菜单选中项（hyperGit.log.scopeAll/Current/Checkpointer 命令入口）。 */
+	setScope(scope: LogScope): void {
+		const root = this.service.repoRoot;
+		if (root) {
+			void this.workspaceState.update(LogWebviewProvider.scopeKey(root), scope);
+		}
+		this.scope = scope;
+		LogWebviewProvider.setCtx('hyperGit.log.scope', scope);
+		this.refresh();
+	}
+
+	/** 标题栏 List/Tree 互斥图标切换（同 Branches 平铺/分组范式）：免整图重拉，定向下发渲染模式。 */
+	setDetailMode(mode: 'flat' | 'tree'): void {
+		if (this.detailMode === mode) {
+			return;
+		}
+		const root = this.service.repoRoot;
+		if (root) {
+			void this.workspaceState.update(LogWebviewProvider.dmodeKey(root), mode);
+		}
+		this.detailMode = mode;
+		LogWebviewProvider.setCtx('hyperGit.log.tree', mode === 'tree');
+		this.post({ type: 'log/detailMode', payload: { mode } });
 	}
 
 	setFilter(filter: LogFilter): void {
@@ -171,7 +223,9 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				void this.loadMore(msg.payload.cursor);
 				break;
 			case 'log/selectCommit':
+				// 选中即开右侧详情面板：变更文件 + 提交详情两路并行取数（webview 按 selectedHash 丢弃过期回包）。
 				void this.sendCommitFiles(msg.payload.hash);
+				void this.showCommitDetail(msg.payload.hash);
 				break;
 			case 'log/openFile':
 				void vscode.commands.executeCommand(
@@ -181,13 +235,6 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 					msg.payload.status,
 					msg.payload.oldPath,
 				);
-				break;
-			case 'log/setScope':
-				this.scope = msg.payload.scope;
-				if (this.service.repoRoot) {
-					this.scopeByRepo.set(this.service.repoRoot, msg.payload.scope);
-				}
-				void this.pushState();
 				break;
 			case 'log/commitAction':
 				if (msg.payload.op === 'menu') {
@@ -200,23 +247,13 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			case 'log/openExternal':
 				void this.ciService.openExternal(msg.payload.url);
 				break;
-			case 'log/ciSignIn':
-				void this.handleCiSignIn();
-				break;
-			case 'log/showCommitDetail':
-				void this.showCommitDetail(msg.payload.hash);
-				break;
-			case 'log/selectRepo':
-				// 复用 postMessage → 原生交互 → executeCommand 通路（同 handleCommitMenu 形态）。
-				void vscode.commands.executeCommand('hyperGit.selectRepository');
-				break;
 		}
 	}
 
-	/** 组装提交详情 VM（基础字段 + 预格式化时间 + 变更统计 + GitHub URL），下发给 webview 浮层渲染。 */
+	/** 组装提交详情 VM（基础字段 + 预格式化时间 + 变更统计 + GitHub URL），下发给 webview 右侧详情面板（#commit-meta）渲染。 */
 	private async showCommitDetail(hash: string): Promise<void> {
 		if (!this.service.repo) {
-			this.post({ type: 'log/commitDetail', payload: { vm: null } });
+			this.post({ type: 'log/commitDetail', payload: { forHash: hash, vm: null } });
 			return;
 		}
 		// 切库竞态守卫（issue #107）：hash 属旧仓库语境，迟到响应不作数（可能取到同名歧义提交）。
@@ -226,12 +263,12 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			const fmt = '%H%x00%s%x00%b%x00%an%x00%ae%x00%aI%x00%cn%x00%cI%x00%P';
 			const raw = await this.service.execGit(['show', '-s', `--format=${fmt}`, hash]);
 			if (this.service.repoRoot !== rootAtStart) {
-				this.post({ type: 'log/commitDetail', payload: { vm: null } });
+				this.post({ type: 'log/commitDetail', payload: { forHash: hash, vm: null } });
 				return;
 			}
 			const f = raw.split('\0');
 			if (f.length < 9 || !f[0]) {
-				this.post({ type: 'log/commitDetail', payload: { vm: null } });
+				this.post({ type: 'log/commitDetail', payload: { forHash: hash, vm: null } });
 				return;
 			}
 			const [fullHash, subject, body, authorName, authorEmail, authorDate, committerName, committerDate, parentsRaw] = f;
@@ -239,7 +276,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				await this.service.execGit(['diff-tree', '--no-commit-id', '--shortstat', '-r', '--root', hash]),
 			);
 			if (this.service.repoRoot !== rootAtStart) {
-				this.post({ type: 'log/commitDetail', payload: { vm: null } });
+				this.post({ type: 'log/commitDetail', payload: { forHash: hash, vm: null } });
 				return;
 			}
 			const remote = this.ciService.getGitHubRemote();
@@ -262,9 +299,9 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				stat,
 				githubUrl: remote ? commitWebUrl(remote, fullHash) : undefined,
 			};
-			this.post({ type: 'log/commitDetail', payload: { vm } });
+			this.post({ type: 'log/commitDetail', payload: { forHash: hash, vm } });
 		} catch {
-			this.post({ type: 'log/commitDetail', payload: { vm: null } });
+			this.post({ type: 'log/commitDetail', payload: { forHash: hash, vm: null } });
 		}
 	}
 
@@ -289,9 +326,14 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			maxLanes: page.maxLanes,
 			hasMore: page.hasMore,
 			scope: this.scope,
+			dmode: this.detailMode,
 			repoRoot: this.service.repoRoot ?? '',
 			multiRepo: this.service.listRepositories().length > 1,
 		};
+		// 标题栏副标题 = 仓库路径（原 webview 工具栏文本上移，省一行竖直空间）；
+		// 多仓库态同步 context key 以显隐「切换仓库」图标按钮。
+		this.view.description = this.service.repoRoot ?? undefined;
+		LogWebviewProvider.setCtx('hyperGit.log.multiRepo', !!state.multiRepo);
 		this.post({ type: 'log/graphData', payload: state });
 		// CI 元信息异步随附（不阻塞建图）：远程为 GitHub 才启用，未授权则提示登录。
 		void this.pushCiMeta();
@@ -309,6 +351,8 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 		} catch {
 			meta = { available: false, needsSignIn: false };
 		}
+		// 登录入口迁至标题栏图标按钮（when: hyperGit.log.ciNeedsSignIn），授权完成即自动隐藏。
+		LogWebviewProvider.setCtx('hyperGit.log.ciNeedsSignIn', meta.needsSignIn);
 		if (this.view) {
 			this.post({ type: 'log/ciMeta', payload: meta });
 		}
@@ -328,12 +372,6 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 			rec[hash] = vm;
 		}
 		this.post({ type: 'log/ciData', payload: { map: rec } });
-	}
-
-	/** 用户点击「登录 GitHub 查看 CI」：走原生授权，完成后刷新 CI 元信息。 */
-	private async handleCiSignIn(): Promise<void> {
-		await this.ciService.signIn();
-		await this.pushCiMeta();
 	}
 
 	private async loadMore(cursor: number): Promise<void> {
@@ -506,17 +544,7 @@ ${getBaseStyles()}
 :root { --hg-row: 24px; --hg-lane: 14px; }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-sideBar-background); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-.toolbar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.25)); }
-.seg { display: inline-flex; border: 1px solid var(--vscode-input-border, transparent); border-radius: 4px; overflow: hidden; }
-.seg button { background: transparent; color: var(--vscode-foreground); border: none; padding: 2px 9px; font-size: 11px; cursor: pointer; opacity: 0.65; transition: background-color .12s ease, opacity .12s ease; }
-.seg button:hover { background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground)); opacity: 0.9; }
-.seg button.active { background: var(--vscode-inputOption-activeBackground, var(--vscode-button-background)); color: var(--vscode-inputOption-activeForeground, var(--vscode-button-foreground)); opacity: 1; }
-.repo { margin-left: auto; font-size: 10px; opacity: 0.55; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 多仓库态：仓库名升级为可点击切换按钮（Git Graph 形态）；单仓库保持纯文本观感。 */
-button.repo { background: transparent; color: var(--vscode-foreground); border: none; padding: 1px 6px; border-radius: 3px; cursor: pointer; }
-button.repo.switchable:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
-button.repo:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
-#viewport { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; outline: none; }
+#viewport { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; position: relative; outline: none; }
 #spacer { position: relative; }
 #rows { position: absolute; left: 0; right: 0; }
 .row { display: flex; align-items: center; height: var(--hg-row); padding-right: 8px; cursor: pointer; white-space: nowrap; }
@@ -539,8 +567,27 @@ button.repo:focus-visible { outline: 1px solid var(--vscode-focusBorder); outlin
 .author { flex: 0 0 auto; font-size: 11px; opacity: 0.7; max-width: 110px; overflow: hidden; text-overflow: ellipsis; padding-left: 8px; }
 .date { flex: 0 0 auto; font-size: 11px; opacity: 0.55; padding-left: 8px; }
 #viewport.narrow .author, #viewport.narrow .date { display: none; }
-#details { flex: 0 0 auto; max-height: 38%; overflow-y: auto; border-top: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.25)); display: none; }
-#details.show { display: block; }
+/* ── 图 + 右侧详情面板水平分栏（panel 容器无法并排子视图 → webview 内自分栏）──
+   工具栏整体上移 VS Code 标题栏（scope 子菜单 / List-Tree 图标 / 仓库切换 / CI 登录），
+   仓库路径由 WebviewView.description 呈现 → 省一整行竖直空间。 */
+#main { flex: 1 1 auto; display: flex; min-height: 0; }
+#commit-panel { display: none; flex: 0 0 42%; min-width: 200px; flex-direction: column; overflow: hidden; }
+#commit-panel.show { display: flex; }
+/* 可拖拽分割线（gutter）：图 ⇄ 面板（横向 col-resize / 堆叠态 row-resize）与面板内 上半区 ⇄ 下半区。
+   宽高比例经拖拽实时更新（flex-basis 内联），松手持久化（按仓库记忆）。 */
+.gutter { flex: 0 0 4px; background: transparent; touch-action: none; }
+#gutter-main { cursor: col-resize; }
+#main:not(.panel-open) > #gutter-main { display: none; }
+#gutter-meta { cursor: row-resize; }
+.gutter:hover, .gutter.dragging { background: var(--vscode-focusBorder, rgba(128,128,128,.4)); }
+.gutter:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+/* 分栏降级：#main 窄于 560px 时上下堆叠——面板 200px 硬底不可收缩，横向并排会把图区挤成零宽。 */
+#main.stacked { flex-direction: column; }
+#main.stacked #commit-panel { min-width: 0; }
+#main.stacked #gutter-main { cursor: row-resize; }
+#details { flex: 0 0 55%; min-height: 0; overflow-y: auto; }
+#commit-meta { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.panel-loading { padding: 10px 12px; font-size: 12px; color: var(--vscode-descriptionForeground); }
 #details .dh { position: sticky; top: 0; display: flex; align-items: center; gap: 6px; background: var(--vscode-sideBar-background); padding: 4px 8px; font-size: 11px; color: var(--vscode-descriptionForeground); border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.15)); }
 #details .dh #details-title { flex: 1 1 auto; }
 .dh-close { flex: 0 0 auto; background: transparent; border: none; color: var(--vscode-descriptionForeground); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; border-radius: var(--hg-radius-control); }
@@ -568,8 +615,6 @@ button.repo:focus-visible { outline: 1px solid var(--vscode-focusBorder); outlin
 @keyframes ci-rot { to { transform: rotate(360deg); } }
 .ci-spin { transform-origin: 50% 50%; animation: ci-rot 1s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .ci-spin { animation: none; } }
-.ci-signin { display: none; background: transparent; border: 1px solid var(--vscode-button-border, var(--vscode-input-border, transparent)); color: var(--vscode-textLink-foreground); font-size: 10px; padding: 1px 6px; border-radius: 3px; cursor: pointer; opacity: 0.85; }
-.ci-signin:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
 /* ── CI Tooltip（自定义浮层，置于 #rows 之外，虚拟滚动重写不销毁）── */
 #ci-tip { position: fixed; z-index: 50; display: none; max-width: 360px; min-width: 220px; max-height: 320px; overflow: hidden; background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background)); color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, rgba(128,128,128,.3))); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.35); font-size: 12px; }
 #ci-tip.show { display: flex; flex-direction: column; }
@@ -588,40 +633,37 @@ button.repo:focus-visible { outline: 1px solid var(--vscode-focusBorder); outlin
 #ci-tip .g-failure { color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground, #f85149)); }
 #ci-tip .g-pending { color: var(--vscode-testing-iconQueued, var(--vscode-editorWarning-foreground, #d29922)); }
 #ci-tip .g-skipped, #ci-tip .g-unknown { color: var(--vscode-descriptionForeground, #8b949e); }
-/* ── 提交详情悬浮卡（cursor-anchored；editorHoverWidget 语义令牌，与 CI 浮层同款视觉语言）── */
-#commit-tip { position: fixed; z-index: 50; display: none; max-width: 480px; min-width: 300px; max-height: 80vh; overflow: hidden; background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background)); color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, rgba(128,128,128,.3))); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.4); font-size: 12px; }
-#commit-tip.show { display: flex; flex-direction: column; }
-#commit-tip .ct-scroll { overflow-y: auto; max-height: 80vh; padding: 12px 14px; }
-#commit-tip .ct-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-#commit-tip .ct-avatar { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; background: var(--vscode-badge-background, rgba(128,128,128,.25)); color: var(--vscode-badge-foreground, var(--vscode-foreground)); display: inline-flex; align-items: center; justify-content: center; }
-#commit-tip .ct-avatar svg { width: 16px; height: 16px; opacity: 0.85; }
-#commit-tip .ct-who { display: flex; flex-direction: column; min-width: 0; }
-#commit-tip .ct-author { font-weight: 600; font-size: 13px; }
-#commit-tip .ct-time { font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 1px; }
-#commit-tip .ct-msg { margin-bottom: 10px; }
-#commit-tip .ct-subj { font-size: 13px; font-weight: 600; line-height: 1.4; word-break: break-word; }
-#commit-tip .ct-body { margin-top: 6px; white-space: pre-wrap; word-break: break-word; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; line-height: 1.5; opacity: 0.9; }
-#commit-tip .ct-refs-wrap { margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
-#commit-tip .ct-sec { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
-#commit-tip .ct-sec .ct-k { flex: 0 0 66px; color: var(--vscode-descriptionForeground); font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
-#commit-tip .ct-sec .ct-v { flex: 1 1 auto; min-width: 0; word-break: break-word; }
-#commit-tip .ct-refs { display: flex; flex-wrap: wrap; gap: 4px; }
-/* 浮层内引用胶囊完整显示（覆盖行内 .chip 的 max-width/省略号截断）：换行不截断，空间由浮层承载。 */
-#commit-tip .chip { max-width: none; }
-#commit-tip .chip .chip-nm { overflow: visible; text-overflow: clip; white-space: normal; word-break: break-all; }
-#commit-tip .ct-dim { color: var(--vscode-descriptionForeground); }
-#commit-tip .ct-stat { display: flex; gap: 12px; padding: 8px 0; border-top: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); border-bottom: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); font-size: 12px; font-variant-numeric: tabular-nums; }
-#commit-tip .ct-stat .files { color: var(--vscode-descriptionForeground); }
-#commit-tip .ct-stat .ins { color: var(--vscode-gitDecoration-addedResourceForeground, #3fb950); }
-#commit-tip .ct-stat .del { color: var(--vscode-gitDecoration-deletedResourceForeground, #f14c4c); }
-#commit-tip .ct-foot { display: flex; align-items: center; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
-#commit-tip .ct-sha { font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; color: var(--vscode-descriptionForeground); word-break: break-all; }
-#commit-tip .ct-gh { color: var(--vscode-textLink-foreground); cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
-#commit-tip .ct-gh:hover { text-decoration: underline; }
-#commit-tip .ct-gh:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; border-radius: 2px; }
-#commit-tip .ct-gh svg { width: 13px; height: 13px; }
+/* ── 提交详情面板下半区（#commit-meta，复用 .ct-* 视觉语言；editorHoverWidget 语义令牌与 CI 浮层同源）── */
+#commit-meta .ct-scroll { padding: 12px 14px; }
+#commit-meta .ct-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+#commit-meta .ct-avatar { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; background: var(--vscode-badge-background, rgba(128,128,128,.25)); color: var(--vscode-badge-foreground, var(--vscode-foreground)); display: inline-flex; align-items: center; justify-content: center; }
+#commit-meta .ct-avatar svg { width: 16px; height: 16px; opacity: 0.85; }
+#commit-meta .ct-who { display: flex; flex-direction: column; min-width: 0; }
+#commit-meta .ct-author { font-weight: 600; font-size: 13px; }
+#commit-meta .ct-time { font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 1px; }
+#commit-meta .ct-msg { margin-bottom: 10px; }
+#commit-meta .ct-subj { font-size: 13px; font-weight: 600; line-height: 1.4; word-break: break-word; }
+#commit-meta .ct-body { margin-top: 6px; white-space: pre-wrap; word-break: break-word; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; line-height: 1.5; opacity: 0.9; }
+#commit-meta .ct-refs-wrap { margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
+#commit-meta .ct-sec { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+#commit-meta .ct-sec .ct-k { flex: 0 0 66px; color: var(--vscode-descriptionForeground); font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
+#commit-meta .ct-sec .ct-v { flex: 1 1 auto; min-width: 0; word-break: break-word; }
+#commit-meta .ct-refs { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 面板内引用胶囊完整显示（覆盖行内 .chip 的 max-width/省略号截断）：换行不截断，空间由面板承载。 */
+#commit-meta .chip { max-width: none; }
+#commit-meta .chip .chip-nm { overflow: visible; text-overflow: clip; white-space: normal; word-break: break-all; }
+#commit-meta .ct-dim { color: var(--vscode-descriptionForeground); }
+#commit-meta .ct-stat { display: flex; gap: 12px; padding: 8px 0; border-top: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); border-bottom: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.2)); font-size: 12px; font-variant-numeric: tabular-nums; }
+#commit-meta .ct-stat .files { color: var(--vscode-descriptionForeground); }
+#commit-meta .ct-stat .ins { color: var(--vscode-gitDecoration-addedResourceForeground, #3fb950); }
+#commit-meta .ct-stat .del { color: var(--vscode-gitDecoration-deletedResourceForeground, #f14c4c); }
+#commit-meta .ct-foot { display: flex; align-items: center; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
+#commit-meta .ct-sha { font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; color: var(--vscode-descriptionForeground); word-break: break-all; }
+#commit-meta .ct-gh { color: var(--vscode-textLink-foreground); cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+#commit-meta .ct-gh:hover { text-decoration: underline; }
+#commit-meta .ct-gh:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; border-radius: 2px; }
+#commit-meta .ct-gh svg { width: 13px; height: 13px; }
 /* ── 变更文件目录树（详情面板 Group By Directory 形态）── */
-#details .dh .seg { flex: 0 0 auto; }
 #details .tree-dir { display: flex; align-items: center; gap: 6px; padding: 2px 10px; font-size: 12px; cursor: pointer; user-select: none; }
 #details .tree-dir:hover { background: var(--vscode-list-hoverBackground); }
 #details .tree-dir .tree-twist { flex: 0 0 12px; text-align: center; font-size: 10px; opacity: 0.8; }
@@ -629,24 +671,21 @@ button.repo:focus-visible { outline: 1px solid var(--vscode-focusBorder); outlin
 </style>
 </head>
 <body>
-<div class="toolbar">
-  <span class="seg" role="group" aria-label="Commit scope">
-    <button id="scope-all" class="active" aria-pressed="true">All</button>
-    <button id="scope-current" aria-pressed="false">Current</button>
-    <button id="scope-checkpointer" aria-pressed="false" title="Show internal checkpoint (auto-snapshot) commits">Checkpoints</button>
-  </span>
-  <button class="repo" id="repo" type="button"></button>
-  <button id="ci-signin" class="ci-signin" title="Sign in to GitHub to view CI status">Sign In to GitHub</button>
+<div id="main">
+  <div id="viewport" tabindex="0" role="tree" aria-label="Commit graph">
+    <div id="spacer"><div id="rows"></div></div>
+    <div id="empty"><div class="empty-icon" aria-hidden="true">⌥</div><div class="empty-title">No Commits</div><div class="empty-hint">No commits match the current scope or filter.</div></div>
+    <div id="error" style="display:none"><div class="empty-title">Failed to Load Commits</div><div class="empty-hint" id="error-msg"></div><button class="hg-btn hg-btn--sm" id="retry-btn" style="margin-top:8px">Retry</button></div>
+    <div id="spinner">Loading…</div>
+  </div>
+  <div class="gutter" id="gutter-main" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize commit panel"></div>
+  <aside id="commit-panel" role="region" aria-label="Commit details">
+    <section id="details" role="group" aria-label="Changed files"><div class="dh" id="details-head"><span id="details-title"></span><button class="dh-close" id="details-close" title="Deselect commit" aria-label="Deselect commit">×</button></div><div id="details-list"></div></section>
+    <div class="gutter" id="gutter-meta" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="Resize changed files section"></div>
+    <section id="commit-meta" role="group" aria-label="Commit information"></section>
+  </aside>
 </div>
-<div id="viewport" tabindex="0" role="tree" aria-label="Commit graph">
-  <div id="spacer"><div id="rows"></div></div>
-  <div id="empty"><div class="empty-icon" aria-hidden="true">⌥</div><div class="empty-title">No Commits</div><div class="empty-hint">No commits match the current scope or filter.</div></div>
-  <div id="error" style="display:none"><div class="empty-title">Failed to Load Commits</div><div class="empty-hint" id="error-msg"></div><button class="hg-btn hg-btn--sm" id="retry-btn" style="margin-top:8px">Retry</button></div>
-  <div id="spinner">Loading…</div>
-</div>
-<div id="details"><div class="dh" id="details-head"><span id="details-title"></span><span class="seg" role="group" aria-label="Changed files view mode"><button id="dmode-flat" class="active" aria-pressed="true" title="Flat list">List</button><button id="dmode-tree" aria-pressed="false" title="Group by directory">Tree</button></span><button class="dh-close" id="details-close" title="Close" aria-label="Close details">×</button></div><div id="details-list"></div></div>
 <div id="ci-tip" role="dialog" aria-label="CI check details"></div>
-<div id="commit-tip" role="tooltip" aria-label="Commit details"></div>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 const LANE_FALLBACK = ${laneFallback};
@@ -667,33 +706,35 @@ const PALETTE = (function () {
 	});
 })();
 const ROW_H = 24, LANE_W = 14, NODE_R = 4, GUTTER = 10, OVERSCAN = 8, LOAD_THRESHOLD = 40;
-/** scope 白名单兜底：仅接受三态，否则回退默认 'all'（兼容未来废弃的持久化值）。 */
-function normalizeScope(v) { return v === 'all' || v === 'current' || v === 'checkpointer' ? v : 'all'; }
-// ── 视图状态按仓库分区（v2，issue #107）：scope/选中/dmode/dcollapsed 记忆跟随仓库，
-// 切换仓库换装载互不串扰；无 v2 时从旧平铺结构一次性升级（旧值归首个见到的仓库，不丢偏好）。──
+// ── 视图状态按仓库分区（v2，issue #107）：选中/目录折叠/分栏比例记忆跟随仓库，切换仓库换装载互不串扰；
+// scope 与 List/Tree 模式已上移标题栏（host workspaceState 为事实源，随 graphData 下发），不再入 webview state；
+// 无 v2 时从旧平铺结构一次性升级（旧值归首个见到的仓库，不丢偏好）。──
 const persistedRaw = vscode.getState() || {};
 let persistedRepo = '';
 let persistedByRepo = {};
 if (persistedRaw.v === 2 && persistedRaw.byRepo) {
   persistedByRepo = persistedRaw.byRepo;
 } else if (persistedRaw.selectedHash || persistedRaw.scope || persistedRaw.dmode || persistedRaw.dcollapsed) {
-  persistedByRepo = { '': { selectedHash: persistedRaw.selectedHash, scope: persistedRaw.scope, dmode: persistedRaw.dmode, dcollapsed: persistedRaw.dcollapsed } };
+  persistedByRepo = { '': { selectedHash: persistedRaw.selectedHash, dcollapsed: persistedRaw.dcollapsed } };
 }
 let selectedHash = null;
-let scope = 'all';
-let detailsMode = 'flat';
+let detailsMode = 'flat'; // host 为事实源（graphData.dmode / log/detailMode 下发），webview 仅渲染。
 let dcollapsed = new Set();
-/** 装载某仓库的分区状态（graphData 到达时调用；host 下发的 scope 为该仓库事实源）。 */
-function loadPersistedFor(repoRoot, hostScope) {
+// 分栏比例（拖拽 gutter 调整，按仓库记忆）：panelPct = 面板占 #main 宽（堆叠态为高）比例；detailPct = 上半区占面板高比例。
+let panelPct = 0.42, detailPct = 0.55;
+function clamp01(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+/** 装载某仓库的分区状态（graphData 到达时调用）。 */
+function loadPersistedFor(repoRoot) {
   persistedRepo = repoRoot;
   const s = persistedByRepo[repoRoot] || persistedByRepo[''] || {};
   selectedHash = s.selectedHash || null;
-  scope = hostScope || normalizeScope(s.scope);
-  detailsMode = s.dmode === 'tree' ? 'tree' : 'flat';
   dcollapsed = new Set(s.dcollapsed || []);
+  panelPct = clamp01(typeof s.panelPct === 'number' ? s.panelPct : 0.42, 0.18, 0.75);
+  detailPct = clamp01(typeof s.detailPct === 'number' ? s.detailPct : 0.55, 0.15, 0.85);
+  applyPanelSizes();
 }
 function persist() {
-  persistedByRepo[persistedRepo] = { selectedHash: selectedHash, scope: scope, dmode: detailsMode, dcollapsed: Array.from(dcollapsed) };
+  persistedByRepo[persistedRepo] = { selectedHash: selectedHash, dcollapsed: Array.from(dcollapsed), panelPct: panelPct, detailPct: detailPct };
   vscode.setState({ v: 2, byRepo: persistedByRepo });
 }
 let model = { rows: [], maxLanes: 0, hasMore: false, repoRoot: '', multiRepo: false };
@@ -709,30 +750,28 @@ let ciReqTimer = null;
 let ciPendingRefreshTimer = null;
 let ciRefreshing = false;
 const ciTipEl = document.getElementById('ci-tip');
-const ciSignInEl = document.getElementById('ci-signin');
 let tipHash = null, tipShowT = null, tipHideT = null, overIcon = false, overTip = false;
 const viewport = document.getElementById('viewport');
 const spacer = document.getElementById('spacer');
 const rowsEl = document.getElementById('rows');
-const repoEl = document.getElementById('repo');
 const emptyEl = document.getElementById('empty');
 const spinnerEl = document.getElementById('spinner');
 const detailsEl = document.getElementById('details');
 const detailsList = document.getElementById('details-list');
 const detailsTitleEl = document.getElementById('details-title');
 const detailsCloseEl = document.getElementById('details-close');
-const dmodeFlatEl = document.getElementById('dmode-flat');
-const dmodeTreeEl = document.getElementById('dmode-tree');
-const commitTipEl = document.getElementById('commit-tip');
-let ctHash = null, ctShowT = null, ctHideT = null; // 悬停详情：当前 hash + 显示/隐藏防抖计时器。
+const mainEl = document.getElementById('main');
+const gutterMainEl = document.getElementById('gutter-main');
+const gutterMetaEl = document.getElementById('gutter-meta');
+const commitPanelEl = document.getElementById('commit-panel');
+const commitMetaEl = document.getElementById('commit-meta');
 let curDetailHash = null, curDetailFiles = [], curDetailTree = [];
+let curMetaVm = null, metaFailHash = null; // 面板下半区：VM 缓存（graphData 刷新重渲引用分组）+ 取数失败 hash（同 hash 重点击允许重试）。
 const errorEl = document.getElementById('error');
 const errorMsgEl = document.getElementById('error-msg');
 const retryBtnEl = document.getElementById('retry-btn');
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-// 仓库根路径 → basename（多仓库态按钮文案；尾分隔符安全）。
-function repoBasename(p) { const parts = String(p).split(/[\\\\/]/).filter(Boolean); return parts.pop() || String(p); }
 // 引用胶囊图标（内联 SVG，仿 codicon git-branch / cloud / tag；fill=currentColor 继承 chip 前景色）。
 // 项目未引入 codicon 字体（localResourceRoots=[]、CSP 无 font-src），故图标一律内联，与 ciGlyph 一致。
 const ICO_BRANCH = '<svg class="chip-ico" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9.5 3.25a2.25 2.25 0 1 1-3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 1 1 9.5 3.25zm-4 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0zm.75 8.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5z"/></svg>';
@@ -862,12 +901,6 @@ function render() {
   spacer.style.height = (total * ROW_H) + 'px';
   emptyEl.style.display = total === 0 ? 'block' : 'none';
   errorEl.style.display = 'none';
-  document.getElementById('scope-all').classList.toggle('active', scope === 'all');
-  document.getElementById('scope-current').classList.toggle('active', scope === 'current');
-  document.getElementById('scope-checkpointer').classList.toggle('active', scope === 'checkpointer');
-  document.getElementById('scope-all').setAttribute('aria-pressed', String(scope === 'all'));
-  document.getElementById('scope-current').setAttribute('aria-pressed', String(scope === 'current'));
-  document.getElementById('scope-checkpointer').setAttribute('aria-pressed', String(scope === 'checkpointer'));
   if (model.hasMore && !fetching && l >= total - LOAD_THRESHOLD) {
     fetching = true; spinnerEl.style.display = 'block';
     vscode.postMessage({ type: 'log/loadMore', payload: { cursor: total } });
@@ -1041,13 +1074,39 @@ function hideTip() {
   tipHash = null;
 }
 function openCiUrl(url) { if (url) vscode.postMessage({ type: 'log/openExternal', payload: { url: url } }); }
-function renderCiMeta() { ciSignInEl.style.display = ciMeta.needsSignIn ? 'inline-block' : 'none'; }
 
 function selectRow(hash) {
+  if (hash === selectedHash && metaFailHash !== hash) return; // 同 hash 重点击不重拉防闪烁；失败态例外放行重试。
   selectedHash = hash;
+  selectedAt = Date.now();
   persist();
   renderedFirst = -1; scheduleRender();
+  requestPanelData(hash);
+}
+/** 面板取数漏斗（不改选中态）：开面板 + Loading 占位 + 发 selectCommit；graphData 恢复选中时复用，绕过同 hash 防抖。 */
+function requestPanelData(hash) {
+  curMetaVm = null; metaFailHash = null;
+  curDetailHash = null; curDetailFiles = []; curDetailTree = []; // 清旧选中残留，Loading 期间 List/Tree 切换不渲染上一提交。
+  commitPanelEl.classList.add('show');
+  mainEl.classList.add('panel-open'); // 主 gutter（图 ⇄ 面板分割线）随面板显隐。
+  detailsTitleEl.textContent = 'Changed Files · ' + hash.slice(0, 7); // 计数待回包补齐。
+  detailsList.innerHTML = '<div class="panel-loading">Loading…</div>';
+  commitMetaEl.innerHTML = '<div class="panel-loading">Loading…</div>';
   vscode.postMessage({ type: 'log/selectCommit', payload: { hash: hash } });
+}
+/** 取消选中漏斗（× / Escape / 选中行消失于图）：收面板清内容，焦点回落图区保键盘导航。 */
+function deselectRow() {
+  // 面板可见性纳入守卫：graphData 解析出「无选中」时（如切到无记忆选中的仓库）仍需收起残留面板。
+  if (selectedHash === null && !commitPanelEl.classList.contains('show')) return;
+  selectedHash = null;
+  persist();
+  renderedFirst = -1; scheduleRender();
+  commitPanelEl.classList.remove('show');
+  mainEl.classList.remove('panel-open');
+  if (commitPanelEl.contains(document.activeElement)) viewport.focus();
+  commitMetaEl.innerHTML = ''; detailsList.innerHTML = ''; detailsTitleEl.textContent = '';
+  curDetailHash = null; curDetailFiles = []; curDetailTree = [];
+  curMetaVm = null; metaFailHash = null;
 }
 
 function indexOfHash(hash) { for (let i = 0; i < model.rows.length; i++) if (model.rows[i].hash === hash) return i; return -1; }
@@ -1065,16 +1124,22 @@ function moveSel(delta) {
   }
 }
 
+let selectedAt = 0; // 选中时刻：双击守卫——dblclick 的第二击落在 300ms 内不视为「再次点击取反」。
 rowsEl.addEventListener('click', function (e) {
   if (e.target.closest('.ci')) return; // 点击 CI 图标不选中提交行
   const r = e.target.closest('.row'); if (!r) return;
-  selectRow(r.getAttribute('data-hash'));
+  const h = r.getAttribute('data-hash');
+  // 再次点击已选中的提交 = 反向操作：收起 ChangeFiles / Commit 详情面板（取数失败态例外，放行重试）。
+  if (h === selectedHash && metaFailHash !== h) {
+    if (Date.now() - selectedAt > 300) deselectRow();
+    return;
+  }
+  selectRow(h);
 });
 rowsEl.addEventListener('mouseover', function (e) {
   const icon = e.target.closest && e.target.closest('.ci');
   if (!icon || icon.classList.contains('ci-empty')) return;
   overIcon = true;
-  hideCommitTip(); // 进入 CI 图标：立即隐藏提交浮层并取消在途，二者互斥。
   scheduleShow(icon.getAttribute('data-ci'), icon);
 });
 rowsEl.addEventListener('mouseout', function (e) {
@@ -1082,10 +1147,6 @@ rowsEl.addEventListener('mouseout', function (e) {
   if (!icon) return;
   overIcon = false;
   scheduleHide();
-  // 离开 CI 图标但仍在同一行内（移回行体）：切回提交详情浮层。
-  const to = e.relatedTarget;
-  const r = to && to.closest && to.closest('.row');
-  if (r && !(to.closest && to.closest('.ci'))) scheduleShowCommit(r.getAttribute('data-hash'));
 });
 rowsEl.addEventListener('keydown', function (e) {
   const icon = e.target.closest && e.target.closest('.ci');
@@ -1111,48 +1172,22 @@ ciTipEl.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') { hideTip(); }
   else if (e.key === 'Enter') { const t = e.target.closest('[data-url]'); if (t) openCiUrl(t.getAttribute('data-url')); }
 });
-ciSignInEl.addEventListener('click', function () { vscode.postMessage({ type: 'log/ciSignIn' }); });
-rowsEl.addEventListener('dblclick', function (e) {
-  // 双击 = 打开提交（选中 + 展开详情），与 VS Code「双击即打开」一致；提交操作菜单保留在右键与 Enter。
-  const r = e.target.closest('.row'); if (!r) return;
-  selectRow(r.getAttribute('data-hash'));
-});
 rowsEl.addEventListener('contextmenu', function (e) {
   const r = e.target.closest('.row'); if (!r) return;
   e.preventDefault();
   vscode.postMessage({ type: 'log/commitAction', payload: { op: 'menu', hash: r.getAttribute('data-hash') } });
 });
-function setScope(next) { if (scope !== next) { scope = next; persist(); vscode.postMessage({ type: 'log/setScope', payload: { scope: next } }); } }
-document.getElementById('scope-all').addEventListener('click', function () { setScope('all'); });
-document.getElementById('scope-current').addEventListener('click', function () { setScope('current'); });
-document.getElementById('scope-checkpointer').addEventListener('click', function () { setScope('checkpointer'); });
-// 仓库名按钮（多仓库态）：点击弹出原生仓库选择（host 复用 hyperGit.selectRepository）。
-repoEl.addEventListener('click', function () {
-  if (!model.multiRepo) { return; }
-  vscode.postMessage({ type: 'log/selectRepo' });
-});
-detailsCloseEl.addEventListener('click', function () { detailsEl.classList.remove('show'); });
+detailsCloseEl.addEventListener('click', function () { deselectRow(); });
 retryBtnEl.addEventListener('click', function () { errorEl.style.display = 'none'; spinnerEl.style.display = 'block'; vscode.postMessage({ type: 'log/retry' }); });
 viewport.addEventListener('scroll', scheduleRender, { passive: true });
-viewport.addEventListener('scroll', function () { if (tipHash) hideTip(); if (ctHash) hideCommitTip(); }, { passive: true });
+viewport.addEventListener('scroll', function () { if (tipHash) hideTip(); }, { passive: true });
 viewport.addEventListener('keydown', function (e) {
   if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-1); }
   else if (e.key === 'Home') { e.preventDefault(); if (model.rows.length) selectRow(model.rows[0].hash); }
   else if (e.key === 'End') { e.preventDefault(); if (model.rows.length) selectRow(model.rows[model.rows.length - 1].hash); }
   else if (e.key === 'Enter') { e.preventDefault(); if (selectedHash) vscode.postMessage({ type: 'log/commitAction', payload: { op: 'menu', hash: selectedHash } }); }
-  else if (e.key === 'i' || e.key === 'I') {
-    // 键盘可达（hover-vs-tap 保险）：对选中提交打开详情浮层；无光标，锚在选中行 rect。
-    e.preventDefault();
-    if (selectedHash) {
-      const el = rowsEl.querySelector('.row.selected');
-      ctHash = selectedHash;
-      vscode.postMessage({ type: 'log/showCommitDetail', payload: { hash: selectedHash } });
-      // 回包后由 message 处理器渲染；此处仅在有选中行时预锚定（光标未知 → 用 rect）。
-      el && (window.__ctKeybRect = el.getBoundingClientRect());
-    }
-  }
-  else if (e.key === 'Escape') { hideCommitTip(); }
+  else if (e.key === 'Escape') { if (tipHash) hideTip(); else deselectRow(); }
 });
 detailsList.addEventListener('click', function (e) {
   const d = e.target.closest('.tree-dir');
@@ -1184,34 +1219,22 @@ function toggleDetailCollapse(p) {
   persist();
   renderDetails(curDetailHash, curDetailFiles, curDetailTree);
 }
-function updateDetailModeButtons() {
-  dmodeFlatEl.classList.toggle('active', detailsMode === 'flat');
-  dmodeTreeEl.classList.toggle('active', detailsMode === 'tree');
-  dmodeFlatEl.setAttribute('aria-pressed', String(detailsMode === 'flat'));
-  dmodeTreeEl.setAttribute('aria-pressed', String(detailsMode === 'tree'));
-}
-function setDetailMode(m) { if (detailsMode === m) return; detailsMode = m; persist(); updateDetailModeButtons(); if (curDetailHash) renderDetails(curDetailHash, curDetailFiles, curDetailTree); }
-dmodeFlatEl.addEventListener('click', function () { setDetailMode('flat'); });
-dmodeTreeEl.addEventListener('click', function () { setDetailMode('tree'); });
 
+/** 渲染面板上半区（Changed Files）；可见性由选中态经 requestPanelData/deselectRow 驱动，此处不再触碰 .show。 */
 function renderDetails(hash, files, tree) {
-  if (!hash) { detailsEl.classList.remove('show'); return; }
   curDetailHash = hash; curDetailFiles = files || []; curDetailTree = tree || [];
-  updateDetailModeButtons();
   detailsTitleEl.textContent = 'Changed Files (' + curDetailFiles.length + ') · ' + hash.slice(0, 7);
-  if (curDetailFiles.length === 0) { detailsList.innerHTML = '<div class="file" style="opacity:.6">No changed files (may be a root or merge commit)</div>'; detailsEl.classList.add('show'); return; }
+  if (curDetailFiles.length === 0) { detailsList.innerHTML = '<div class="file" style="opacity:.6">No changed files (may be a root or merge commit)</div>'; return; }
   pruneDetailCollapsed(curDetailTree);
   const out = [];
   if (detailsMode === 'tree') { for (const n of curDetailTree) renderDetailNode(n, 0, hash, curDetailFiles, out); }
   else { for (const f of curDetailFiles) out.push(detailLeafHtml(hash, f, 0, (f.oldPath ? f.oldPath + ' → ' + f.path : f.path))); }
   detailsList.innerHTML = out.join('');
-  detailsEl.classList.add('show');
 }
 
-// ── 提交详情悬浮卡（cursor-anchored hover tooltip，对齐官方 Source Control Graph 的观感）──
-// webview 是沙箱 iframe，浮层无法溢出到编辑器区像素（这是 VS Code 扩展的硬限制，GitLens 亦然），
-// 故贴近「光标处」呈现：mousemove 跟踪光标 → 悬停稳定 400ms 后请 host 组装富数据 → 回包后渲染并
-// 锚在光标处（边沿自动翻转）。鼠标移到浮层上不消失（hover bridge，方便点 Open on GitHub）。
+// ── 提交详情面板下半区（#commit-meta 常驻渲染，对齐官方 Source Control Graph 的信息密度）──
+// 点击提交行 → selectRow → log/selectCommit（host 并行回 commitFiles + commitDetail）→
+// 回包按 selectedHash/forHash 校验后渲染；面板可见性 ⟺ 选中态（requestPanelData/deselectRow 漏斗）。
 function commitStatHtml(s) {
   const parts = ['<span class="files">' + s.files + (s.files === 1 ? ' file' : ' files') + ' changed</span>'];
   if (s.insertions > 0) parts.push('<span class="ins">' + s.insertions + (s.insertions === 1 ? ' insertion(+)' : ' insertions(+)') + '</span>');
@@ -1235,7 +1258,7 @@ function refsHtml(row) {
   }
   return secs.length ? '<div class="ct-refs-wrap">' + secs.join('') + '</div>' : '';
 }
-function renderCommitTip(vm) {
+function renderCommitMeta(vm) {
   if (!vm) return;
   const tb = [];
   if (vm.authorDateRel) tb.push(esc(vm.authorDateRel));
@@ -1253,7 +1276,7 @@ function renderCommitTip(vm) {
     committerRow = '<div class="ct-sec"><span class="ct-k">Committer</span><span class="ct-v">' + esc(vm.committerName) + (ctb.length ? ' <span class="ct-dim">· ' + ctb.join(' ') + '</span>' : '') + '</span></div>';
   }
   const gh = vm.githubUrl ? '<span class="ct-gh" role="link" tabindex="0" data-url="' + esc(vm.githubUrl) + '">' + ICO_GH + 'Open on GitHub</span>' : '';
-  commitTipEl.innerHTML = '<div class="ct-scroll">'
+  commitMetaEl.innerHTML = '<div class="ct-scroll">'
     + '<div class="ct-head"><span class="ct-avatar">' + ICO_PERSON + '</span><span class="ct-who"><span class="ct-author">' + esc(vm.authorName) + '</span>' + (meta.length ? '<span class="ct-time">' + meta.join(' · ') + '</span>' : '') + '</span></div>'
     + refsHtml(row)
     + '<div class="ct-msg"><div class="ct-subj">' + esc(vm.subject) + '</div>' + (vm.body ? '<div class="ct-body">' + esc(vm.body) + '</div>' : '') + '</div>'
@@ -1262,81 +1285,41 @@ function renderCommitTip(vm) {
     + '<div class="ct-foot"><span class="ct-sha">' + esc(vm.hash) + '</span>' + gh + '</div>'
     + '</div>';
 }
-function showCommitTipNow() {
-  positionAtCursor(commitTipEl);
-  commitTipEl.classList.add('show');
-}
-function hideCommitTip() {
-  clearTimeout(ctShowT); clearTimeout(ctHideT);
-  commitTipEl.classList.remove('show');
-  commitTipEl.style.display = 'none';
-  commitTipEl.innerHTML = '';
-  ctHash = null;
-}
-function scheduleShowCommit(hash) {
-  clearTimeout(ctHideT);
-  if (ctHash === hash && commitTipEl.classList.contains('show')) return;
-  clearTimeout(ctShowT);
-  ctHash = hash; // 标记当前意图 hash；回包校验一致才渲染，过期响应丢弃。
-  ctShowT = setTimeout(function () {
-    vscode.postMessage({ type: 'log/showCommitDetail', payload: { hash: hash } });
-  }, 400);
-}
-function scheduleHideCommit() {
-  clearTimeout(ctShowT);
-  clearTimeout(ctHideT);
-  ctHideT = setTimeout(function () { hideCommitTip(); }, 200);
-}
-rowsEl.addEventListener('mouseover', function (e) {
-  const ci = e.target.closest && e.target.closest('.ci');
-  if (ci && !ci.classList.contains('ci-empty')) { hideCommitTip(); return; } // 进入 CI 图标区：即时隐藏提交浮层并取消在途，二者互斥。
-  const r = e.target.closest && e.target.closest('.row');
-  if (!r) return;
-  scheduleShowCommit(r.getAttribute('data-hash'));
-});
-rowsEl.addEventListener('mouseout', function (e) {
-  const r = e.target.closest && e.target.closest('.row');
-  if (!r) return;
-  const to = e.relatedTarget;
-  if (to && (commitTipEl.contains(to) || r.contains(to))) return; // 行内移动或进入浮层不隐藏。
-  scheduleHideCommit();
-});
-// hover bridge：鼠标移到浮层上时取消隐藏（方便点击 Open on GitHub），离开则隐藏。
-commitTipEl.addEventListener('mouseenter', function () { clearTimeout(ctHideT); });
-commitTipEl.addEventListener('mouseleave', scheduleHideCommit);
-commitTipEl.addEventListener('click', function (e) {
+// 面板内交互链接（Open on GitHub）：点击 / Enter / Space 经 host 校验跳转（anti-SSRF）。
+commitMetaEl.addEventListener('click', function (e) {
   const t = e.target.closest('.ct-gh'); if (!t) return;
   const u = t.getAttribute('data-url');
   if (u) vscode.postMessage({ type: 'log/openExternal', payload: { url: u } });
 });
-commitTipEl.addEventListener('keydown', function (e) {
-  if (e.key === 'Enter' || e.key === ' ') { const t = e.target.closest('.ct-gh'); if (t) { e.preventDefault(); const u = t.getAttribute('data-url'); if (u) vscode.postMessage({ type: 'log/openExternal', payload: { url: u } }); } }
-  if (e.key === 'Escape') { hideCommitTip(); }
+commitMetaEl.addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const t = e.target.closest('.ct-gh'); if (!t) return;
+  e.preventDefault();
+  const u = t.getAttribute('data-url');
+  if (u) vscode.postMessage({ type: 'log/openExternal', payload: { url: u } });
+});
+// 面板级 Escape：取消选中收起面板（阻断冒泡，避免触发 viewport 的 Escape 逻辑重复处理）。
+commitPanelEl.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') { e.stopPropagation(); deselectRow(); }
 });
 
 window.addEventListener('message', function (e) {
   const m = e.data;
   if (m.type === 'log/graphData') {
     model = { rows: m.payload.rows, maxLanes: m.payload.maxLanes, hasMore: m.payload.hasMore, repoRoot: m.payload.repoRoot, multiRepo: !!m.payload.multiRepo };
-    loadPersistedFor(m.payload.repoRoot, m.payload.scope);
-    // 仓库名按钮：多仓库态显示 basename + ▾（Git Graph 形态），单仓库保持完整路径纯文本观感。
-    if (model.multiRepo) {
-      repoEl.textContent = repoBasename(m.payload.repoRoot) + ' ▾';
-      repoEl.title = m.payload.repoRoot + ' — Switch repository';
-      repoEl.setAttribute('aria-label', 'Switch repository: ' + m.payload.repoRoot);
-      repoEl.classList.add('switchable');
-    } else {
-      repoEl.textContent = m.payload.repoRoot; repoEl.title = m.payload.repoRoot;
-      repoEl.removeAttribute('aria-label');
-      repoEl.classList.remove('switchable');
-    }
+    loadPersistedFor(m.payload.repoRoot);
+    detailsMode = m.payload.dmode === 'tree' ? 'tree' : 'flat'; // host 为事实源（标题栏 List/Tree 图标切换）。
     // 保留 ciByHash 稳定缓存（CI 状态以不可变 hash 为键）：图重置只清请求去重集合，
     // 已缓存的提交重绘时立即可见图标，避免「清缓存→重拉→整行重建」的闪烁。
     ciRequested.clear(); ciPending.clear();
     if (ciReqTimer) { clearTimeout(ciReqTimer); ciReqTimer = null; }
     hideTip();
     renderedFirst = -1; renderedLast = -1; viewport.scrollTop = 0; fetching = false; spinnerEl.style.display = 'none';
-    if (!model.rows.some(function (r) { return r.hash === selectedHash; })) selectedHash = null;
+    // 选中态与面板联动：选中行消失 → 收面板；选中在但面板数据未装载（重载/切库恢复）→ 补拉；
+    // 已装载 → 文件不可变不重拉，meta 按新行集重渲（引用 chips 可能已变，如新推分支/标签）。
+    if (!model.rows.some(function (r) { return r.hash === selectedHash; })) deselectRow();
+    else if (curDetailHash !== selectedHash) requestPanelData(selectedHash);
+    else if (curMetaVm && curMetaVm.hash === selectedHash) renderCommitMeta(curMetaVm);
     scheduleRender();
   } else if (m.type === 'log/appendData') {
     model.rows = model.rows.concat(m.payload.rows);
@@ -1344,7 +1327,11 @@ window.addEventListener('message', function (e) {
     model.hasMore = m.payload.hasMore; fetching = false; spinnerEl.style.display = 'none';
     renderedFirst = -1; scheduleRender();
   } else if (m.type === 'log/commitFiles') {
+    if (m.payload.hash !== selectedHash) return; // 过期回包（快速换选/切库）丢弃。
     renderDetails(m.payload.hash, m.payload.files, m.payload.tree);
+  } else if (m.type === 'log/detailMode') {
+    detailsMode = m.payload.mode === 'tree' ? 'tree' : 'flat';
+    if (curDetailHash) renderDetails(curDetailHash, curDetailFiles, curDetailTree);
   } else if (m.type === 'log/busy') {
     spinnerEl.style.display = m.payload.busy ? 'block' : 'none';
   } else if (m.type === 'log/error') {
@@ -1353,7 +1340,6 @@ window.addEventListener('message', function (e) {
     errorEl.style.display = 'block';
   } else if (m.type === 'log/ciMeta') {
     ciMeta = { available: !!m.payload.available, needsSignIn: !!m.payload.needsSignIn, error: m.payload.error || '' };
-    renderCiMeta();
     if (ciMeta.available) ensurePendingRefresh(); else stopPendingRefresh();
     renderedFirst = -1; // 强制重绘可见行（CI 槽位/登录提示出现或消失）
     scheduleRender();
@@ -1371,12 +1357,11 @@ window.addEventListener('message', function (e) {
       });
     }
   } else if (m.type === 'log/commitDetail') {
-    // 提交详情回包：仅当仍是当前意图 hash 才渲染（丢弃过期响应）；光标已知→锚光标，键盘→锚行 rect。
+    // 面板详情回包：forHash ≠ 当前选中即过期（含切库失败的 null 回包），丢弃；失败非静默——占位提示。
+    if (!selectedHash || m.payload.forHash !== selectedHash) return;
     const vm = m.payload.vm;
-    if (!vm || vm.hash !== ctHash) return;
-    renderCommitTip(vm);
-    if (window.__ctKeybRect) { positionAtRect(commitTipEl, window.__ctKeybRect); window.__ctKeybRect = null; }
-    else showCommitTipNow();
+    if (vm) { curMetaVm = vm; metaFailHash = null; renderCommitMeta(vm); }
+    else { curMetaVm = null; metaFailHash = selectedHash; commitMetaEl.innerHTML = '<div class="panel-loading">Details unavailable</div>'; }
   }
 });
 
@@ -1386,6 +1371,84 @@ function updateWidthClass() {
 }
 new ResizeObserver(updateWidthClass).observe(viewport);
 updateWidthClass();
+// 分栏降级观察器：观察 #main（宽度不随面板开合变化）而非 #viewport，杜绝「开面板→变窄→堆叠→变宽」反馈环。
+function updateLayoutClass() {
+  const stacked = mainEl.clientWidth < 560;
+  mainEl.classList.toggle('stacked', stacked);
+  gutterMainEl.setAttribute('aria-orientation', stacked ? 'horizontal' : 'vertical');
+}
+new ResizeObserver(updateLayoutClass).observe(mainEl);
+updateLayoutClass();
+
+// ── 分栏比例应用与拖拽（Commits 图 / ChangeFiles / Commit 详情 三区两根 gutter）──
+function applyPanelSizes() {
+  commitPanelEl.style.flexBasis = (panelPct * 100).toFixed(2) + '%';
+  detailsEl.style.flexBasis = (detailPct * 100).toFixed(2) + '%';
+}
+/** 横向模式下面板比例钳制：面板 ≥ 200px 且图区 ≥ 280px（分栏降级阈值之外的人为下限）。 */
+function clampPanelPctRow(p) {
+  const w = Math.max(mainEl.clientWidth, 1);
+  return clamp01(p, 200 / w, Math.max(200 / w, (w - 280) / w));
+}
+function adjustPanelPct(delta) {
+  // 键盘微调无 pointer 坐标：以面板实际几何占 #main 的比例反推当前值，再叠加增量。
+  const stacked = mainEl.classList.contains('stacked');
+  const mr = mainEl.getBoundingClientRect(), pr = commitPanelEl.getBoundingClientRect();
+  const cur = stacked ? pr.height / mr.height : pr.width / mr.width;
+  panelPct = stacked ? clamp01(cur + delta, 0.18, 0.75) : clampPanelPctRow(cur + delta);
+  applyPanelSizes(); persist();
+}
+function adjustDetailPct(delta) {
+  const pr = commitPanelEl.getBoundingClientRect();
+  const cur = clamp01((gutterMetaEl.getBoundingClientRect().top - pr.top) / Math.max(pr.height, 1), 0.15, 0.85);
+  detailPct = clamp01(cur + delta, 0.15, 0.85);
+  applyPanelSizes(); persist();
+}
+/** gutter 通用拖拽：pointer capture + 实时改比例 + 松手持久化；dragging 态高亮分隔线。 */
+function draggableGutter(el, onMove) {
+  el.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    try { el.setPointerCapture(e.pointerId); } catch { /* 指针已失效（合成事件/竞态）：退化为无捕获拖拽 */ }
+    el.classList.add('dragging');
+    const move = function (ev) { onMove(ev); applyPanelSizes(); };
+    const done = function (ev) {
+      try { el.releasePointerCapture(ev.pointerId); } catch { /* 未持有捕获（指针已释放） */ }
+      el.classList.remove('dragging');
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', done);
+      el.removeEventListener('pointercancel', done);
+      applyPanelSizes(); persist();
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', done);
+    el.addEventListener('pointercancel', done);
+  });
+}
+draggableGutter(gutterMainEl, function (ev) {
+  const r = mainEl.getBoundingClientRect();
+  if (mainEl.classList.contains('stacked')) panelPct = clamp01((r.bottom - ev.clientY) / r.height, 0.18, 0.75);
+  else panelPct = clampPanelPctRow((r.right - ev.clientX) / r.width);
+});
+draggableGutter(gutterMetaEl, function (ev) {
+  const r = commitPanelEl.getBoundingClientRect();
+  detailPct = clamp01((ev.clientY - r.top) / Math.max(r.height, 1), 0.15, 0.85);
+});
+// 键盘可达：方向键 ±2%（横向 Left/Right 调面板、纵向 Up/Down；meta gutter 固定 Up/Down）。
+gutterMainEl.addEventListener('keydown', function (e) {
+  const stacked = mainEl.classList.contains('stacked');
+  const dec = stacked ? 'ArrowUp' : 'ArrowLeft', inc = stacked ? 'ArrowDown' : 'ArrowRight';
+  if (e.key === dec) { e.preventDefault(); adjustPanelPct(-0.02); }
+  else if (e.key === inc) { e.preventDefault(); adjustPanelPct(0.02); }
+  else if (e.key === 'Home') { e.preventDefault(); panelPct = stacked ? 0.18 : clampPanelPctRow(0.18); applyPanelSizes(); persist(); }
+  else if (e.key === 'End') { e.preventDefault(); panelPct = 0.75; applyPanelSizes(); persist(); }
+});
+gutterMetaEl.addEventListener('keydown', function (e) {
+  if (e.key === 'ArrowUp') { e.preventDefault(); adjustDetailPct(-0.02); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); adjustDetailPct(0.02); }
+  else if (e.key === 'Home') { e.preventDefault(); detailPct = 0.15; applyPanelSizes(); persist(); }
+  else if (e.key === 'End') { e.preventDefault(); detailPct = 0.85; applyPanelSizes(); persist(); }
+});
 
 vscode.postMessage({ type: 'log/requestState' });
 </script>

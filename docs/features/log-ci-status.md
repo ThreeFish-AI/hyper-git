@@ -34,8 +34,8 @@ flowchart LR
 
 - 复用 **VS Code 内置 GitHub 认证**（`vscode.authentication`），凭证由编辑器托管，**绝不经过 chat / 日志 / webview**。
 - 范围 `repo`：覆盖私有仓库的 Checks（Actions）+ Commit Status 读取（`repo:status` 不覆盖 Checks API）。
-- **静默优先**：加载时 `getSession({createIfNone:false})` 仅复用已有会话，**绝不自动弹窗**；仅当用户点击工具栏「登录 GitHub」
-  按钮时才以 `{createIfNone:true}` 触发原生授权 UI。未登录 → 显示登录提示、不渲染图标、不发请求。
+- **静默优先**：加载时 `getSession({createIfNone:false})` 仅复用已有会话，**绝不自动弹窗**；仅当用户点击 Graph 标题栏「登录 GitHub」
+  图标按钮（`$(sign-in)`，`when: hyperGit.log.ciNeedsSignIn`，授权完成自动隐藏）时才以 `{createIfNone:true}` 触发原生授权 UI。未登录 → 仅显该按钮、不渲染图标、不发请求。
 - **反 SSRF**：Tooltip 的跳转链接（`detailsUrl` / `targetUrl`，属「观察内容」）由 host 校验 `https` 且主机 ∈ {仓库主机、`*.github.com`} 后才 `openExternal`。
 
 ## 限流与性能

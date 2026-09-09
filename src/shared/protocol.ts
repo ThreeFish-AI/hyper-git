@@ -143,7 +143,7 @@ export interface CommitDetailStat {
 }
 
 /**
- * Commit 详情面板视图模型（编辑器区 WebviewPanel 显示，对齐官方 Source Control Graph）。
+ * Commit 详情面板视图模型（Graph webview 右侧详情面板下半区渲染，对齐官方 Source Control Graph）。
  * host 侧一次备齐：基础字段（git show）+ 相对/绝对时间（预格式化）+ 变更统计 + 可选 GitHub 提交页 URL。
  */
 export interface CommitDetailVM {
@@ -177,8 +177,10 @@ export interface LogGraphState {
 	readonly maxLanes: number;
 	readonly hasMore: boolean;
 	readonly scope: LogScope;
+	/** 变更文件展示模式（host 为事实源，标题栏 List/Tree 图标切换；webview 据此渲染）。 */
+	readonly dmode: 'flat' | 'tree';
 	readonly repoRoot: string;
-	/** 工作区含多个 git 仓库时为 true：仓库名按钮呈现可切换态（缺省视为 false，向后兼容）。 */
+	/** 工作区含多个 git 仓库时为 true：标题栏「切换仓库」图标按钮显隐（缺省视为 false，向后兼容）。 */
 	readonly multiRepo?: boolean;
 }
 
@@ -199,7 +201,7 @@ export type LogCommitOp =
 export interface CiMetaVM {
 	/** 远程为 GitHub 且功能启用时为 true；否则整列隐藏、不发起任何请求。 */
 	readonly available: boolean;
-	/** 远程是 GitHub 但尚未授权：webview 显示「登录 GitHub 查看 CI」提示。 */
+	/** 远程是 GitHub 但尚未授权：标题栏显示「登录 GitHub」图标按钮（授权完成自动隐藏）。 */
 	readonly needsSignIn: boolean;
 	/** 软错误（限流/网络）摘要，供 webview 给出一次性提示；为空表示正常。 */
 	readonly error?: string;
@@ -225,7 +227,12 @@ export type LogHostToWebviewMessage =
 	| { readonly type: 'log/error'; readonly payload: { readonly message: string } }
 	| { readonly type: 'log/ciMeta'; readonly payload: CiMetaVM }
 	| { readonly type: 'log/ciData'; readonly payload: { readonly map: Readonly<Record<string, CiStatusVM>> } }
-	| { readonly type: 'log/commitDetail'; readonly payload: { readonly vm: CommitDetailVM | null } };
+	| {
+		/** forHash：请求时的选中 hash。失败回包 vm=null 无 hash 可比对，webview 据此丢弃过期响应。 */
+		readonly type: 'log/commitDetail';
+		readonly payload: { readonly forHash: string; readonly vm: CommitDetailVM | null };
+	}
+	| { readonly type: 'log/detailMode'; readonly payload: { readonly mode: 'flat' | 'tree' } };
 
 /** Webview → Host（Log Graph）。 */
 export type LogWebviewToHostMessage =
@@ -234,21 +241,6 @@ export type LogWebviewToHostMessage =
 	| { readonly type: 'log/loadMore'; readonly payload: { readonly cursor: number } }
 	| { readonly type: 'log/selectCommit'; readonly payload: { readonly hash: string } }
 	| { readonly type: 'log/commitAction'; readonly payload: { readonly op: LogCommitOp; readonly hash: string } }
-	| { readonly type: 'log/setScope'; readonly payload: { readonly scope: LogScope } }
 	| { readonly type: 'log/openFile'; readonly payload: { readonly hash: string; readonly path: string; readonly status: string; readonly oldPath?: string } }
 	| { readonly type: 'log/requestCi'; readonly payload: { readonly hashes: readonly string[] } }
-	| { readonly type: 'log/ciSignIn' }
-	| { readonly type: 'log/openExternal'; readonly payload: { readonly url: string } }
-	/** 悬停提交行 → 请求在右侧编辑器区打开该提交的详情面板。 */
-	| { readonly type: 'log/showCommitDetail'; readonly payload: { readonly hash: string } }
-	/** 工具栏仓库名按钮 → 打开原生仓库选择（host 复用 hyperGit.selectRepository 命令，issue #107）。 */
-	| { readonly type: 'log/selectRepo' };
-
-/** Host → Commit 详情面板（编辑器区 WebviewPanel）。 */
-export type CommitDetailHostToWebviewMessage =
-	/** 详情数据到达（null = 取数失败/坏 hash，面板显示空态）。 */
-	| { readonly type: 'commitDetail/data'; readonly payload: CommitDetailVM | null };
-
-/** Commit 详情面板 → Host。 */
-export type CommitDetailWebviewToHostMessage =
-	| { readonly type: 'commitDetail/openExternal'; readonly payload: { readonly url: string } };
+	| { readonly type: 'log/openExternal'; readonly payload: { readonly url: string } };

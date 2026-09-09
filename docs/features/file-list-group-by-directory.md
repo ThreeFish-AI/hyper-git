@@ -23,19 +23,20 @@ flowchart LR
 
 ## 两视图差异
 
-| | Commit 视图 | Log 视图（详情面板） |
+| | Commit 视图 | Log 视图（右侧详情面板上半区） |
 |---|---|---|
 | 数据源 | 活动 Changelist 的 `CommitFileItem[]` | 选中提交 `diff-tree` 的 `LogCommitFileItem[]` |
 | 建树路径 | 条目 `path`（仓库相对） | `CommitFileChange.path`（干净新路径，重命名归位到新目录） |
 | 复选框 | 有：叶子勾选 + **目录三态**级联；Select All 基于全量文件 | 无（只读浏览） |
 | 叶子单击 | 打开 Diff（`commit/openFile`） | 打开单文件 Diff（`log/openFile`，`data-path` 保持展示串不变） |
-| 偏好持久化 | `setState({mode, collapsed, checked})` | `setState({dmode, dcollapsed, ...})` |
+| 偏好持久化 | `setState({mode, collapsed, checked})` | host `workspaceState`（`hyperGit.log.dmode:<repo>`）+ webview `dcollapsed` 按仓库记忆 |
+| 切换控件 | webview 内 List/Tree 段控 | Graph 标题栏 `$(list-tree)`/`$(list-flat)` 互斥图标（同 Branches 分组切换范式） |
 
 ## 实现
 
 - 引擎：[`engine/tree/file-tree.ts`](../../src/engine/tree/file-tree.ts)（+ [`tests/unit/file-tree.test.ts`](../../tests/unit/file-tree.test.ts)，15 用例）。
 - 协议：[`shared/protocol.ts`](../../src/shared/protocol.ts)（`FileTreeNode`；`CommitViewState.tree`；`log/commitFiles` payload `tree`）。
-- 渲染：[`commit-webview.ts`](../../src/adapter/webview/commit-webview.ts)（List/Tree 段控、`renderFlat`/`renderTree`、`makeLeafRow`、目录三态 `updateDirStates`）、[`log-webview.ts`](../../src/adapter/webview/log-webview.ts)（`renderDetails` 分派、`renderDetailNode`）。
+- 渲染：[`commit-webview.ts`](../../src/adapter/webview/commit-webview.ts)（List/Tree 段控、`renderFlat`/`renderTree`、`makeLeafRow`、目录三态 `updateDirStates`）、[`log-webview.ts`](../../src/adapter/webview/log-webview.ts)（`renderDetails` 分派、`renderDetailNode`；Log 侧切换控件为 Graph 标题栏 `hyperGit.log.detailTree/detailFlat` 命令图标，模式经 `log/detailMode` 定向下发免整图重拉）。
 
 ## 验证
 

@@ -88,7 +88,7 @@ export async function activate(
 		conflict: new NullConflictResolver(),
 	});
 	const commitView = new CommitWebviewProvider(service, registry, commit);
-	const logTree = new LogWebviewProvider(service, ciService);
+	const logTree = new LogWebviewProvider(service, ciService, context.workspaceState);
 	const branchesTree = new BranchesTreeProvider(
 		service,
 		favorites,
@@ -185,6 +185,12 @@ export async function activate(
 		vscode.commands.registerCommand('hyperGit.commit', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.commitAndPush', focusCommitView),
 		vscode.commands.registerCommand('hyperGit.ci.signIn', () => ciService.signIn()),
+		// Graph 标题栏视图级控件（原 webview 工具栏上移）：Scope 下拉子菜单 + Changed Files List/Tree 互斥图标。
+		vscode.commands.registerCommand('hyperGit.log.scopeAll', () => logTree.setScope('all')),
+		vscode.commands.registerCommand('hyperGit.log.scopeCurrent', () => logTree.setScope('current')),
+		vscode.commands.registerCommand('hyperGit.log.scopeCheckpointer', () => logTree.setScope('checkpointer')),
+		vscode.commands.registerCommand('hyperGit.log.detailTree', () => logTree.setDetailMode('tree')),
+		vscode.commands.registerCommand('hyperGit.log.detailFlat', () => logTree.setDetailMode('flat')),
 		vscode.commands.registerCommand('hyperGit.showConsole', () => showGitConsole()),
 		vscode.commands.registerCommand('hyperGit.startRebase', () => RebaseWebview.open(service)),
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, inlineLens),

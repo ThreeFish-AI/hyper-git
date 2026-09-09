@@ -183,6 +183,33 @@
 				"icon": "$(refresh)"
 			},
 			{
+				"command": "hyperGit.log.scopeAll",
+				"title": "All Commits",
+				"category": "Hyper Git"
+			},
+			{
+				"command": "hyperGit.log.scopeCurrent",
+				"title": "Current Branch",
+				"category": "Hyper Git"
+			},
+			{
+				"command": "hyperGit.log.scopeCheckpointer",
+				"title": "Checkpoints",
+				"category": "Hyper Git"
+			},
+			{
+				"command": "hyperGit.log.detailTree",
+				"title": "Group Changed Files by Directory",
+				"category": "Hyper Git",
+				"icon": "$(list-tree)"
+			},
+			{
+				"command": "hyperGit.log.detailFlat",
+				"title": "Show Changed Files as Flat List",
+				"category": "Hyper Git",
+				"icon": "$(list-flat)"
+			},
+			{
 				"command": "hyperGit.selectRepository",
 				"title": "Select Repository…",
 				"category": "Hyper Git",
@@ -697,7 +724,34 @@
 				"icon": "$(clear-all)"
 			}
 		],
+		"submenus": [
+			{
+				"id": "hyperGit.log.scopeMenu",
+				"label": "Scope",
+				"icon": "$(layers)"
+			}
+		],
 		"menus": {
+			"hyperGit.log.scopeMenu": [
+				{
+					"command": "hyperGit.log.scopeAll",
+					"when": "view == hyperGit.log",
+					"group": "navigation@1",
+					"toggled": "hyperGit.log.scope == 'all'"
+				},
+				{
+					"command": "hyperGit.log.scopeCurrent",
+					"when": "view == hyperGit.log",
+					"group": "navigation@2",
+					"toggled": "hyperGit.log.scope == 'current'"
+				},
+				{
+					"command": "hyperGit.log.scopeCheckpointer",
+					"when": "view == hyperGit.log",
+					"group": "navigation@3",
+					"toggled": "hyperGit.log.scope == 'checkpointer'"
+				}
+			],
 			"view/title": [
 				{
 					"command": "hyperGit.refresh",
@@ -745,9 +799,34 @@
 					"group": "1_sync@6"
 				},
 				{
+					"submenu": "hyperGit.log.scopeMenu",
+					"when": "view == hyperGit.log",
+					"group": "navigation@0.5"
+				},
+				{
+					"command": "hyperGit.log.detailTree",
+					"when": "view == hyperGit.log && !hyperGit.log.tree",
+					"group": "navigation@0.75"
+				},
+				{
+					"command": "hyperGit.log.detailFlat",
+					"when": "view == hyperGit.log && hyperGit.log.tree",
+					"group": "navigation@0.75"
+				},
+				{
 					"command": "hyperGit.refreshLog",
 					"when": "view == hyperGit.log",
 					"group": "navigation@1"
+				},
+				{
+					"command": "hyperGit.ci.signIn",
+					"when": "view == hyperGit.log && hyperGit.log.ciNeedsSignIn",
+					"group": "navigation@1.2"
+				},
+				{
+					"command": "hyperGit.selectRepository",
+					"when": "view == hyperGit.log && hyperGit.log.multiRepo",
+					"group": "navigation@1.5"
 				},
 				{
 					"command": "hyperGit.logFilter",
