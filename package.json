@@ -54,6 +54,56 @@
 		"workspace"
 	],
 	"contributes": {
+		"walkthroughs": [
+			{
+				"id": "hyperGit.getStarted",
+				"title": "Get Started with Hyper Git",
+				"description": "Bring IntelliJ IDEA's Git & Commit workflow into VS Code — changelists, an interactive commit window, a rich graph, shelf, stash, and worktrees.",
+				"steps": [
+					{
+						"id": "panel",
+						"title": "Open the Hyper Git panel",
+						"description": "Find every Hyper Git view in the bottom panel.",
+						"media": {
+							"markdown": "media/walkthrough/panel.md"
+						}
+					},
+					{
+						"id": "commit",
+						"title": "Commit with changelists",
+						"description": "Group changes into changelists and commit them independently, with live Conventional Commits validation.",
+						"media": {
+							"markdown": "media/walkthrough/commit.md"
+						},
+						"primary": true
+					},
+					{
+						"id": "graph",
+						"title": "Explore the commit graph",
+						"description": "Filter the graph, check CI status, and inspect any commit in the details panel.",
+						"media": {
+							"markdown": "media/walkthrough/graph.md"
+						}
+					},
+					{
+						"id": "branches",
+						"title": "Manage branches and tags",
+						"description": "Group, multi-select, and act on refs from one tree.",
+						"media": {
+							"markdown": "media/walkthrough/branches.md"
+						}
+					},
+					{
+						"id": "stash",
+						"title": "Shelf, stash, and worktrees",
+						"description": "Shelve patches per changelist, stash changes, and work on branches in parallel worktrees.",
+						"media": {
+							"markdown": "media/walkthrough/stash.md"
+						}
+					}
+				]
+			}
+		],
 		"viewsContainers": {
 			"panel": [
 				{
@@ -1418,7 +1468,19 @@
 					"scope": "resource"
 				}
 			}
-		}
+		},
+		"keybindings": [
+			{
+				"command": "hyperGit.toggleBlameAnnotation",
+				"key": "alt+b",
+				"when": "editorTextFocus"
+			},
+			{
+				"command": "hyperGit.logFilter",
+				"key": "alt+g",
+				"when": "focusedView == hyperGit.log"
+			}
+		]
 	},
 	"scripts": {
 		"vscode:prepublish": "pnpm run package",
