@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -6,6 +5,7 @@ import type { GitRepositoryService } from '../git-repository-service';
 import { diff3, type MergeHunk } from '../../engine/merge/diff3';
 import { parseConflictState } from '../../engine/git-state/conflict-detector';
 import { getBaseStyles } from './shared-styles';
+import { getNonce } from './nonce';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -53,8 +53,19 @@ export class MergeEditorWebview {
 			vscode.ViewColumn.Active,
 			{ enableScripts: true, retainContextWhenHidden: true },
 		);
+		MergeEditorWebview.attachPanel(service, panel, filePath, hunks, conflicts);
+	}
+
+	/** 面板装配：渲染 HTML + 消息接线（订阅随 panel dispose 释放）。 */
+	private static attachPanel(
+		service: GitRepositoryService,
+		panel: vscode.WebviewPanel,
+		filePath: string,
+		hunks: readonly MergeHunk[],
+		conflicts: number,
+	): void {
 		panel.webview.html = MergeEditorWebview.renderHtml(filePath, hunks, conflicts);
-		panel.webview.onDidReceiveMessage(async (msg) => {
+		const msgSub = panel.webview.onDidReceiveMessage(async (msg) => {
 			if (msg?.type === 'save' && typeof msg.content === 'string') {
 				await MergeEditorWebview.saveResult(service, filePath, msg.content);
 				panel.dispose();
@@ -62,6 +73,61 @@ export class MergeEditorWebview {
 				panel.dispose();
 			}
 		});
+		panel.onDidDispose(() => msgSub.dispose());
+	}
+
+	/**
+	 * 窗口 reload 后的面板恢复：按 state 中的 filePath 重拉三阶段冲突数据重渲染。
+	 * 已编辑未保存的 Result 不随 state 保留（known limitation）；若冲突已在他处解决则直接关闭恢复的面板。
+	 */
+	static registerSerializer(service: GitRepositoryService): vscode.Disposable {
+		return vscode.window.registerWebviewPanelSerializer('hyperGit.mergeEditor', {
+			async deserializeWebviewPanel(panel, state) {
+				const filePath = (state as { filePath?: unknown } | undefined)?.filePath;
+				if (typeof filePath !== 'string' || !service.repo) {
+					panel.webview.html = MergeEditorWebview.renderStaleHtml();
+					return;
+				}
+				try {
+					const [base, ours, theirs] = await Promise.all([
+						service.execGit(['show', `:1:${filePath}`]),
+						service.execGit(['show', `:2:${filePath}`]),
+						service.execGit(['show', `:3:${filePath}`]),
+					]);
+					const hunks = diff3(splitLines(base), splitLines(ours), splitLines(theirs));
+					const conflicts = hunks.filter((h) => h.kind === 'conflict').length;
+					if (conflicts === 0) {
+						// reload 前冲突已被解决：恢复无意义，直接关闭。
+						void vscode.window.showInformationMessage(`"${filePath}" has no unresolved conflicts; the restored merge editor was closed.`);
+						panel.dispose();
+						return;
+					}
+					MergeEditorWebview.attachPanel(service, panel, filePath, hunks, conflicts);
+				} catch {
+					panel.webview.html = MergeEditorWebview.renderStaleHtml();
+				}
+			},
+		});
+	}
+
+	/** 面板过期（无有效 state / 冲突数据已不可读）时的占位页。 */
+	private static renderStaleHtml(): string {
+		return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<style>
+${getBaseStyles()}
+body { margin: 0; padding: 16px 20px; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-editor-background); }
+p { color: var(--vscode-descriptionForeground); }
+</style>
+</head>
+<body>
+<h3>Merge</h3>
+<p>This merge session is no longer available. Close this tab and re-open it from <strong>Resolve Conflicts…</strong> if needed.</p>
+</body>
+</html>`;
 	}
 
 	private static async saveResult(service: GitRepositoryService, filePath: string, content: string): Promise<void> {
@@ -90,7 +156,7 @@ export class MergeEditorWebview {
 	}
 
 	private static renderHtml(filePath: string, hunks: readonly MergeHunk[], conflicts: number): string {
-		const nonce = crypto.randomBytes(16).toString('base64');
+		const nonce = getNonce();
 		// JSON 注入 <script> 内的 JS 字符串上下文：按 JS-string 转义（反斜杠/引号）+ < → < 防 </script> 破出。
 		// 不可用 escapeHtml——其产出 &quot; 在 <script> raw-text 中不被解码，会令 JSON.parse 失败。
 		const dataJson = JSON.stringify(hunks)
@@ -143,6 +209,10 @@ body { margin: 0; padding: 10px 14px; font-family: var(--vscode-font-family); fo
 </div>
 <div id="hunks"></div>
 <script nonce="${nonce}">
+// acquireVsCodeApi 每个 webview 仅可调用一次：顶部获取后全程复用（回调内重复调用会抛异常）。
+var vscode = acquireVsCodeApi();
+// 窗口 reload 后的面板恢复：state 仅存 filePath（host 侧重拉三阶段，编辑中内容不保留）。
+vscode.setState({ filePath: ${JSON.stringify(filePath).replace(/</g, '\\u003c')} });
 var HUNKS = JSON.parse("${dataJson}");
 function lines(pre){ return (pre||[]); }
 function markerText(h){
@@ -243,9 +313,9 @@ document.getElementById('save').onclick = function(){
     if (h.kind === 'stable') { result.push.apply(result, h.content||[]); }
     else { ci += 1; result.push(document.getElementById('result-' + ci).value); }
   });
-  acquireVsCodeApi().postMessage({ type: 'save', content: result.join('\\n') + '\\n' });
+  vscode.postMessage({ type: 'save', content: result.join('\\n') + '\\n' });
 };
-document.getElementById('cancel').onclick = function(){ acquireVsCodeApi().postMessage({ type: 'cancel' }); };
+document.getElementById('cancel').onclick = function(){ vscode.postMessage({ type: 'cancel' }); };
 </script>
 </body>
 </html>`;

@@ -25,7 +25,7 @@ import { InlineCommitCodeLensProvider, registerInlineCommitCommand } from './ada
 import { BlameAnnotationController } from './adapter/editor/blame-annotation';
 import { ShelfService, ShelfTreeProvider, registerShelfCommands } from './adapter/shelf';
 import { RebaseWebview } from './adapter/webview/rebase-webview';
-import { registerMergeCommands } from './adapter/webview/merge-editor';
+import { MergeEditorWebview, registerMergeCommands } from './adapter/webview/merge-editor';
 import { registerMiscCommands } from './adapter/misc-commands';
 import { registerClaudeCommands } from './adapter/claude-commands';
 import { registerRepositorySelectionCommand } from './adapter/repository-selection';
@@ -173,6 +173,9 @@ export async function activate(
 		...registerAdvancedCommands(service, branchesTree),
 		...registerRemoteCommands(service, branchesTree, logTree),
 		...registerMergeCommands(service),
+		// 窗口 reload 后 rebase/merge 面板恢复（retainContextWhenHidden 仅保活不跨 reload，serializer 补齐）。
+		RebaseWebview.registerSerializer(service),
+		MergeEditorWebview.registerSerializer(service),
 		...registerMiscCommands(service, branchesTree, logTree),
 		...registerClaudeCommands(),
 		registerRepositorySelectionCommand(service),
