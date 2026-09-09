@@ -9,11 +9,13 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
  * 编辑器内 Blame 注解（逐行作者 / 日期 / 提交注解）。
  *
  * Toggle：对当前文件执行 `git blame --line-porcelain`，解析每行作者/日期，用行内
- * before 装饰渲染在每行行首（gutter 风格）。再次 toggle 关闭。切换编辑器/文档变更时清理。
+ * before 装饰渲染在每行行首（gutter 风格）。再次 toggle 关闭。
+ * 生命周期：同一文档 split 出的每个可见编辑器都同步挂载/卸载装饰；文档在所有编辑器
+ * 关闭后自动移出注解表；文档编辑（行号失配）与仓库切换时清除对应注解。
  */
 export class BlameAnnotationController implements vscode.Disposable {
 	private readonly decoration: vscode.TextEditorDecorationType;
-	private readonly annotated = new Set<string>(); // 已注解的 document uri
+	private readonly annotations = new Map<string, vscode.DecorationOptions[]>(); // uri → 装饰选项
 	private readonly disposables: vscode.Disposable[] = [];
 
 	constructor(private readonly service: GitRepositoryService) {
@@ -26,8 +28,25 @@ export class BlameAnnotationController implements vscode.Disposable {
 		// 文档变更后清除注解（行号失配）
 		this.disposables.push(
 			vscode.workspace.onDidChangeTextDocument((e) => {
-				if (this.annotated.has(e.document.uri.toString())) {
+				if (this.annotations.has(e.document.uri.toString())) {
 					this.clear(e.document.uri);
+				}
+			}),
+		);
+		// 可见编辑器变化：新 split 出的编辑器补挂装饰；文档全部关闭则移出注解表（防泄漏）。
+		this.disposables.push(
+			vscode.window.onDidChangeVisibleTextEditors((editors) => {
+				const openKeys = new Set(editors.map((e) => e.document.uri.toString()));
+				for (const [key, options] of this.annotations) {
+					if (!openKeys.has(key)) {
+						this.annotations.delete(key);
+						continue;
+					}
+					for (const e of editors) {
+						if (e.document.uri.toString() === key) {
+							e.setDecorations(this.decoration, options);
+						}
+					}
 				}
 			}),
 		);
@@ -43,7 +62,7 @@ export class BlameAnnotationController implements vscode.Disposable {
 			return;
 		}
 		const key = editor.document.uri.toString();
-		if (this.annotated.has(key)) {
+		if (this.annotations.has(key)) {
 			this.clear(editor.document.uri);
 			return;
 		}
@@ -66,6 +85,8 @@ export class BlameAnnotationController implements vscode.Disposable {
 			if (!b) {
 				continue;
 			}
+			// hover 用 MarkdownString.appendText：换行真实生效（纯字符串会把 \n 折叠成空格）且转义作者名/摘要中的 markdown 字符。
+			const hover = new vscode.MarkdownString().appendText(`${b.sha.slice(0, 7)} · ${b.author}`).appendText('\n\n').appendText(b.summary);
 			options.push({
 				range: new vscode.Range(line, 0, line, 0),
 				renderOptions: {
@@ -74,26 +95,40 @@ export class BlameAnnotationController implements vscode.Disposable {
 						fontStyle: 'italic',
 					},
 				},
-				hoverMessage: `${b.sha.slice(0, 7)} · ${b.author}\n${b.summary}`,
+				hoverMessage: hover,
 			});
 		}
-		editor.setDecorations(this.decoration, options);
-		this.annotated.add(key);
+		this.annotations.set(key, options);
+		this.applyToVisibleEditors(editor.document.uri);
+	}
+
+	/** 对展示同一文档的全部可见编辑器（含 split）统一挂载当前注解。 */
+	private applyToVisibleEditors(uri: vscode.Uri): void {
+		const key = uri.toString();
+		const options = this.annotations.get(key) ?? [];
+		for (const e of vscode.window.visibleTextEditors) {
+			if (e.document.uri.toString() === key) {
+				e.setDecorations(this.decoration, options);
+			}
+		}
 	}
 
 	private clear(uri: vscode.Uri): void {
-		const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri.toString());
-		editor?.setDecorations(this.decoration, []);
-		this.annotated.delete(uri.toString());
+		const key = uri.toString();
+		const empty: vscode.DecorationOptions[] = [];
+		for (const e of vscode.window.visibleTextEditors) {
+			if (e.document.uri.toString() === key) {
+				e.setDecorations(this.decoration, empty);
+			}
+		}
+		this.annotations.delete(key);
 	}
 
-	/** 清除全部注解（仓库切换时，annotated 中的 uri 逐个对可见编辑器复位装饰）。 */
+	/** 清除全部注解（仓库切换时，对可见编辑器复位装饰）。 */
 	private clearAll(): void {
-		for (const key of [...this.annotated]) {
-			const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === key);
-			editor?.setDecorations(this.decoration, []);
+		for (const key of [...this.annotations.keys()]) {
+			this.clear(vscode.Uri.parse(key));
 		}
-		this.annotated.clear();
 	}
 
 	dispose(): void {

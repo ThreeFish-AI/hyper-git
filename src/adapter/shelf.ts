@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { showGitError } from './notify';
 import type { GitRepositoryService } from './git-repository-service';
 import { handleGitConflict } from './conflict-ui';
 import { mdTooltip, relativeDate } from './tree/tree-tooltip';
@@ -67,25 +68,33 @@ export class ShelfService {
 	 * 仅 rename（零删除）、目标已存在即跳过（零覆盖）、失败静默可重试（已移入保留，未移入下次续迁）。
 	 * 多仓库历史混仓数据无法事后归因，归属当前活跃仓库（Known Limitation）。
 	 */
-	private migrateLegacyShelves(targetDir: string): void {
+	private async migrateLegacyShelves(targetDir: string): Promise<void> {
 		try {
-			if (fs.existsSync(targetDir)) {
-				return; // 本仓库已迁移/已使用（幂等出口）
-			}
-			if (!fs.existsSync(this.shelvesBase)) {
-				return;
-			}
-			const legacyFiles = fs.readdirSync(this.shelvesBase).filter((f) => f.endsWith('.json'));
+			await fs.promises.access(targetDir);
+			return; // 本仓库已迁移/已使用（幂等出口）
+		} catch {
+			/* 目标目录不存在 → 检查旧版平铺数据 */
+		}
+		try {
+			await fs.promises.access(this.shelvesBase);
+		} catch {
+			return; // 基目录不存在（从未创建过 shelf）：无旧数据可迁，静默退出（ENOENT 非失败，勿污染 Console）
+		}
+		try {
+			const legacyFiles = (await fs.promises.readdir(this.shelvesBase)).filter((f) => f.endsWith('.json'));
 			if (legacyFiles.length === 0) {
 				return;
 			}
-			fs.mkdirSync(targetDir, { recursive: true });
+			await fs.promises.mkdir(targetDir, { recursive: true });
 			for (const f of legacyFiles) {
 				const dest = path.join(targetDir, f);
-				if (fs.existsSync(dest)) {
+				try {
+					await fs.promises.access(dest);
 					continue; // 绝不覆盖
+				} catch {
+					/* 目标不存在 → 迁移 */
 				}
-				fs.renameSync(path.join(this.shelvesBase, f), dest);
+				await fs.promises.rename(path.join(this.shelvesBase, f), dest);
 			}
 			logGit(['shelf:migrateLegacy'], targetDir);
 		} catch (e) {
@@ -107,21 +116,21 @@ export class ShelfService {
 		if (!patch.trim()) {
 			throw new Error('Selected files have no changes (or are untracked)');
 		}
-		this.migrateLegacyShelves(dir);
-		fs.mkdirSync(dir, { recursive: true });
+		await this.migrateLegacyShelves(dir);
+		await fs.promises.mkdir(dir, { recursive: true });
 		const entry: ShelfEntry = { name, paths, timestamp, patch };
-		fs.writeFileSync(path.join(dir, `${sanitize(name)}.json`), JSON.stringify(entry, null, 2));
+		await fs.promises.writeFile(path.join(dir, `${sanitize(name)}.json`), JSON.stringify(entry, null, 2), 'utf8');
 		// 移除工作区改动（变更已保存在 patch）
 		await this.service.execGit(['checkout', '--', ...paths]);
 	}
 
 	async unshelve(name: string, threeWay: boolean): Promise<void> {
-		const entry = this.readEntry(name);
+		const entry = await this.readEntry(name);
 		if (!entry) {
 			throw new Error(`Shelf "${name}" does not exist`);
 		}
 		const tmp = path.join(os.tmpdir(), `hg-unshelve-${Date.now()}.patch`);
-		fs.writeFileSync(tmp, entry.patch);
+		await fs.promises.writeFile(tmp, entry.patch, 'utf8');
 		try {
 			const args = ['apply'];
 			if (threeWay) {
@@ -130,64 +139,64 @@ export class ShelfService {
 			args.push(tmp);
 			await this.service.execGit(args);
 		} finally {
-			try {
-				fs.unlinkSync(tmp);
-			} catch {
+			void fs.promises.unlink(tmp).catch(() => {
 				/* ignore */
-			}
+			});
 		}
 	}
 
 	async unshelveAndDrop(name: string, threeWay: boolean): Promise<void> {
 		await this.unshelve(name, threeWay);
-		this.drop(name);
+		await this.drop(name);
 	}
 
-	drop(name: string): void {
+	async drop(name: string): Promise<void> {
 		const dir = this.currentDir();
 		if (!dir) {
 			return;
 		}
 		const file = path.join(dir, `${sanitize(name)}.json`);
-		if (fs.existsSync(file)) {
-			fs.unlinkSync(file);
+		try {
+			await fs.promises.unlink(file);
+		} catch {
+			/* 不存在/占用：静默（幂等） */
 		}
 	}
 
-	listShelves(): ShelfNode[] {
+	/** 异步枚举（fs.promises）：此前同步 readdir/readFile 阻塞扩展宿主，getChildren 处 UI 请求路径。 */
+	async listShelves(): Promise<ShelfNode[]> {
 		const dir = this.currentDir();
 		if (!dir) {
 			return [];
 		}
-		this.migrateLegacyShelves(dir);
-		if (!fs.existsSync(dir)) {
+		await this.migrateLegacyShelves(dir);
+		let files: string[];
+		try {
+			files = (await fs.promises.readdir(dir)).filter((f) => f.endsWith('.json'));
+		} catch {
 			return [];
 		}
-		return fs
-			.readdirSync(dir)
-			.filter((f) => f.endsWith('.json'))
-			.map((f) => {
+		const nodes = await Promise.all(
+			files.map(async (f) => {
 				try {
-					const entry = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as ShelfEntry;
+					const entry = JSON.parse(await fs.promises.readFile(path.join(dir, f), 'utf8')) as ShelfEntry;
 					return { kind: 'shelf' as const, name: entry.name, paths: entry.paths, timestamp: entry.timestamp };
 				} catch {
 					return null;
 				}
-			})
-			.filter((n): n is ShelfNode => n !== null);
+			}),
+		);
+		return nodes.filter((n): n is ShelfNode => n !== null);
 	}
 
-	private readEntry(name: string): ShelfEntry | null {
+	private async readEntry(name: string): Promise<ShelfEntry | null> {
 		const dir = this.currentDir();
 		if (!dir) {
 			return null;
 		}
 		const file = path.join(dir, `${sanitize(name)}.json`);
-		if (!fs.existsSync(file)) {
-			return null;
-		}
 		try {
-			return JSON.parse(fs.readFileSync(file, 'utf8')) as ShelfEntry;
+			return JSON.parse(await fs.promises.readFile(file, 'utf8')) as ShelfEntry;
 		} catch {
 			return null;
 		}
@@ -205,7 +214,7 @@ export class ShelfTreeProvider implements vscode.TreeDataProvider<ShelfTreeNode>
 		this._onDidChange.fire(undefined);
 	}
 
-	getChildren(element?: ShelfTreeNode): ShelfTreeNode[] {
+	async getChildren(element?: ShelfTreeNode): Promise<ShelfTreeNode[]> {
 		if (!element) {
 			return this.shelfService.listShelves();
 		}
@@ -274,9 +283,11 @@ export function registerShelfCommands(service: GitRepositoryService, shelfServic
 			try {
 				await shelfService.shelve(name.trim(), picks.map((p) => p.label), new Date().toISOString());
 				shelfTree.refresh();
+				// Shelf 视图默认隐藏：创建后聚焦引导定位（reveal 需要 provider 重建的元素实例，focus 更稳）。
+				void vscode.commands.executeCommand('hyperGit.shelf.focus');
 				void vscode.window.showInformationMessage(`Shelved "${name.trim()}" (${picks.length} files)`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to shelve: ${errMsg(e)}`);
+				void showGitError(`Failed to shelve: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -291,7 +302,7 @@ export function registerShelfCommands(service: GitRepositoryService, shelfServic
 				shelfTree.refresh();
 				void vscode.window.showInformationMessage(`Unshelved "${node.name}"`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to unshelve: ${errMsg(e)}`);
+				void showGitError(`Failed to unshelve: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -307,7 +318,7 @@ export function registerShelfCommands(service: GitRepositoryService, shelfServic
 				void vscode.window.showInformationMessage(`Unshelved "${node.name}" (3-way)`);
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Unshelve'))) {
-					void vscode.window.showErrorMessage(`Failed to unshelve: ${errMsg(e)}`);
+					void showGitError(`Failed to unshelve: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -320,7 +331,7 @@ export function registerShelfCommands(service: GitRepositoryService, shelfServic
 			}
 			const ok = await vscode.window.showWarningMessage(`Delete shelf "${node.name}"?`, { modal: true }, 'Delete');
 			if (ok === 'Delete') {
-				shelfService.drop(node.name);
+				await shelfService.drop(node.name);
 				shelfTree.refresh();
 			}
 		}),

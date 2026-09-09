@@ -148,3 +148,19 @@
 - **处理方式**：落地全局活跃仓库切换（Git Graph 模式）——① 选取逻辑下沉纯函数 `engine/git-state/repo-selection.ts`（三级优先：持久化恢复 → folder0 匹配 → 首个仓库，路径归一化跨平台稳定），`GitRepositoryService` 新增 `selectRepository`/`listRepositories`/`onDidChangeRepository`，活跃仓库持久化 `hyperGit.activeRepoRoot`；② **三重顺序不变量**保证 rebind 先于刷新：`applyRepository` 内先 fire 切换事件（同步 rebind：registry/favorites/branchesTree.setRepoRoot + context key 同步 + blame 清理 + filter 清空）后 fire onDidChange（防抖刷新），且 rebind 订阅先于 `refreshAll` 注册；③ Shelf 目录随 `service.repoRoot` 动态求值（`shelves/<basename>.<sha1[:8]>/`）+ 旧平铺数据一次性安全迁移（仅 rename、目标存在即跳过、失败可重试）；④ Graph 工具栏仓库名升级可点击按钮（单仓库退化纯文本）+ `hyperGit.selectRepository` palette 命令（带参=程序化切换接缝，`activate()` 导出 `{ service }` 供集成测试）；⑤ webview 视图状态（scope/选中/勾选集等）v2 `byRepo` 分区 + 最近提交消息 per-repo key（旧 key 回落一次平滑迁移）。集成测试新增 multi-root 双仓库 fixture 套件（`tests/suite/multi-root.test.js`）。
 - **后续防范**：① **新增组件若构造期快照 repoRoot（拼 memento key / 存储目录），必须订阅 `service.onDidChangeRepository` 重绑**——可用 `grep -rn 'repoRoot' src/adapter/ | grep -v 'service.repoRoot'` 扫描快照点；② 集成测试需 UI 交互时，优先给命令 handler 加可选参数（无参=QuickPick，带参=程序化）+ `activate()` 导出接缝，勿依赖无法自动化的原生弹窗；③ 顺带修复了既有激活竞态（repo 发现晚于 activate 时 memento key 落 workspaceRoot 占位），rebind 事件会纠正——但根治应在「窗口内无写入路径」前提下依赖该纠正，勿在激活早期引入持久化写入。
 - **同类问题影响**：所有围绕「单一活跃仓库」装配的 VS Code Git 扩展；凡按 repoRoot 构造 workspaceState/globalStorage 键或存储目录、却不在仓库集合变化时重绑的实现；以及 macOS 上 VS Code ≥ 1.110 主二进制 `Electron`→`Code` 更名导致 `@vscode/test-electron` 旧版 ENOENT 的集成测试环境（升 3.1.0 解决，见 PR #102）。
+
+## #17 Webview 内联脚本回调中重复调用 acquireVsCodeApi()
+
+- **表因**：Merge 编辑器点击 Save → 拒绝「强制保存」确认 → 点击 Cancel 时按钮无响应；交互 Rebase 冲突失败后重试同理。控制台报 `An instance of the VS Code API has already been acquired`。
+- **根因**：`acquireVsCodeApi()` 每个 webview 全局仅允许成功调用一次（VS Code API 设计约束），第二次调用抛异常。merge-editor 与 rebase-webview 在事件回调内现场调用（`document.getElementById('save').onclick = function(){ acquireVsCodeApi().postMessage(...) }`），首次执行某回调成功后，任何其他回调再调用即崩溃。
+- **处理方式**：脚本顶部 `const vscode = acquireVsCodeApi();` 获取一次，全部回调复用（commit/log webview 本就是此写法）。落地见 `fix(Webview)` 批次。
+- **后续防范**：webview 内联脚本一律顶部单次获取；review 时 `grep -n "acquireVsCodeApi" src/adapter/webview/` 应只命中每文件脚本顶部一处调用。
+- **同类问题影响**：所有自绘 webview 的扩展；回调/异步分支中按需获取 API 的惰性写法均存在此雷。
+
+## #18 Commit 视图草稿随视图销毁丢失（state 未覆盖 + 模板重灌覆盖）
+
+- **表因**：Commit 视图切走再切回（或折叠 Panel 展开），已输入的提交信息与 amend/signoff/skipHooks 勾选全部丢失，模板重新灌入。
+- **根因**：复合缺陷——① WebviewView 未设 `retainContextWhenHidden`，隐藏即销毁；② `vscode.getState()` 只持久化 checked/mode/collapsed，不含草稿；③ message 输入经 200ms debounce 才 postMessage 到 host，销毁前最后一段输入连 host 侧 `currentMessage` 都未到达；④ 重建时模板注入逻辑因 textarea 为空而重新灌模板。内置 SCM 输入框草稿跨销毁可恢复，对比形成 UX 回归。
+- **处理方式**：webview state v3 在 `byRepo` 分区新增 `draft`（message + 三勾选）；输入/勾选变更即时 `saveState()` 落盘（消除 debounce 尾丢）；回灌仅限「重建首帧/切换仓库」两时机且先于 `reconcileChecked`（避免 state 推送往返覆盖当前编辑）；提交成功清空草稿。未采用 `retainContextWhenHidden`（钉死整个 webview 内存，且不跨窗口 reload）。
+- **后续防范**：webview 内用户编辑态一律显式入 `setState`（含 debounce 之外的即时落盘点）；回灌逻辑必须有时机守卫（一次性/切换触发），并注意「先回灌 DOM、后执行任何从 DOM 取数回写 state」的顺序。
+- **同类问题影响**：所有自绘 WebviewView 承载编辑器的扩展；凡输入经防抖上报宿主的模式都存在尾丢窗口。

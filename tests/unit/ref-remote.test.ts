@@ -77,10 +77,10 @@ describe('formatRemoteDeleteConfirm', () => {
 
 	it('单条 → 删除 + 不可撤销 + 协作者', () => {
 		const r = formatRemoteDeleteConfirm([t('origin/foo', 'origin', 'foo')]);
-		expect(r.confirmLabel).toBe('删除');
+		expect(r.confirmLabel).toBe('Delete');
 		expect(r.detail).toContain('origin/foo');
-		expect(r.detail).toContain('不可撤销');
-		expect(r.detail).toContain('协作者');
+		expect(r.detail).toContain('cannot be undone');
+		expect(r.detail).toContain('collaborators');
 	});
 
 	it('多条 → 含数量与截断名', () => {
@@ -89,18 +89,18 @@ describe('formatRemoteDeleteConfirm', () => {
 			t('origin/b1', 'origin', 'b1'),
 			t('origin/b2', 'origin', 'b2'),
 		]);
-		expect(r.confirmLabel).toBe('删除');
-		expect(r.detail).toContain('3 个');
+		expect(r.confirmLabel).toBe('Delete');
+		expect(r.detail).toContain('3 remote');
 	});
 
-	it('多条超上限 → truncateNames 截断（…还有）', () => {
+	it('多条超上限 → truncateNames 截断（… and N more）', () => {
 		const ts = Array.from({ length: 12 }, (_, i) => t(`origin/b${i}`, 'origin', `b${i}`));
-		expect(formatRemoteDeleteConfirm(ts).detail).toContain('…还有');
+		expect(formatRemoteDeleteConfirm(ts).detail).toContain('… and 4 more');
 	});
 
 	it('含当前 HEAD 上游 → ⚠ 软警示', () => {
 		const r = formatRemoteDeleteConfirm([t('origin/foo', 'origin', 'foo')], { hasUpstreamOfHead: true });
-		expect(r.detail).toContain('上游');
+		expect(r.detail).toContain('upstream');
 		expect(r.detail).toContain('⚠');
 	});
 

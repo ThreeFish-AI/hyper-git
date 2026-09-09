@@ -1,5 +1,8 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { showGitError } from './notify';
+import { runWithProgress } from './task-progress';
+import { validateRefName } from '../engine/ref/ref-name';
 import type { BranchNode } from './tree/branches-tree';
 import type { BranchesTreeProvider } from './tree/branches-tree';
 import type { BranchFavorites } from './branch-favorites';
@@ -103,13 +106,16 @@ export function registerHistoryCommands(
 			if (!repo) {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: 'New branch name' });
+			const name = await vscode.window.showInputBox({
+				prompt: 'New branch name',
+				validateInput: (v) => validateRefName(v, 'branch'),
+			});
 			if (name && name.trim()) {
 				try {
 					await repo.createBranch(name.trim(), true);
 					branchesTree.refresh();
 				} catch (e) {
-					void vscode.window.showErrorMessage(`Failed to create branch: ${errMsg(e)}`);
+					void showGitError(`Failed to create branch: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -125,7 +131,7 @@ export function registerHistoryCommands(
 				await repo.checkout(node.ref.shortName);
 				branchesTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to checkout: ${errMsg(e)}`);
+				void showGitError(`Failed to checkout: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -156,7 +162,8 @@ export function registerHistoryCommands(
 			const { merged, unmerged } = partitionByMerged(mergedOut, names);
 			const mergedSet = new Set(merged);
 			const { detail, confirmLabel } = formatBranchDeleteConfirm(merged, unmerged);
-			const choice = await vscode.window.showWarningMessage(detail, { modal: true }, confirmLabel);
+			// 多行明细走 MessageOptions.detail（VS Code 模态框的次要文字载体），标题保持单行。
+			const choice = await vscode.window.showWarningMessage('Delete local branch(es)?', { modal: true, detail }, confirmLabel);
 			if (choice !== confirmLabel) {
 				return;
 			}
@@ -195,7 +202,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Merge'))) {
-					void vscode.window.showErrorMessage(`Failed to merge: ${errMsg(e)}`);
+					void showGitError(`Failed to merge: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -217,7 +224,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Rebase'))) {
-					void vscode.window.showErrorMessage(`Failed to rebase: ${errMsg(e)}`);
+					void showGitError(`Failed to rebase: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -244,7 +251,7 @@ export function registerHistoryCommands(
 				const doc = await vscode.workspace.openTextDocument({ content: blame, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to Blame: ${errMsg(e)}`);
+				void showGitError(`Failed to Blame: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -256,11 +263,11 @@ export function registerHistoryCommands(
 				return;
 			}
 			try {
-				await repo.pull();
+				await runWithProgress('Pulling…', () => repo.pull());
 				branchesTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Pull'))) {
-					void vscode.window.showErrorMessage(`Failed to Pull: ${errMsg(e)}`);
+					void showGitError(`Failed to Pull: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -280,7 +287,7 @@ export function registerHistoryCommands(
 			try {
 				if (head.upstream) {
 					// 已配置上游：按 push.default 推送到追踪分支（正确处理本地名/上游名不一致）。
-					await repo.push();
+					await runWithProgress('Pushing…', () => repo.push());
 				} else {
 					// 无上游：选定 remote 并以 -u 建立追踪（修复「Failed to execute git」根因）。
 					const remotes = repo.state.remotes.map((r) => r.name);
@@ -297,12 +304,12 @@ export function registerHistoryCommands(
 					if (!remote) {
 						return;
 					}
-					await repo.push(remote, head.name, true);
+					await runWithProgress('Pushing…', () => repo.push(remote, head.name, true));
 				}
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Pushed ${head.name}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to Push: ${errMsg(e)}`);
+				void showGitError(`Failed to Push: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -321,11 +328,11 @@ export function registerHistoryCommands(
 				return;
 			}
 			try {
-				await repo.fetch(pick.includes('Prune') ? { prune: true } : undefined);
+				await runWithProgress('Fetching…', () => repo.fetch(pick.includes('Prune') ? { prune: true } : undefined));
 				branchesTree.refresh();
 				logTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to Fetch: ${errMsg(e)}`);
+				void showGitError(`Failed to Fetch: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -348,7 +355,7 @@ export function registerHistoryCommands(
 			// 逐 remote 执行 fetch --prune：API 的 FetchOptions 仅接受单 remote，遍历以覆盖多远程场景。
 			for (const remote of remotes) {
 				try {
-					await repo.fetch({ remote, prune: true });
+					await runWithProgress('Pruning remotes…', () => repo.fetch({ remote, prune: true }));
 				} catch {
 					failed.push(remote);
 				}
@@ -389,7 +396,11 @@ export function registerHistoryCommands(
 				return;
 			}
 			const source = node.ref.shortName;
-			const name = await vscode.window.showInputBox({ prompt: `Create and checkout a new local branch from "${source}"`, placeHolder: 'New branch name' });
+			const name = await vscode.window.showInputBox({
+				prompt: `Create and checkout a new local branch from "${source}"`,
+				placeHolder: 'New branch name',
+				validateInput: (v) => validateRefName(v, 'branch'),
+			});
 			if (!name || !name.trim()) {
 				return;
 			}
@@ -397,7 +408,7 @@ export function registerHistoryCommands(
 				await repo.createBranch(name.trim(), true, source);
 				branchesTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to create branch: ${errMsg(e)}`);
+				void showGitError(`Failed to create branch: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -414,7 +425,7 @@ export function registerHistoryCommands(
 				const doc = await vscode.workspace.openTextDocument({ content: `$ git diff --stat HEAD...${selected}\n\n${out}`, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to compare: ${errMsg(e)}`);
+				void showGitError(`Failed to compare: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -425,29 +436,35 @@ export function registerHistoryCommands(
 			if (!repo) {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: 'Tag name (e.g. v1.0.0)' });
+			const name = await vscode.window.showInputBox({
+				prompt: 'Tag name (e.g. v1.0.0)',
+				validateInput: (v) => validateRefName(v, 'tag'),
+			});
 			if (!name || !name.trim()) {
 				return;
 			}
 			const commits = await repo.log({ maxEntries: 20 });
-			const items = [
+			// Separator 分段 HEAD 与历史提交（QuickPickItemKind.Separator，1.53+）；description 带 hash 供模糊搜索。
+			const items: Array<{ label: string; description?: string; target: string } | { label: string; kind: vscode.QuickPickItemKind.Separator }> = [
 				{ label: 'HEAD', description: 'Current commit', target: 'HEAD' },
+				{ label: 'Recent Commits', kind: vscode.QuickPickItemKind.Separator },
 				...commits.map((c) => ({
 					label: (c.message.split('\n', 1)[0] ?? c.hash).slice(0, 50),
 					description: c.hash.slice(0, 7),
 					target: c.hash,
 				})),
 			];
-			const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Choose a commit to tag' });
-			if (!pick) {
+			const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Choose a commit to tag', matchOnDescription: true, matchOnDetail: true });
+			if (!picked || !('target' in picked)) {
 				return;
 			}
+			const pick = picked;
 			try {
 				await service.execGit(['tag', name.trim(), pick.target]);
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Created tag ${name.trim()} @ ${pick.target === 'HEAD' ? 'HEAD' : pick.target.slice(0, 7)}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to create tag: ${errMsg(e)}`);
+				void showGitError(`Failed to create tag: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -498,7 +515,7 @@ export function registerHistoryCommands(
 				await repo.checkout(name);
 				branchesTree.refresh();
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to checkout tag: ${errMsg(e)}`);
+				void showGitError(`Failed to checkout tag: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -527,7 +544,7 @@ export function registerHistoryCommands(
 			try {
 				await vscode.commands.executeCommand('vscode.diff', left, right, `${filePath} · ${hash.slice(0, 7)} (commit diff)`, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to open diff: ${errMsg(e)}`);
+				void showGitError(`Failed to open diff: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -561,7 +578,7 @@ export function registerHistoryCommands(
 				void vscode.window.showInformationMessage(`Reset (--${pick.label} ${hash.slice(0, 7)}) complete`);
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Reset'))) {
-					void vscode.window.showErrorMessage(`Failed to Reset: ${errMsg(e)}`);
+					void showGitError(`Failed to Reset: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -573,7 +590,11 @@ export function registerHistoryCommands(
 			if (!repo || node?.kind !== 'commit') {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: `Create and checkout a new branch from ${node.commit.hash.slice(0, 7)}`, placeHolder: 'New branch name' });
+			const name = await vscode.window.showInputBox({
+				prompt: `Create and checkout a new branch from ${node.commit.hash.slice(0, 7)}`,
+				placeHolder: 'New branch name',
+				validateInput: (v) => validateRefName(v, 'branch'),
+			});
 			if (!name || !name.trim()) {
 				return;
 			}
@@ -582,7 +603,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Created and checked out ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to create branch: ${errMsg(e)}`);
+				void showGitError(`Failed to create branch: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -592,7 +613,11 @@ export function registerHistoryCommands(
 			if (node?.kind !== 'commit') {
 				return;
 			}
-			const name = await vscode.window.showInputBox({ prompt: `Create a new tag at ${node.commit.hash.slice(0, 7)}`, placeHolder: 'e.g. v1.0.0' });
+			const name = await vscode.window.showInputBox({
+				prompt: `Create a new tag at ${node.commit.hash.slice(0, 7)}`,
+				placeHolder: 'e.g. v1.0.0',
+				validateInput: (v) => validateRefName(v, 'tag'),
+			});
 			if (!name || !name.trim()) {
 				return;
 			}
@@ -601,7 +626,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Created tag ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to create tag: ${errMsg(e)}`);
+				void showGitError(`Failed to create tag: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -619,7 +644,7 @@ export function registerHistoryCommands(
 				});
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to query: ${errMsg(e)}`);
+				void showGitError(`Failed to query: ${errMsg(e)}`);
 			}
 		}),
 	);

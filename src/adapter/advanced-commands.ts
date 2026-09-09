@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { showGitError } from './notify';
 import type { BranchNode, BranchesTreeProvider } from './tree/branches-tree';
 import type { GitRepositoryService } from './git-repository-service';
 import type { LogNode } from './webview/log-webview';
@@ -30,7 +31,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage('Undo last commit complete (soft)');
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to undo: ${errMsg(e)}`);
+				void showGitError(`Failed to undo: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -58,7 +59,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Dropped commit ${hash.slice(0, 7)}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to drop (may need manual conflict resolution): ${errMsg(e)}`);
+				void showGitError(`Failed to drop (may need manual conflict resolution): ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -89,7 +90,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Fixup into ${hash.slice(0, 7)} complete`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Fixup failed: ${errMsg(e)}`);
+				void showGitError(`Fixup failed: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -107,7 +108,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 				const out = await service.execGit(['branch', '--merged', base]);
 				merged = filterMergeable(out, base, headName ? [headName] : []);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to query merged branches: ${errMsg(e)}`);
+				void showGitError(`Failed to query merged branches: ${errMsg(e)}`);
 				return;
 			}
 			if (merged.length === 0) {
@@ -173,7 +174,7 @@ export function registerAdvancedCommands(service: GitRepositoryService, branches
 				const doc = await vscode.workspace.openTextDocument({ content, language: 'markdown' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`3-way diff failed: ${errMsg(e)}`);
+				void showGitError(`3-way diff failed: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -192,6 +193,6 @@ async function pickCommitHash(service: GitRepositoryService): Promise<string | u
 		description: `${c.authorName ?? ''} · ${c.hash.slice(0, 7)}`,
 		hash: c.hash,
 	}));
-	const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select a commit' });
+	const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select a commit', matchOnDescription: true, matchOnDetail: true });
 	return pick?.hash;
 }

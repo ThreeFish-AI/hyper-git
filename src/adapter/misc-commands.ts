@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
+import { showGitError } from './notify';
 import type { GitRepositoryService } from './git-repository-service';
 import type { LogFilterControl } from './webview/log-webview';
 import type { BranchesTreeProvider } from './tree/branches-tree';
@@ -42,7 +43,7 @@ export function registerMiscCommands(
 			try {
 				patch = await service.execGit(scope.args);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to generate patch: ${errMsg(e)}`);
+				void showGitError(`Failed to generate patch: ${errMsg(e)}`);
 				return;
 			}
 			if (!patch.trim()) {
@@ -60,7 +61,7 @@ export function registerMiscCommands(
 				await fs.promises.writeFile(target.fsPath, patch, 'utf8');
 				void vscode.window.showInformationMessage(`Patch exported: ${target.fsPath}`);
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to write patch: ${errMsg(e)}`);
+				void showGitError(`Failed to write patch: ${errMsg(e)}`);
 			}
 		}),
 	);
@@ -97,7 +98,7 @@ export function registerMiscCommands(
 				void vscode.window.showInformationMessage('Patch applied');
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Apply Patch'))) {
-					void vscode.window.showErrorMessage(`Failed to apply patch: ${errMsg(e)}`);
+					void showGitError(`Failed to apply patch: ${errMsg(e)}`);
 				}
 			}
 		}),
@@ -114,7 +115,7 @@ export function registerMiscCommands(
 				const doc = await vscode.workspace.openTextDocument({ content: `# git reflog (latest 200 entries)\n\n${out}`, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to read reflog: ${errMsg(e)}`);
+				void showGitError(`Failed to read reflog: ${errMsg(e)}`);
 			}
 		}),
 	);

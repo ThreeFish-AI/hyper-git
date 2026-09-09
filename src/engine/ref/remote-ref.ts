@@ -85,12 +85,12 @@ export function formatRemoteDeleteConfirm(
 	deletable: readonly RemoteBranchTarget[],
 	opts?: { hasUpstreamOfHead?: boolean },
 ): { detail: string; confirmLabel: string } {
-	const head = opts?.hasUpstreamOfHead ? '⚠ 其中包含当前分支的上游，删除后当前分支将失去远程追踪。\n' : '';
-	const irreversible = '此操作作用于远程仓库，不可撤销，并可能影响其他协作者。';
+	const head = opts?.hasUpstreamOfHead ? '⚠ The selection includes the upstream of the current branch; deleting it will leave the current branch untracked.\n' : '';
+	const irreversible = 'This acts on the remote repository, cannot be undone, and may affect other collaborators.';
 	const n = deletable.length;
 	const body =
 		n === 1
-			? `将删除远程分支「${deletable[0].shortName}」（位于远程 ${deletable[0].remote}）。\n${irreversible}`
-			: `将删除 ${n} 个远程分支：${truncateNames(deletable.map((t) => t.shortName))}。\n${irreversible}`;
-	return { detail: `${head}${body}`, confirmLabel: '删除' };
+			? `Delete remote branch "${deletable[0].shortName}" (on remote ${deletable[0].remote})?\n${irreversible}`
+			: `Delete ${n} remote branches: ${truncateNames(deletable.map((t) => t.shortName))}.\n${irreversible}`;
+	return { detail: `${head}${body}`, confirmLabel: 'Delete' };
 }

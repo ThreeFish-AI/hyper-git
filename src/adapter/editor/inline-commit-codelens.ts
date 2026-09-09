@@ -16,11 +16,12 @@ function repoRelative(root: string, fsPath: string): string | null {
 /**
  * 行内提交 CodeLensProvider（编辑器内逐 Hunk 提交）。
  *
- * 对当前文件每个未暂存 hunk，在其起始行上方渲染可点击 CodeLens「✓ 提交此 Hunk (+N -M)」。
+ * 对当前文件每个未暂存 hunk，在其起始行上方渲染可点击 CodeLens「$(check) Commit this Hunk (+N -M)」
+ * （codicon 主题图标，随 product icon theme 渲染）。
  * 点击 → 仅暂存该 hunk（patch 重建 + `git apply --cached`）→ 输入 message → `git commit`。
  * gutter 视觉标记（绿/红/蓝）由原生 git quickDiff 提供，不重复造。
  */
-export class InlineCommitCodeLensProvider implements vscode.CodeLensProvider {
+export class InlineCommitCodeLensProvider implements vscode.CodeLensProvider, vscode.Disposable {
 	private readonly _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
 	readonly onDidChangeCodeLenses = this._onDidChangeCodeLenses.event;
 
@@ -30,7 +31,11 @@ export class InlineCommitCodeLensProvider implements vscode.CodeLensProvider {
 		this._onDidChangeCodeLenses.fire();
 	}
 
-	async provideCodeLenses(doc: vscode.TextDocument): Promise<vscode.CodeLens[]> {
+	dispose(): void {
+		this._onDidChangeCodeLenses.dispose();
+	}
+
+	async provideCodeLenses(doc: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.CodeLens[]> {
 		const repo = this.service.repo;
 		if (!repo) {
 			return [];
@@ -41,7 +46,7 @@ export class InlineCommitCodeLensProvider implements vscode.CodeLensProvider {
 		}
 		try {
 			const diff = await this.service.execGit(['diff', '-U3', '--', rel]);
-			if (!diff.trim()) {
+			if (token.isCancellationRequested || !diff.trim()) {
 				return [];
 			}
 			const files = parseUnifiedDiff(diff);
@@ -53,7 +58,7 @@ export class InlineCommitCodeLensProvider implements vscode.CodeLensProvider {
 				const line = Math.max(0, r.startLine - 1);
 				return new vscode.CodeLens(new vscode.Range(line, 0, line, 0), {
 					command: 'hyperGit.inlineCommitHunk',
-					title: `✓ Commit this Hunk (+${r.addedCount} -${r.removedCount})`,
+					title: `$(check) Commit this Hunk (+${r.addedCount} -${r.removedCount})`,
 					arguments: [rel, r.hunkIndex],
 				});
 			});
@@ -97,15 +102,13 @@ export function registerInlineCommitCommand(service: GitRepositoryService, provi
 			}
 			const patch = buildPatch(files[0], [hunkIndex]);
 			const tmp = path.join(os.tmpdir(), `hg-inline-${Date.now()}.diff`);
-			fs.writeFileSync(tmp, patch);
+			await fs.promises.writeFile(tmp, patch, 'utf8');
 			try {
 				await service.execGit(['apply', '--cached', '--whitespace=nowarn', tmp]);
 			} finally {
-				try {
-					fs.unlinkSync(tmp);
-				} catch {
+				void fs.promises.unlink(tmp).catch(() => {
 					/* ignore */
-				}
+				});
 			}
 			await service.execGit(['commit', '-m', message.trim()]);
 			provider.refresh();
