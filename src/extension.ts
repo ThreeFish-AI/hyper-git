@@ -30,6 +30,7 @@ import { registerMiscCommands } from './adapter/misc-commands';
 import { registerClaudeCommands } from './adapter/claude-commands';
 import { registerRepositorySelectionCommand } from './adapter/repository-selection';
 import { getGitApi } from './adapter/git-api';
+import { FileStatus } from './engine/model';
 import { GitRepositoryService } from './adapter/git-repository-service';
 import { GitHubAuth } from './adapter/ci/github-auth';
 import { GitHubCiService } from './adapter/ci/github-ci-service';
@@ -250,6 +251,12 @@ export async function activate(
 	const updateBadge = (): void => {
 		const n = service.getChangeCount();
 		badgeView.badge = n > 0 ? { value: n, tooltip: `${n} uncommitted change(s)` } : undefined;
+		// 冲突存在性 context key：acceptOurs/acceptTheirs 等命令在 commandPalette 的显隐依据（见 package.json）。
+		void vscode.commands.executeCommand(
+			'setContext',
+			'hyperGit.hasConflicts',
+			service.getChanges().some((c) => c.status === FileStatus.Conflict),
+		);
 	};
 
 	// 角标走独立快路径（~40ms 微防抖）：即便视图未 resolve / Panel 未激活也近实时更新计数（Panel 展开即呈现），
