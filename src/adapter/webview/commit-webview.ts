@@ -302,11 +302,14 @@ let checked = new Set();
 let mode = 'flat';
 let collapsed = new Set();
 let draft = null; // 当前仓库的草稿快照（loadPersistedFor 装载；仅 webview 重建/切仓库时回灌 DOM）
+let stateV3Written = false; // 本会话是否已落盘 v3 state：true 后 '' 兜底关闭（见 loadPersistedFor）
 function loadPersistedFor(repoRoot) {
   persistedRepo = repoRoot;
   // '' 条目兜底仅用于旧版 state（v1 平铺 / v2 迁移语义）；v3 起按仓严格隔离——
   // 无本仓条目即空对象，避免无仓库会话期（repoRoot=''）写入的草稿回灌到其他仓库。
-  const fallback = persistedRaw.v === 3 ? undefined : persistedByRepo[''];
+  // persistedRaw.v 是启动快照、saveState 后不更新：stateV3Written 补位——本会话首写 v3 后
+  // 即关闭兜底，升级/全新会话内同样保持隔离，无需等下一次 webview 重建。
+  const fallback = persistedRaw.v === 3 || stateV3Written ? undefined : persistedByRepo[''];
   const s = persistedByRepo[repoRoot] || fallback || {};
   checked = new Set(s.checked || []);
   mode = s.mode === 'tree' ? 'tree' : 'flat';
@@ -322,6 +325,7 @@ function saveState() {
     draft: { message: msgEl.value, amend: amendEl.checked, signoff: signoffEl.checked, skipHooks: skipHooksEl.checked }
   };
   vscode.setState({ v: 3, byRepo: persistedByRepo });
+  stateV3Written = true;
 }
 let draftRestored = false;
 let conventionalEnabled = true;

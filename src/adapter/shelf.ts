@@ -76,6 +76,11 @@ export class ShelfService {
 			/* 目标目录不存在 → 检查旧版平铺数据 */
 		}
 		try {
+			await fs.promises.access(this.shelvesBase);
+		} catch {
+			return; // 基目录不存在（从未创建过 shelf）：无旧数据可迁，静默退出（ENOENT 非失败，勿污染 Console）
+		}
+		try {
 			const legacyFiles = (await fs.promises.readdir(this.shelvesBase)).filter((f) => f.endsWith('.json'));
 			if (legacyFiles.length === 0) {
 				return;
