@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getDecoration } from '../../engine/scm-mapping/status-decoration';
@@ -15,6 +14,7 @@ import type {
 } from '../../shared/protocol';
 import type { CommitService } from '../commit/commit-service';
 import { getBaseStyles } from './shared-styles';
+import { getNonce } from './nonce';
 
 /**
  * Commit 提交窗口（WebviewView，自绘提交面板）。
@@ -275,12 +275,14 @@ details.advanced[open] summary { margin-bottom: 4px; }
 
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
-// ── 勾选集/视图模式按仓库分区（v2，issue #107）：勾选是相对路径集合，跨仓库本就错位；
-// 切换仓库换装载互不串扰；无 v2 时从旧平铺结构一次性升级（旧值归首个见到的仓库）。──
+// ── 勾选集/视图模式/提交草稿按仓库分区（v3，issue #107）：勾选是相对路径集合，跨仓库本就错位；
+// 切换仓库换装载互不串扰；v3 起 draft（message + amend/signoff/skipHooks）一并入 state——
+// 视图隐藏销毁 / 窗口 reload 后草稿可恢复（对齐内置 SCM 输入框草稿语义），提交成功即清空。
+// 旧版 state（v2 byRepo / v1 平铺）无感升级，draft 缺省为空。──
 const persistedRaw = vscode.getState() || {};
 let persistedRepo = '';
 let persistedByRepo = {};
-if (persistedRaw.v === 2 && persistedRaw.byRepo) {
+if ((persistedRaw.v === 2 || persistedRaw.v === 3) && persistedRaw.byRepo) {
   persistedByRepo = persistedRaw.byRepo;
 } else if (persistedRaw.checked || persistedRaw.mode || persistedRaw.collapsed) {
   persistedByRepo = { '': { checked: persistedRaw.checked, mode: persistedRaw.mode, collapsed: persistedRaw.collapsed } };
@@ -288,17 +290,26 @@ if (persistedRaw.v === 2 && persistedRaw.byRepo) {
 let checked = new Set();
 let mode = 'flat';
 let collapsed = new Set();
+let draft = null; // 当前仓库的草稿快照（loadPersistedFor 装载；仅 webview 重建/切仓库时回灌 DOM）
 function loadPersistedFor(repoRoot) {
   persistedRepo = repoRoot;
   const s = persistedByRepo[repoRoot] || persistedByRepo[''] || {};
   checked = new Set(s.checked || []);
   mode = s.mode === 'tree' ? 'tree' : 'flat';
   collapsed = new Set(s.collapsed || []);
+  draft = s.draft || null;
 }
+// saveState 从 DOM 现值取 draft（草稿写点统一收敛于此）：输入即时保存，彻底消除 200ms debounce 尾丢。
 function saveState() {
-  persistedByRepo[persistedRepo] = { checked: Array.from(checked), mode: mode, collapsed: Array.from(collapsed) };
-  vscode.setState({ v: 2, byRepo: persistedByRepo });
+  persistedByRepo[persistedRepo] = {
+    checked: Array.from(checked),
+    mode: mode,
+    collapsed: Array.from(collapsed),
+    draft: { message: msgEl.value, amend: amendEl.checked, signoff: signoffEl.checked, skipHooks: skipHooksEl.checked }
+  };
+  vscode.setState({ v: 3, byRepo: persistedByRepo });
 }
+let draftRestored = false;
 let conventionalEnabled = true;
 let templateApplied = false;
 let curFiles = [];
@@ -324,11 +335,15 @@ const modeTreeEl = document.getElementById('mode-tree');
 
 let msgTimer = null;
 msgEl.addEventListener('input', function () {
+  saveState(); // 草稿即时持久化（防抖前落盘，视图销毁不丢尾部输入）
   clearTimeout(msgTimer);
   msgTimer = setTimeout(function () {
     vscode.postMessage({ type: 'messageChanged', payload: { message: msgEl.value } });
   }, 200);
 });
+amendEl.addEventListener('change', saveState);
+signoffEl.addEventListener('change', saveState);
+skipHooksEl.addEventListener('change', saveState);
 
 // Ctrl/Cmd+Enter 提交（业界通用快捷键：VS Code/GitHub/JetBrains 一致）。
 msgEl.addEventListener('keydown', function (e) {
@@ -552,6 +567,7 @@ function renderRecent(messages) {
     chip.title = m;
     chip.addEventListener('click', function () {
       msgEl.value = m;
+      saveState();
       vscode.postMessage({ type: 'messageChanged', payload: { message: msgEl.value } });
     });
     recentEl.appendChild(chip);
@@ -577,7 +593,21 @@ window.addEventListener('message', function (e) {
   const m = e.data;
   if (m.type === 'state') {
     const p = m.payload;
-    loadPersistedFor(p.repoRoot || '');
+    const repoRoot = p.repoRoot || '';
+    // 草稿回灌仅两种时机：webview 重建后首帧、活跃仓库切换（loadPersistedFor 会改写 persistedRepo，先判定）。
+    // 必须先于 reconcileChecked/saveState——saveState 从 DOM 取草稿，先回灌才能在后续保存中保住草稿。
+    const restoreDraft = !draftRestored || repoRoot !== persistedRepo;
+    loadPersistedFor(repoRoot);
+    if (restoreDraft && draft) {
+      msgEl.value = draft.message || '';
+      amendEl.checked = Boolean(draft.amend);
+      signoffEl.checked = Boolean(draft.signoff);
+      skipHooksEl.checked = Boolean(draft.skipHooks);
+      if (draft.message) {
+        vscode.postMessage({ type: 'messageChanged', payload: { message: draft.message } });
+      }
+    }
+    draftRestored = true;
     curFiles = p.files || [];
     curTree = p.tree || [];
     reconcileChecked(curFiles);
@@ -589,6 +619,7 @@ window.addEventListener('message', function (e) {
     conventionalEnabled = p.conventionalEnabled;
     if (!templateApplied && p.template && !msgEl.value) {
       msgEl.value = p.template;
+      saveState();
       vscode.postMessage({ type: 'messageChanged', payload: { message: msgEl.value } });
     }
     templateApplied = true;
@@ -600,6 +631,7 @@ window.addEventListener('message', function (e) {
       toast(m.payload.warning || 'Commit succeeded', Boolean(m.payload.warning));
       msgEl.value = '';
       amendEl.checked = false; signoffEl.checked = false; skipHooksEl.checked = false;
+      saveState(); // 提交成功清空草稿（失败保留，供修改重试）
       vscode.postMessage({ type: 'messageChanged', payload: { message: '' } });
     } else {
       toast(m.payload.error || 'Commit failed', true);
@@ -612,8 +644,4 @@ vscode.postMessage({ type: 'requestState' });
 </body>
 </html>`;
 	}
-}
-
-function getNonce(): string {
-	return crypto.randomBytes(16).toString('base64');
 }
