@@ -24,6 +24,18 @@ export const GRAPH_LANE_W = 14;
 /** 按钮视觉变体。 */
 export type ButtonVariant = 'primary' | 'secondary' | 'sm';
 
+// ── 共享内联 SVG 图标（fill/stroke currentColor 随主题前景色；webview 不引 codicon 字体的替代方案） ──
+
+/** 12px 折叠 chevron（向下；折叠态由 CSS rotate(-90deg) 旋转）。 */
+export const ICON_CHEVRON_DOWN =
+	'<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M4 6l4 4 4-4"/></svg>';
+/** 11px 关闭 X。 */
+export const ICON_CLOSE =
+	'<svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8"/></svg>';
+/** 12px 水平省略号（⋯ 菜单）。 */
+export const ICON_ELLIPSIS =
+	'<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>';
+
 /**
  * 基础样式：`:root` Token + 通用组件类 + 全局控件基线 + 统一交互态。
  * 返回纯 CSS 字符串，供 Webview 在 `<style>` 首行注入。

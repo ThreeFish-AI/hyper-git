@@ -5,7 +5,7 @@ import { showGitError } from '../notify';
 import type { GitRepositoryService } from '../git-repository-service';
 import { diff3, type MergeHunk } from '../../engine/merge/diff3';
 import { parseConflictState } from '../../engine/git-state/conflict-detector';
-import { getBaseStyles } from './shared-styles';
+import { getBaseStyles, ICON_CHEVRON_DOWN } from './shared-styles';
 import { getNonce } from './nonce';
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -178,6 +178,10 @@ body { margin: 0; padding: 10px 14px; font-family: var(--vscode-font-family); fo
 .bar .spacer { flex: 1; }
 .bar .nav { display: inline-flex; align-items: center; gap: 2px; }
 .bar .nav #conflict-pos { font-size: calc(var(--vscode-font-size) - 2px); min-width: 46px; text-align: center; color: var(--vscode-descriptionForeground); }
+.nav-ico { display: inline-flex; align-items: center; }
+.nav-ico svg { display: block; }
+.nav-ico--prev svg { transform: rotate(90deg); }
+.nav-ico--next svg { transform: rotate(-90deg); }
 .remaining { font-size: calc(var(--vscode-font-size) - 2px); opacity: 0.75; margin-left: 6px; }
 .remaining.has-unresolved { color: var(--vscode-editorWarning-foreground, #d29922); opacity: 1; }
 .hunk { margin-bottom: 10px; }
@@ -201,9 +205,9 @@ body { margin: 0; padding: 10px 14px; font-family: var(--vscode-font-family); fo
   <span class="count">${conflicts} conflict${conflicts === 1 ? '' : 's'}</span>
   <span class="spacer"></span>
   <span class="nav" id="conflict-nav" role="group" aria-label="Conflict navigation">
-    <button class="hg-btn hg-btn--sm" id="prev-conflict" title="Previous conflict" aria-label="Previous conflict">‹</button>
+    <button class="hg-btn hg-btn--sm" id="prev-conflict" title="Previous conflict" aria-label="Previous conflict"><span class="nav-ico nav-ico--prev">${ICON_CHEVRON_DOWN}</span></button>
     <span id="conflict-pos" aria-live="polite">—</span>
-    <button class="hg-btn hg-btn--sm" id="next-conflict" title="Next conflict" aria-label="Next conflict">›</button>
+    <button class="hg-btn hg-btn--sm" id="next-conflict" title="Next conflict" aria-label="Next conflict"><span class="nav-ico nav-ico--next">${ICON_CHEVRON_DOWN}</span></button>
   </span>
   <button class="hg-btn hg-btn--secondary" id="cancel">Cancel</button>
   <button class="hg-btn" id="save">Save &amp; Mark Resolved<span class="remaining" id="remaining"></span></button>

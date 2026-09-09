@@ -20,6 +20,7 @@ export interface CommitFileItem {
 	readonly label: string; // basename
 	readonly dir: string; // dirname
 	readonly themeColor: string; // gitDecoration.* 主题色 id → webview 用 var(--vscode-...)
+	readonly letter: string; // 状态字母标记（M/A/U/R/D/C/!/I，对齐官方 SCM 字母角标；webview 渲染替代色点）
 }
 
 /**

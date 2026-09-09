@@ -13,7 +13,7 @@ import type {
 	WebviewToHostMessage,
 } from '../../shared/protocol';
 import type { CommitService } from '../commit/commit-service';
-import { getBaseStyles } from './shared-styles';
+import { getBaseStyles, ICON_CHEVRON_DOWN, ICON_ELLIPSIS } from './shared-styles';
 import { getNonce } from './nonce';
 
 /**
@@ -158,6 +158,7 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider {
 			label: path.basename(c.relativePath),
 			dir: path.dirname(c.relativePath),
 			themeColor: decoration.themeColor,
+			letter: decoration.letter,
 		};
 	}
 
@@ -210,15 +211,20 @@ body { margin: 0; padding: var(--hg-space-2); font-family: var(--vscode-font-fam
 .seg { display: inline-flex; border: 1px solid var(--vscode-input-border, transparent); border-radius: 3px; overflow: hidden; }
 .seg button { background: transparent; color: var(--vscode-foreground); border: none; padding: 2px 8px; font-size: calc(var(--vscode-font-size) - 2px); cursor: pointer; opacity: 0.7; }
 .seg button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); opacity: 1; }
+.seg button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 .files { max-height: 260px; overflow-y: auto; border: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.3)); border-radius: var(--hg-radius-control); margin-bottom: var(--hg-space-2); }
+.files:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.file.kb-focus, .tree-dir.kb-focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 .file { display: flex; align-items: center; gap: 6px; padding: 2px 6px; cursor: pointer; }
 .file:hover { background: var(--vscode-list-hoverBackground); }
-.file .dot { font-size: calc(var(--vscode-font-size) + 1px); line-height: 1; flex: 0 0 auto; }
+.file .dot { flex: 0 0 1.2em; text-align: center; font-weight: 600; font-size: calc(var(--vscode-font-size) - 1px); line-height: 1; }
 .file .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .file .dir { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: calc(var(--vscode-font-size) - 2px); white-space: nowrap; padding-left: 8px; }
 .tree-dir { display: flex; align-items: center; gap: 6px; padding: 2px 6px; cursor: pointer; user-select: none; }
 .tree-dir:hover { background: var(--vscode-list-hoverBackground); }
-.tree-twist { flex: 0 0 12px; text-align: center; font-size: calc(var(--vscode-font-size) - 3px); opacity: 0.8; }
+.tree-twist { flex: 0 0 14px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.8; }
+.tree-twist svg { display: block; }
+.tree-twist.collapsed svg { transform: rotate(-90deg); }
 .tree-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--vscode-descriptionForeground); }
 textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .validation { font-size: calc(var(--vscode-font-size) - 2px); min-height: 16px; margin: 4px 2px; }
@@ -229,6 +235,7 @@ textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .recent-label { color: var(--vscode-descriptionForeground); font-size: calc(var(--vscode-font-size) - 2px); }
 .hg-chip { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: none; border-radius: 9px; padding: 1px 8px; font-size: calc(var(--vscode-font-size) - 2px); cursor: pointer; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hg-chip:hover { opacity: 0.85; }
+.hg-chip:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 .opt { display: block; font-size: calc(var(--vscode-font-size) - 1px); margin: 3px 2px; }
 .buttons { display: flex; gap: 6px; margin-top: var(--hg-space-2); }
 .buttons .hg-btn { flex: 1; }
@@ -252,7 +259,7 @@ details.advanced[open] summary { margin-bottom: 4px; }
 <div class="cl-bar">
   <span class="cl-label">Active Changelist:</span>
   <select id="cl-switch" class="hg-select" title="Switch active changelist"></select>
-  <button id="cl-menu" class="hg-btn hg-btn--secondary hg-btn--sm cl-menu-btn" title="Changelist actions" aria-label="Changelist actions">⋯</button>
+  <button id="cl-menu" class="hg-btn hg-btn--secondary hg-btn--sm cl-menu-btn" title="Changelist actions" aria-label="Changelist actions">${ICON_ELLIPSIS}</button>
 </div>
 <div class="files-header" id="files-header" style="display:none">
   <label class="opt" style="margin:0"><input type="checkbox" id="select-all"> Select All</label>
@@ -261,7 +268,7 @@ details.advanced[open] summary { margin-bottom: 4px; }
     <button id="mode-tree" aria-pressed="false" title="Group by directory">Tree</button>
   </span>
 </div>
-<div class="files" id="files"></div>
+<div class="files" id="files" tabindex="0" role="tree" aria-label="Changed files"></div>
 <textarea id="message" class="hg-input" rows="4" placeholder="Commit message (Conventional Commits: type(scope): description)" spellcheck="false"></textarea>
 <div id="validation" class="validation" role="status" aria-live="polite"></div>
 <div class="recent" id="recent"></div>
@@ -319,6 +326,7 @@ let templateApplied = false;
 let curFiles = [];
 let curTree = [];
 const INDENT = 14;
+const ICON_CHEVRON = ${JSON.stringify(ICON_CHEVRON_DOWN)};
 const EMPTY_HTML = '<div class="files-empty">No changes in this changelist.<br>Edit files in your workspace and they will appear here.</div>';
 const filesEl = document.getElementById('files');
 const msgEl = document.getElementById('message');
@@ -410,10 +418,11 @@ function makeLeafRow(f, depth) {
     if (cb.checked) checked.add(f.path); else checked.delete(f.path);
     saveState(); syncSelectAll(); updateDirStates();
   });
+  // 状态字母标记（M/A/U/R/D/C…）替代色点：色盲可辨、对齐官方 SCM 角标（兜底空串）。
   const dot = document.createElement('span');
   dot.className = 'dot';
   dot.style.color = 'var(--vscode-' + f.themeColor.replace(/\\./g, '-') + ')';
-  dot.textContent = '\\u25CF';
+  dot.textContent = f.letter || '';
   const name = document.createElement('span');
   name.className = 'name';
   name.textContent = f.label;
@@ -457,8 +466,8 @@ function renderNode(node, depth, parent, files) {
     dirRow.style.paddingLeft = (depth * INDENT + 6) + 'px';
     dirRow.dataset.dir = node.path;
     const tw = document.createElement('span');
-    tw.className = 'tree-twist';
-    tw.textContent = isCol ? '\\u25B8' : '\\u25BE';
+    tw.className = 'tree-twist' + (isCol ? ' collapsed' : '');
+    tw.innerHTML = ICON_CHEVRON;
     const cb = document.createElement('input');
     cb.type = 'checkbox'; cb.className = 'dir-cb'; cb.dataset.dir = node.path;
     cb.addEventListener('click', function (e) { e.stopPropagation(); });
@@ -516,6 +525,7 @@ function toggleCollapse(p) {
 }
 
 function renderList() {
+  kbIdx = -1;
   filesEl.innerHTML = '';
   if (!curFiles || curFiles.length === 0) {
     filesHeaderEl.style.display = 'none';
@@ -526,6 +536,39 @@ function renderList() {
   if (mode === 'tree') { renderTree(curTree, curFiles); } else { renderFlat(curFiles); }
   syncSelectAll();
 }
+
+// ── 键盘可达性（复刻 Graph #viewport 模式）：容器级焦点，ArrowUp/Down/Home/End 移动、Enter 触发行、Escape 归还 ──
+let kbIdx = -1;
+function kbRows() { return Array.from(filesEl.querySelectorAll('.file, .tree-dir')); }
+function kbApply(idx) {
+  const rows = kbRows();
+  kbRows().forEach(function (r) { r.classList.remove('kb-focus'); });
+  kbIdx = idx;
+  if (kbIdx >= 0 && kbIdx < rows.length) {
+    rows[kbIdx].classList.add('kb-focus');
+    rows[kbIdx].scrollIntoView({ block: 'nearest' });
+  }
+}
+filesEl.addEventListener('keydown', function (e) {
+  const rows = kbRows();
+  if (rows.length === 0) { return; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (kbIdx < 0) { kbApply(e.key === 'ArrowDown' ? 0 : rows.length - 1); return; }
+    kbApply(Math.max(0, Math.min(rows.length - 1, kbIdx + (e.key === 'ArrowDown' ? 1 : -1))));
+  } else if (e.key === 'Home') {
+    e.preventDefault(); kbApply(0);
+  } else if (e.key === 'End') {
+    e.preventDefault(); kbApply(rows.length - 1);
+  } else if (e.key === 'Enter' && kbIdx >= 0) {
+    e.preventDefault();
+    rows[kbIdx].click();
+  } else if (e.key === 'Escape') {
+    kbApply(-1);
+    filesEl.blur();
+  }
+});
+filesEl.addEventListener('focus', function () { if (kbIdx < 0) { kbApply(0); } });
 
 function updateModeButtons() {
   modeFlatEl.classList.toggle('active', mode === 'flat');
@@ -580,10 +623,20 @@ function renderRecent(messages) {
 
 function showValidation(v) {
   valEl.className = 'validation ' + v.severity;
+  valEl.textContent = '';
+  // 图标字符单独 aria-hidden（不进读屏播报）；\\uFE0E 强制文本呈现（防 ⚠/ℹ 在部分平台渲染为彩色 emoji）。
+  function iconSpan(ch) {
+    const el = document.createElement('span');
+    el.setAttribute('aria-hidden', 'true');
+    el.textContent = ch + '\\uFE0E';
+    el.style.marginRight = '4px';
+    return el;
+  }
   if (v.severity === 'ok') {
-    valEl.textContent = conventionalEnabled ? '\\u2713 Valid Conventional Commits' : '';
+    if (conventionalEnabled) { valEl.appendChild(iconSpan('\\u2713')); valEl.appendChild(document.createTextNode('Valid Conventional Commits')); }
   } else {
-    valEl.textContent = (v.severity === 'error' ? '\\u26A0 ' : '\\u2139 ') + (v.reason || '');
+    valEl.appendChild(iconSpan(v.severity === 'error' ? '\\u26A0' : '\\u2139'));
+    valEl.appendChild(document.createTextNode(v.reason || ''));
   }
 }
 

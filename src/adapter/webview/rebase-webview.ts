@@ -393,6 +393,18 @@ input.subject:not(:disabled) { border-color: var(--vscode-focusBorder, #007fd4);
     persist();
   });
 
+  // 键盘重排（WCAG 2.1.1：拖拽须有键盘替代路径）：行内任意控件聚焦时 Alt+↑/↓ 整行移动。
+  tbody.addEventListener('keydown', function (e) {
+    if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) { return; }
+    var tr = e.target.closest('tr');
+    if (!tr) { return; }
+    var target = e.key === 'ArrowUp' ? tr.previousElementSibling : tr.nextElementSibling;
+    if (!target) { return; }
+    e.preventDefault();
+    if (e.key === 'ArrowUp') { tbody.insertBefore(tr, target); } else { tbody.insertBefore(tr, target.nextSibling); }
+    persist();
+  });
+
   function collectActions() {
     return rows().map(function (row) {
       return { hash: row.dataset.hash, action: row.querySelector('select.action').value, subject: row.querySelector('input.subject').value };
@@ -410,18 +422,39 @@ input.subject:not(:disabled) { border-color: var(--vscode-focusBorder, #007fd4);
   tbody.addEventListener('input', persist);
 
   // 执行前确认：rebase 改写历史，前置确认防误操作（非阻塞 HTML 覆盖层）。
+  // 对话框语义补全：Escape 关闭、Tab 焦点圈禁（背景表格不可达）、关闭后焦点还原触发按钮。
+  var confirmReturnFocus = null;
+  function closeConfirm() {
+    confirmEl.style.display = 'none';
+    if (confirmReturnFocus && confirmReturnFocus.focus) { confirmReturnFocus.focus(); }
+    confirmReturnFocus = null;
+  }
   document.getElementById('rebase-btn').addEventListener('click', function () {
     var n = rows().length;
     document.getElementById('confirm-count').textContent = 'Rebase ' + n + ' commit' + (n === 1 ? '' : 's') + ' — this rewrites history.';
     document.getElementById('confirm-summary').textContent = document.getElementById('summary').textContent || (n + ' commits');
+    confirmReturnFocus = document.activeElement;
     confirmEl.style.display = 'flex';
     document.getElementById('confirm-go').focus();
   });
+  confirmEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeConfirm();
+    } else if (e.key === 'Tab') {
+      var f = Array.prototype.slice.call(confirmEl.querySelectorAll('button'));
+      if (f.length === 0) { return; }
+      var first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
   document.getElementById('confirm-go').addEventListener('click', function () {
     confirmEl.style.display = 'none';
+    confirmReturnFocus = null;
     vscode.postMessage({ type: 'rebase', actions: collectActions() });
   });
-  document.getElementById('confirm-cancel').addEventListener('click', function () { confirmEl.style.display = 'none'; });
+  document.getElementById('confirm-cancel').addEventListener('click', closeConfirm);
   document.getElementById('cancel-btn').addEventListener('click', function () { vscode.postMessage({ type: 'cancel' }); });
 })();
 </script>

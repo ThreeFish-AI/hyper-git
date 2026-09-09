@@ -4,7 +4,7 @@ import { parseNameStatus, statusLabel, parseShortStat } from '../../engine/log/c
 import { applyClientFilters, toClientFilter, type LogFilter } from '../../engine/log/log-filter';
 import { DEFAULT_LANE_PALETTE } from '../../engine/log/graph-color';
 import { computeGraphLayout, maxLanes } from '../../engine/log/graph-layout';
-import { getBaseStyles, GRAPH_ROW_H, GRAPH_LANE_W } from './shared-styles';
+import { getBaseStyles, GRAPH_ROW_H, GRAPH_LANE_W, ICON_CHEVRON_DOWN, ICON_CLOSE } from './shared-styles';
 import { getNonce } from './nonce';
 import { parseLogLines } from '../../engine/log/log-line';
 import { buildLogArgs, type LogScope } from '../../engine/log/log-query';
@@ -671,7 +671,9 @@ body[data-vscode-theme-kind~='high-contrast'] .chip {
 /* ── 变更文件目录树（详情面板 Group By Directory 形态）── */
 #details .tree-dir { display: flex; align-items: center; gap: 6px; padding: 2px 10px; font-size: 12px; cursor: pointer; user-select: none; }
 #details .tree-dir:hover { background: var(--vscode-list-hoverBackground); }
-#details .tree-dir .tree-twist { flex: 0 0 12px; text-align: center; font-size: 10px; opacity: 0.8; }
+#details .tree-dir .tree-twist { flex: 0 0 14px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.8; }
+#details .tree-dir .tree-twist svg { display: block; }
+#details .tree-dir .tree-twist.collapsed svg { transform: rotate(-90deg); }
 #details .tree-dir .tree-name { color: var(--vscode-descriptionForeground); overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
@@ -679,13 +681,13 @@ body[data-vscode-theme-kind~='high-contrast'] .chip {
 <div id="main">
   <div id="viewport" tabindex="0" role="tree" aria-label="Commit graph">
     <div id="spacer"><div id="rows"></div></div>
-    <div id="empty"><div class="empty-icon" aria-hidden="true">⌥</div><div class="empty-title">No Commits</div><div class="empty-hint">No commits match the current scope or filter.</div></div>
+    <div id="empty"><div class="empty-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><circle cx="8" cy="8" r="2.8"/><path d="M8 1.5v3.7M8 10.8v3.7"/></svg></div><div class="empty-title">No Commits</div><div class="empty-hint">No commits match the current scope or filter.</div></div>
     <div id="error" style="display:none"><div class="empty-title">Failed to Load Commits</div><div class="empty-hint" id="error-msg"></div><button class="hg-btn hg-btn--sm" id="retry-btn" style="margin-top:8px">Retry</button></div>
     <div id="spinner">Loading…</div>
   </div>
   <div class="gutter" id="gutter-main" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize commit panel"></div>
   <aside id="commit-panel" role="region" aria-label="Commit details">
-    <section id="details" role="group" aria-label="Changed files"><div class="dh" id="details-head"><span id="details-title"></span><button class="dh-close" id="details-close" title="Deselect commit" aria-label="Deselect commit">×</button></div><div id="details-list"></div></section>
+    <section id="details" role="group" aria-label="Changed files"><div class="dh" id="details-head"><span id="details-title"></span><button class="dh-close" id="details-close" title="Deselect commit" aria-label="Deselect commit">${ICON_CLOSE}</button></div><div id="details-list"></div></section>
     <div class="gutter" id="gutter-meta" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="Resize changed files section"></div>
     <section id="commit-meta" role="group" aria-label="Commit information"></section>
   </aside>
@@ -694,6 +696,7 @@ body[data-vscode-theme-kind~='high-contrast'] .chip {
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 const LANE_FALLBACK = ${laneFallback};
+const ICON_CHEVRON = ${JSON.stringify(ICON_CHEVRON_DOWN)};
 // 泳道色解析：优先主题 --vscode-charts-* 令牌（深/浅主题自适应），缺失或与其它 lane 撞色时
 // 回落 DEFAULT_LANE_PALETTE 原始 distinct hex，保底相邻 lane 可区分（对齐 graph-color 设计注释）。
 // 主题热切换监听：webview 不随换主题重载，CSS 变量热更但 JS 快照不会——MutationObserver 观察
@@ -893,7 +896,9 @@ function ciSlotHtml(row) {
 
 function rowHtml(row, idx) {
   const sel = row.hash === selectedHash ? ' selected' : '';
-  const merge = row.isMerge ? '<span class="merge" title="Merge commit">⇠</span>' : '';
+  // merge 标记：双父提交的 graph 型 SVG（Unicode ⇠ 随字体渲染不稳定且进读屏）。
+  const MERGE_ICON = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="4" cy="4" r="1.8"/><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="8" r="1.8"/></svg>';
+  const merge = row.isMerge ? '<span class="merge" title="Merge commit">' + MERGE_ICON + '</span>' : '';
   // 列顺序对齐官方 GRAPH：泳道图 → message → 引用胶囊 → author → date → CI。chips 作为 message 右侧后缀。
   return '<div class="row' + sel + '" data-i="' + idx + '" data-hash="' + esc(row.hash) + '" role="treeitem" aria-selected="' + (sel !== '') + '">'
     + rowSvg(row)
@@ -1224,7 +1229,7 @@ function detailLeafHtml(hash, f, depth, label) {
 function renderDetailNode(node, depth, hash, files, out) {
   if (node.dir) {
     const isCol = dcollapsed.has(node.path);
-    out.push('<div class="tree-dir" style="padding-left:' + (depth * DINDENT + 8) + 'px" data-dir="' + esc(node.path) + '"><span class="tree-twist">' + (isCol ? '\\u25B8' : '\\u25BE') + '</span><span class="tree-name">' + esc(node.name) + '</span></div>');
+    out.push('<div class="tree-dir" style="padding-left:' + (depth * DINDENT + 8) + 'px" data-dir="' + esc(node.path) + '"><span class="tree-twist' + (isCol ? ' collapsed' : '') + '">' + ICON_CHEVRON + '</span><span class="tree-name">' + esc(node.name) + '</span></div>');
     if (!isCol) { for (const c of node.children) renderDetailNode(c, depth + 1, hash, files, out); }
   } else {
     out.push(detailLeafHtml(hash, files[node.fileIndex], depth, node.name));
