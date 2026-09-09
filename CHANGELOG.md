@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **CI 发布渠道重启双市场**:`publish` job 增回 Open VSX 发布步骤(`pnpm exec ovsx publish --packagePath ./*.vsix`,由仓库变量 `ENABLE_OVSX_PUBLISH` 门控 + `OVSX_PAT` 凭证,复用 `package` job 的同一枚 VSIX、共享 production 审批门),覆盖 Cursor / Windsurf / VSCodium 等 Open VSX 系编辑器;README 安装渠道同步加回 Open VSX。发布决策沿革见 [发布策略调研](./docs/research/04-publishing-cicd.md)。
+
 ## [0.0.17] - 2026-09-09 — Log 提交详情常驻面板 · VS Code 1.136 最佳实践对齐 · 稳定性与体验修复
 
 自 v0.0.16 以来的积累（PR #115 / #116）。核心变更：**Log 提交详情由悬停浮层改为右侧常驻面板**（三区可拖拽分割线、窄视图自适应堆叠），并全面对齐 VS Code 1.136 控件 / 交互 / API 最佳实践（修复 9 项缺陷、Webview 控件全面主题化、能力声明与设置治理）；新增长时 git 操作进度反馈、入门导览与默认键位、Stash / Worktrees 批量操作、分支 / 标签名即时校验等体验增强。完整用户视角叙述见 [Release Note v0.0.17](./docs/releases/v0.0.17.md)。

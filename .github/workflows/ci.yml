@@ -134,3 +134,14 @@ jobs:
           pnpm exec vsce publish --packagePath *.vsix $PRE_FLAG
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      # Open VSX 发布：由仓库变量 ENABLE_OVSX_PUBLISH 门控（与 ENABLE_MARKETPLACE_PUBLISH 对称）。
+      # 需配置 OVSX_PAT（open-vsx.org 的 Access Token）；覆盖 Cursor / Windsurf / VSCodium 等 Open VSX 系编辑器。
+      # 与 vsce 同款 `pnpm exec ovsx`（项目锁定版本；其传递依赖 @vscode/vsce 的构建脚本
+      # 已在 pnpm-workspace.yaml allowBuilds 审批）。注意：ovsx 对「已打包 VSIX」会忽略 --pre-release
+      # （预发布语义已由 package job 的 vsce package --pre-release 内嵌进 VSIX 元数据），
+      # 故此处不传 PRE_FLAG——与 vsce publish 的两端成对要求不同。
+      - name: 发布到 Open VSX
+        if: ${{ vars.ENABLE_OVSX_PUBLISH == 'true' }}
+        run: pnpm exec ovsx publish --packagePath ./*.vsix
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}

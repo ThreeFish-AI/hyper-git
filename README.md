@@ -51,6 +51,7 @@
 
 - **Manual (recommended for now)**: download `hyper-git-agentic-git-x.x.x.vsix` from [Releases](https://github.com/ThreeFish-AI/hyper-git/releases) → run `Extensions: Install from VSIX` in the Command Palette.
 - **VS Code Marketplace**: search for `Hyper Git - Agentic Git`.
+- **Open VSX**: search for `Hyper Git - Agentic Git` (covers Cursor / Windsurf / VSCodium and other Open VSX-based editors).
 - **Requirements**: VS Code ≥ 1.85.0 with the built-in Git extension enabled (`vscode.git`, bundled by default). Local Git repositories only — virtual / Web workspaces are not supported.
 
 ## Known Limitations
