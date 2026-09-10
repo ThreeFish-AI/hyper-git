@@ -22,6 +22,7 @@ suite('扩展冒烟测试', function () {
 			'hyperGit.setActiveChangelist',
 			'hyperGit.commit.detailTree',
 			'hyperGit.commit.detailFlat',
+			'hyperGit.commit.discardSelected',
 			'hyperGit.renameChangelist',
 			'hyperGit.deleteChangelist',
 			'hyperGit.moveChangelist',

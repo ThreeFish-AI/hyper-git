@@ -286,6 +286,12 @@
 				"icon": "$(list-flat)"
 			},
 			{
+				"command": "hyperGit.commit.discardSelected",
+				"title": "Discard Changes",
+				"category": "Hyper Git",
+				"icon": "$(discard)"
+			},
+			{
 				"command": "hyperGit.selectRepository",
 				"title": "Select Repository…",
 				"category": "Hyper Git",
@@ -843,6 +849,11 @@
 					"command": "hyperGit.commit.detailFlat",
 					"when": "view == hyperGit.commit && hyperGit.commit.tree",
 					"group": "navigation@0.75"
+				},
+				{
+					"command": "hyperGit.commit.discardSelected",
+					"when": "view == hyperGit.commit",
+					"group": "2_changes@0"
 				},
 				{
 					"command": "hyperGit.refresh",
@@ -1409,6 +1420,10 @@
 				},
 				{
 					"command": "hyperGit.commit.detailFlat",
+					"when": "view == hyperGit.commit"
+				},
+				{
+					"command": "hyperGit.commit.discardSelected",
 					"when": "view == hyperGit.commit"
 				},
 				{

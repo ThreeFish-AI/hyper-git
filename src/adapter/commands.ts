@@ -184,32 +184,51 @@ export function registerChangesCommands(
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.discardChanges', async (arg: ChangeItem | string) => {
-			const repo = service.repo;
-			const change = resolveChange(arg);
-			if (!repo || !change) {
-				return;
-			}
-			const choice = await vscode.window.showWarningMessage(
-				`Discard changes to "${change.relativePath}"? This action cannot be undone.`,
-				{ modal: true },
-				'Discard',
-			);
-			if (choice !== 'Discard') {
-				return;
-			}
-			try {
-				// 未跟踪文件用 clean（删除）；已跟踪的改动用 restore（丢弃工作区改动）。
-				// 视图刷新由 service.onDidChange → refreshAll 驱动。
-				if (change.status === FileStatus.Untracked) {
-					await repo.clean([change.uri.fsPath]);
-				} else {
-					await repo.restore([change.uri.fsPath]);
+		vscode.commands.registerCommand(
+			'hyperGit.discardChanges',
+			// 单文件（文件右键菜单）与批量（Commit 标题栏勾选集）统一路径：归一为数组后逐项解析过滤。
+			async (arg: ChangeItem | string | readonly (ChangeItem | string)[]) => {
+				const repo = service.repo;
+				const changes = (Array.isArray(arg) ? arg : [arg])
+					.map(resolveChange)
+					.filter((c): c is ChangeItem => Boolean(c));
+				if (!repo || changes.length === 0) {
+					return;
 				}
-			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to discard: ${e instanceof Error ? e.message : String(e)}`);
-			}
-		}),
+				const paths = changes.map((c) => c.relativePath);
+				const choice = await vscode.window.showWarningMessage(
+					paths.length === 1
+						? `Discard changes to "${paths[0]}"? This action cannot be undone.`
+						: `Discard changes to ${paths.length} selected files? This action cannot be undone.`,
+					// 批量时列示目标文件（超出 10 个截断），破坏性操作保持可见范围。
+					{
+						modal: true,
+						detail:
+							paths.length > 1
+								? paths.slice(0, 10).join('\n') + (paths.length > 10 ? `\n… and ${paths.length - 10} more` : '')
+								: undefined,
+					},
+					'Discard',
+				);
+				if (choice !== 'Discard') {
+					return;
+				}
+				try {
+					// 未跟踪文件用 clean（删除）；已跟踪的改动用 restore（丢弃工作区改动），两类各一次调用。
+					// 视图刷新由 service.onDidChange → refreshAll 驱动。
+					const untracked = changes.filter((c) => c.status === FileStatus.Untracked).map((c) => c.uri.fsPath);
+					const tracked = changes.filter((c) => c.status !== FileStatus.Untracked).map((c) => c.uri.fsPath);
+					if (untracked.length > 0) {
+						await repo.clean(untracked);
+					}
+					if (tracked.length > 0) {
+						await repo.restore(tracked);
+					}
+				} catch (e) {
+					void vscode.window.showErrorMessage(`Failed to discard: ${e instanceof Error ? e.message : String(e)}`);
+				}
+			},
+		),
 	);
 
 	return subs;

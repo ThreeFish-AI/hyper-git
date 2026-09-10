@@ -243,6 +243,9 @@ export async function activate(
 		// commitView 的 onDidChangeRepository 订阅先于 refreshAll 注册，切库时 dmode 重载先于视图刷新）。
 		vscode.commands.registerCommand('hyperGit.commit.detailTree', () => commitView.setDetailMode('tree')),
 		vscode.commands.registerCommand('hyperGit.commit.detailFlat', () => commitView.setDetailMode('flat')),
+		// 标题栏「…」批量 Discard：范围 = 勾选集镜像（webview 经 checkedChanged 单向同步），
+		// 确认与执行复用 discardChanges（单/多统一路径）。
+		vscode.commands.registerCommand('hyperGit.commit.discardSelected', () => commitView.discardChecked()),
 		vscode.commands.registerCommand('hyperGit.showConsole', () => showGitConsole()),
 		vscode.commands.registerCommand('hyperGit.startRebase', () => RebaseWebview.open(service)),
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, inlineLens),

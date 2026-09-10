@@ -32,7 +32,7 @@ const titleEntries = pkg.contributes.menus['view/title'];
 const paletteEntries = pkg.contributes.menus.commandPalette;
 
 describe('commit-titlebar（Commit 视图标题栏控件声明护栏）', () => {
-	it('三个命令定义齐备：changelist 选择器带 … 与 $(checklist)，List/Tree 图标与 Graph 版一致', () => {
+	it('四个命令定义齐备：changelist 选择器带 … 与 $(checklist)，List/Tree 图标与 Graph 版一致，批量 Discard 带 $(discard)', () => {
 		expect(commandById.get('hyperGit.setActiveChangelist')).toMatchObject({
 			title: 'Set Active Changelist…',
 			icon: '$(checklist)',
@@ -45,9 +45,13 @@ describe('commit-titlebar（Commit 视图标题栏控件声明护栏）', () => 
 			title: 'Show Changed Files as Flat List',
 			icon: '$(list-flat)',
 		});
+		expect(commandById.get('hyperGit.commit.discardSelected')).toMatchObject({
+			title: 'Discard Changes',
+			icon: '$(discard)',
+		});
 	});
 
-	it('view/title 挂载于 Refresh 左侧且 List/Tree 以 hyperGit.commit.tree 互斥', () => {
+	it('view/title 挂载于 Refresh 左侧且 List/Tree 以 hyperGit.commit.tree 互斥，批量 Discard 入 … 菜单', () => {
 		const pick = (command: string): MenuEntry => {
 			const hit = titleEntries.find(
 				(e) => e.command === command && (e.when ?? '').includes('hyperGit.commit'),
@@ -70,6 +74,12 @@ describe('commit-titlebar（Commit 视图标题栏控件声明护栏）', () => 
 			when: 'view == hyperGit.commit && hyperGit.commit.tree',
 			group: 'navigation@0.75',
 		});
+		// 非 navigation 组 → 落入标题栏「…」菜单（排序在 1_sync 同步组之后）。
+		expect(pick('hyperGit.commit.discardSelected')).toEqual({
+			command: 'hyperGit.commit.discardSelected',
+			when: 'view == hyperGit.commit',
+			group: '2_changes@0',
+		});
 	});
 
 	it('commandPalette 三条均限定 Commit 视图聚焦（不全局泄漏）', () => {
@@ -77,6 +87,7 @@ describe('commit-titlebar（Commit 视图标题栏控件声明护栏）', () => 
 			'hyperGit.setActiveChangelist',
 			'hyperGit.commit.detailTree',
 			'hyperGit.commit.detailFlat',
+			'hyperGit.commit.discardSelected',
 		]) {
 			expect(
 				paletteEntries.find((e) => e.command === command),
