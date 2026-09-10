@@ -39,27 +39,18 @@ export interface FileTreeNode {
 	readonly children?: readonly FileTreeNode[]; // 仅目录
 }
 
-/** Commit 头部切换下拉的 changelist 条目（含文件计数，空列表也在内以便切换）。 */
-export interface CommitChangelistItem {
-	readonly id: string;
-	readonly name: string;
-	readonly count: number;
-}
-
 export interface CommitViewState {
 	readonly template: string;
 	readonly recentMessages: readonly string[];
-	readonly activeChangelistName: string;
-	readonly activeChangelistId: string;
-	/** 全部 changelist（含空列表，供头部切换下拉 / 展示计数）。 */
-	readonly changelists: readonly CommitChangelistItem[];
+	/** 文件列表展示模式（host 为事实源，标题栏 List/Tree 图标切换；镜像 LogGraphState.dmode）。 */
+	readonly mode: 'flat' | 'tree';
 	/** 活动 changelist 的文件（提交目标；平铺形态直接渲染）。 */
 	readonly files: readonly CommitFileItem[];
 	/** 活动 changelist 文件的目录树（host 侧构建，供 Group By Directory 形态渲染）。 */
 	readonly tree: readonly FileTreeNode[];
 	readonly conventionalEnabled: boolean;
 	readonly busy: boolean;
-	/** 当前活跃仓库根（issue #107）：webview 勾选集/视图模式按仓库分区记忆。 */
+	/** 当前活跃仓库根（issue #107）：webview 勾选集/折叠集按仓库分区记忆（mode 已上移 host）。 */
 	readonly repoRoot: string;
 }
 
@@ -84,11 +75,12 @@ export type WebviewToHostMessage =
 			readonly push: boolean;
 		};
 	}
-	// ── 由旧 Changes 树平移而来的文件 / changelist 操作（webview 右键/点击 → host 复用既有命令）── //
+	// ── 由旧 Changes 树平移而来的文件操作（webview 点击/右键 → host 复用既有命令）；
+	// changelist 切换与管理已上移标题栏（hyperGit.setActiveChangelist QuickPick）── //
 	| { readonly type: 'commit/openFile'; readonly payload: { readonly path: string } }
 	| { readonly type: 'commit/fileMenu'; readonly payload: { readonly path: string } }
-	| { readonly type: 'commit/setActive'; readonly payload: { readonly id: string } }
-	| { readonly type: 'commit/changelistMenu'; readonly payload: { readonly id: string } };
+	// 勾选集单向同步（webview 事实源 → host 镜像）：Commit 标题栏「…」批量 Discard 的数据源。
+	| { readonly type: 'commit/checkedChanged'; readonly payload: { readonly paths: readonly string[] } };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Log Graph 视图（hyperGit.log，Webview）↔ Extension Host 消息契约。

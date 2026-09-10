@@ -32,9 +32,6 @@ export const ICON_CHEVRON_DOWN =
 /** 11px 关闭 X。 */
 export const ICON_CLOSE =
 	'<svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8"/></svg>';
-/** 12px 水平省略号（⋯ 菜单）。 */
-export const ICON_ELLIPSIS =
-	'<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>';
 
 /**
  * 基础样式：`:root` Token + 通用组件类 + 全局控件基线 + 统一交互态。

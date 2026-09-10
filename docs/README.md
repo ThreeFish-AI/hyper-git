@@ -14,14 +14,14 @@
 - [Agentic Git 偏好配置](./features/agentic-git-preferences.md) — Agentic Git 预置：Base Branch + Commit / Create PR / Review 三项 agent 指令偏好（多行文本域 + 内置默认模板；M5 前置铺垫）。
 
 ## 发布说明
-- [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.17 Log 提交详情常驻面板 · VS Code 1.136 最佳实践对齐](./releases/v0.0.17.md)。
+- [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.18 Commit / Branches 标题栏重构 · 批量 Discard Changes · 分支级 Push](./releases/v0.0.18.md)。
 
 ## 调研报告（循证依据）
 - [02 · VS Code SCM API 与 vscode.git 集成路径](./research/02-vscode-scm-integration.md) — 路径 B 决策依据、SCM 稳定/proposed API 边界、changelist 模型映射。
 - [03 · VS Code 扩展工程蓝图](./research/03-extension-blueprint.md) — 技术栈决策、工程骨架、IDEA→VS Code UI 表面映射表。
-- [04 · 发布策略 + CI/CD](./research/04-publishing-cicd.md) — VS Code Marketplace 发布、CI 矩阵、版本治理、安全。
+- [04 · 发布策略 + CI/CD](./research/04-publishing-cicd.md) — 双市场(Marketplace + Open VSX)发布、CI 矩阵、版本治理、安全。
 - [05 · AI Agent 架构预留](./research/05-ai-agent-seams.md) — AI 接缝（ILlmProvider 等）+ 借鉴 JetBrains CheckinHandler 责任链设计 + 渐进式引入路线。
 
 ## 协作与规范
 - [AGENTS.md](../AGENTS.md) — 协作协议与工程行为准则。
-- [知识索引](./.agents/knowledge-map.md) · [Issue 记录](./.agents/issue.md) · [引用规范 IEEE](./.agents/reference-specifications.md)。
+- [知识索引](./.agents/knowledge-map.md) · [Issue 记录](./.agents/issue.md)。引用规范（IEEE）与浏览器验证协议以全局 `~/.agents/docs/` 为准（见 AGENTS.md）。

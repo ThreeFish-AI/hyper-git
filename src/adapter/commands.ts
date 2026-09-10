@@ -21,7 +21,8 @@ function asId(arg: unknown): string | undefined {
  * 注册 Changes / Commit 相关命令（M1；原 Changes 树移除后由 Commit webview 复用）。
  *
  * 文件级命令统一接受 `ChangeItem | 路径字符串`：webview 传路径，host 经 {@link resolveChange}
- * 回落到 `service.getChanges()` 解析为 ChangeItem（单一事实源）。视图刷新由 registry/service
+ * 回落到 `service.getChanges()` 解析为 ChangeItem（单一事实源）。changelist 切换与管理由
+ * 标题栏 $(checklist) 图标进入 setActiveChangelist QuickPick 承载。视图刷新由 registry/service
  * 的 onDidChange → extension.refreshAll → commitView.refresh() 驱动，命令内不再直接刷新视图。
  */
 export function registerChangesCommands(
@@ -57,10 +58,48 @@ export function registerChangesCommands(
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.setActiveChangelist', (arg: unknown) => {
+		vscode.commands.registerCommand('hyperGit.setActiveChangelist', async (arg?: unknown) => {
+			// 带参 = 程序化切换；无参 = QuickPick（标题栏 $(checklist) 图标与命令面板共用入口）。
 			const id = asId(arg);
 			if (id) {
 				registry.setActive(id);
+				return;
+			}
+			const active = registry.activeChangelistId;
+			// 计数取 getGroups（含空列表，未显式分配项归活动列表——见 engine/changelist/grouper）。
+			const groups = registry.getGroups(service.getChanges(), (c) => c.relativePath);
+			type SetActiveItem =
+				| { label: string; description: string; picked: boolean; setId: string }
+				| { label: string; kind: vscode.QuickPickItemKind }
+				| { label: string; op: 'new' | 'rename' | 'delete'; targetId?: string };
+			const items: SetActiveItem[] = groups.map((g) => ({
+				label: g.name,
+				description: `${g.items.length} file${g.items.length === 1 ? '' : 's'}`,
+				picked: g.id === active, // 预选当前活动项（对齐 selectRepository 的 picked 范式）
+				setId: g.id,
+			}));
+			// 分隔线后并入原 webview「⋯」菜单管理操作（default 不可改名/删除，镜像原 handleChangelistMenu 语义）。
+			items.push({ label: 'Actions', kind: vscode.QuickPickItemKind.Separator });
+			items.push({ label: '$(add) New Changelist…', op: 'new' });
+			const def = active !== 'default' ? registry.getDef(active) : undefined;
+			if (def) {
+				items.push({ label: `$(edit) Rename "${def.name}"…`, op: 'rename', targetId: active });
+				items.push({ label: `$(trash) Delete "${def.name}"…`, op: 'delete', targetId: active });
+			}
+			const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select Active Changelist' });
+			if (!pick) {
+				return;
+			}
+			if ('setId' in pick) {
+				registry.setActive(pick.setId); // 视图刷新经 registry.onDidChange → refreshAll 驱动
+			} else if ('op' in pick) {
+				if (pick.op === 'new') {
+					await vscode.commands.executeCommand('hyperGit.newChangelist');
+				} else if (pick.op === 'rename') {
+					await vscode.commands.executeCommand('hyperGit.renameChangelist', pick.targetId);
+				} else {
+					await vscode.commands.executeCommand('hyperGit.deleteChangelist', pick.targetId);
+				}
 			}
 		}),
 	);
@@ -145,32 +184,51 @@ export function registerChangesCommands(
 	);
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.discardChanges', async (arg: ChangeItem | string) => {
-			const repo = service.repo;
-			const change = resolveChange(arg);
-			if (!repo || !change) {
-				return;
-			}
-			const choice = await vscode.window.showWarningMessage(
-				`Discard changes to "${change.relativePath}"? This action cannot be undone.`,
-				{ modal: true },
-				'Discard',
-			);
-			if (choice !== 'Discard') {
-				return;
-			}
-			try {
-				// 未跟踪文件用 clean（删除）；已跟踪的改动用 restore（丢弃工作区改动）。
-				// 视图刷新由 service.onDidChange → refreshAll 驱动。
-				if (change.status === FileStatus.Untracked) {
-					await repo.clean([change.uri.fsPath]);
-				} else {
-					await repo.restore([change.uri.fsPath]);
+		vscode.commands.registerCommand(
+			'hyperGit.discardChanges',
+			// 单文件（文件右键菜单）与批量（Commit 标题栏勾选集）统一路径：归一为数组后逐项解析过滤。
+			async (arg: ChangeItem | string | readonly (ChangeItem | string)[]) => {
+				const repo = service.repo;
+				const changes = (Array.isArray(arg) ? arg : [arg])
+					.map(resolveChange)
+					.filter((c): c is ChangeItem => Boolean(c));
+				if (!repo || changes.length === 0) {
+					return;
 				}
-			} catch (e) {
-				void vscode.window.showErrorMessage(`Failed to discard: ${e instanceof Error ? e.message : String(e)}`);
-			}
-		}),
+				const paths = changes.map((c) => c.relativePath);
+				const choice = await vscode.window.showWarningMessage(
+					paths.length === 1
+						? `Discard changes to "${paths[0]}"? This action cannot be undone.`
+						: `Discard changes to ${paths.length} selected files? This action cannot be undone.`,
+					// 批量时列示目标文件（超出 10 个截断），破坏性操作保持可见范围。
+					{
+						modal: true,
+						detail:
+							paths.length > 1
+								? paths.slice(0, 10).join('\n') + (paths.length > 10 ? `\n… and ${paths.length - 10} more` : '')
+								: undefined,
+					},
+					'Discard',
+				);
+				if (choice !== 'Discard') {
+					return;
+				}
+				try {
+					// 未跟踪文件用 clean（删除）；已跟踪的改动用 restore（丢弃工作区改动），两类各一次调用。
+					// 视图刷新由 service.onDidChange → refreshAll 驱动。
+					const untracked = changes.filter((c) => c.status === FileStatus.Untracked).map((c) => c.uri.fsPath);
+					const tracked = changes.filter((c) => c.status !== FileStatus.Untracked).map((c) => c.uri.fsPath);
+					if (untracked.length > 0) {
+						await repo.clean(untracked);
+					}
+					if (tracked.length > 0) {
+						await repo.restore(tracked);
+					}
+				} catch (e) {
+					void vscode.window.showErrorMessage(`Failed to discard: ${e instanceof Error ? e.message : String(e)}`);
+				}
+			},
+		),
 	);
 
 	return subs;

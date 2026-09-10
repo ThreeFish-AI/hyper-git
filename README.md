@@ -51,6 +51,7 @@
 
 - **Manual (recommended for now)**: download `hyper-git-agentic-git-x.x.x.vsix` from [Releases](https://github.com/ThreeFish-AI/hyper-git/releases) → run `Extensions: Install from VSIX` in the Command Palette.
 - **VS Code Marketplace**: search for `Hyper Git - Agentic Git`.
+- **Open VSX**: search for `Hyper Git - Agentic Git` (covers Cursor / Windsurf / VSCodium and other Open VSX-based editors).
 - **Requirements**: VS Code ≥ 1.85.0 with the built-in Git extension enabled (`vscode.git`, bundled by default). Local Git repositories only — virtual / Web workspaces are not supported.
 
 ## Known Limitations
@@ -95,7 +96,7 @@ pnpm exec vsce publish
 ```
 
 - **Layering**: `engine/` (pure logic) → `adapter/` (the sole layer touching the vscode API, including the hand-rendered `adapter/webview/` UI); `agent/` is injected into `engine/` via interfaces and never depends on the UI; `shared/protocol.ts` is the single source of truth for the Webview ↔ Host contract.
-- **Release**: a `v*` tag triggers CI to produce a GitHub Release (with the `.vsix` attached; the body is drawn from [`docs/releases/`](./docs/releases/README.md)) and publish to the VS Code Marketplace (gated by the `ENABLE_MARKETPLACE_PUBLISH` variable; `rc` tags go to the pre-release channel).
+- **Release**: a `v*` tag triggers CI to produce a GitHub Release (with the `.vsix` attached; the body is drawn from [`docs/releases/`](./docs/releases/README.md)) and publish the same VSIX to both the VS Code Marketplace (gated by the `ENABLE_MARKETPLACE_PUBLISH` variable) and Open VSX (gated by `ENABLE_OVSX_PUBLISH`); `rc` tags go to the pre-release channel.
 - Package management and scripts standardize on `pnpm` (per the [AGENTS.md](./AGENTS.md) engineering conventions). Version history is tracked in the [Changelog](./CHANGELOG.md). See the [documentation hub](./docs/README.md) for the full docs.
 
 ---
