@@ -451,7 +451,7 @@
 				"command": "hyperGit.pruneRemotes",
 				"title": "Prune Deleted Remote Branches",
 				"category": "Hyper Git",
-				"icon": "$(clear-all)"
+				"icon": "$(sync-ignore)"
 			},
 			{
 				"command": "hyperGit.cherryPick",

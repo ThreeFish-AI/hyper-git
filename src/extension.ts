@@ -304,6 +304,28 @@ export async function activate(
 	// 首帧同步：即便后续无事件也确保角标初值正确。
 	updateBadge();
 
+	// 视图标题栏图标默认仅在 hover/聚焦时显示（VS Code 平台行为，由 workbench.view.alwaysShowHeaderActions
+	// 经 CSS 类 actions-always-visible 控制，扩展贡献点无法覆盖）。Hyper Git 多视图重度依赖标题栏动作，
+	// 故一次性提示引导用户开启（仅在设置仍为默认 false 时提示；用户确认才写全局设置，Don't Show Again 后不再打扰）。
+	void (async (): Promise<void> => {
+		const HINT_KEY = 'hyperGit.hint.alwaysShowHeaderActions';
+		const cfg = vscode.workspace.getConfiguration('workbench.view');
+		if (context.globalState.get<boolean>(HINT_KEY) || cfg.get<boolean>('alwaysShowHeaderActions')) {
+			return;
+		}
+		const pick = await vscode.window.showInformationMessage(
+			'Show Hyper Git view toolbar icons at all times? VS Code hides view header actions until hover by default.',
+			'Always Show',
+			'Don\'t Show Again',
+		);
+		if (pick === 'Always Show') {
+			await cfg.update('alwaysShowHeaderActions', true, vscode.ConfigurationTarget.Global);
+			await context.globalState.update(HINT_KEY, true);
+		} else if (pick === 'Don\'t Show Again') {
+			await context.globalState.update(HINT_KEY, true);
+		}
+	})();
+
 	// 首帧保险：若 repo 在 activate 前已就绪，GitRepositoryService 构造函数的 _onDidChange.fire()
 	// 早于任何订阅者挂载而被丢失，state.onDidChange 此后可能不再触发。主动刷新一次确保
 	// Branches/Log 不停留在首帧空状态（getChildren 内已对未就绪数据做 CLI 兜底与空安全处理）。

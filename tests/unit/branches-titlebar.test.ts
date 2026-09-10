@@ -43,6 +43,13 @@ describe('branches-titlebar（Branches 标题栏/右键菜单声明护栏）', (
 		});
 	});
 
+	it('Prune 图标为 $(sync-ignore)，且不与本视图标题栏/右键的删除类 $(trash) 混淆', () => {
+		expect(commandById.get('hyperGit.pruneRemotes')?.icon).toBe('$(sync-ignore)');
+		// 该图标全扩展唯一：避免与 Refresh/Update Project 等同栏同步类图标、以及删除类图标撞脸。
+		const sameIcon = pkg.contributes.commands.filter((c) => c.icon === '$(sync-ignore)').map((c) => c.command);
+		expect(sameIcon).toEqual(['hyperGit.pruneRemotes']);
+	});
+
 	it('view/title：Prune 上移 navigation@4（原 Push 位），标题栏不再挂全局 Push，Merge… 收入 1_sync 组', () => {
 		const branchesEntries = titleEntries.filter((e) => e.when === 'view == hyperGit.branches');
 		const byCommand = new Map(branchesEntries.map((e) => [e.command, e]));
