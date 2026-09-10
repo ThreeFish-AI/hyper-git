@@ -304,13 +304,26 @@ export async function activate(
 	// 首帧同步：即便后续无事件也确保角标初值正确。
 	updateBadge();
 
-	// 视图标题栏图标默认仅在 hover/聚焦时显示（VS Code 平台行为，由 workbench.view.alwaysShowHeaderActions
-	// 经 CSS 类 actions-always-visible 控制，扩展贡献点无法覆盖）。Hyper Git 多视图重度依赖标题栏动作，
-	// 故一次性提示引导用户开启（仅在设置仍为默认 false 时提示；用户确认才写全局设置，Don't Show Again 后不再打扰）。
-	void (async (): Promise<void> => {
-		const HINT_KEY = 'hyperGit.hint.alwaysShowHeaderActions';
+	// 视图标题栏图标默认仅在 hover/聚焦时显示（VS Code 平台行为：ViewPane 依 workbench.view.alwaysShowHeaderActions
+	// 切换 CSS 类 actions-always-visible，扩展贡献点无法覆盖，只能引导用户改设置——改动即时生效，无需重载）。
+	// 双入口：① 命令 hyperGit.alwaysShowHeaderActions 随时手动开启；② 首次激活一次性提示（用户确认才写全局设置）。
+	const HEADER_ACTIONS_HINT_KEY = 'hyperGit.hint.alwaysShowHeaderActions';
+	const enableAlwaysShowHeaderActions = async (): Promise<void> => {
 		const cfg = vscode.workspace.getConfiguration('workbench.view');
-		if (context.globalState.get<boolean>(HINT_KEY) || cfg.get<boolean>('alwaysShowHeaderActions')) {
+		if (cfg.get<boolean>('alwaysShowHeaderActions')) {
+			void vscode.window.showInformationMessage('View toolbar icons are already always visible.');
+			return;
+		}
+		await cfg.update('alwaysShowHeaderActions', true, vscode.ConfigurationTarget.Global);
+		await context.globalState.update(HEADER_ACTIONS_HINT_KEY, true);
+		void vscode.window.showInformationMessage('View toolbar icons are now always visible.');
+	};
+	context.subscriptions.push(
+		vscode.commands.registerCommand('hyperGit.alwaysShowHeaderActions', enableAlwaysShowHeaderActions),
+	);
+	void (async (): Promise<void> => {
+		const cfg = vscode.workspace.getConfiguration('workbench.view');
+		if (context.globalState.get<boolean>(HEADER_ACTIONS_HINT_KEY) || cfg.get<boolean>('alwaysShowHeaderActions')) {
 			return;
 		}
 		const pick = await vscode.window.showInformationMessage(
@@ -319,10 +332,9 @@ export async function activate(
 			'Don\'t Show Again',
 		);
 		if (pick === 'Always Show') {
-			await cfg.update('alwaysShowHeaderActions', true, vscode.ConfigurationTarget.Global);
-			await context.globalState.update(HINT_KEY, true);
+			await enableAlwaysShowHeaderActions();
 		} else if (pick === 'Don\'t Show Again') {
-			await context.globalState.update(HINT_KEY, true);
+			await context.globalState.update(HEADER_ACTIONS_HINT_KEY, true);
 		}
 	})();
 

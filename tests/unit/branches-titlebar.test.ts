@@ -43,10 +43,12 @@ describe('branches-titlebar（Branches 标题栏/右键菜单声明护栏）', (
 		});
 	});
 
-	it('Prune 图标为 $(sync-ignore)，且不与本视图标题栏/右键的删除类 $(trash) 混淆', () => {
-		expect(commandById.get('hyperGit.pruneRemotes')?.icon).toBe('$(sync-ignore)');
+	it('Prune 图标为 $(sync-ignored)，且不与本视图标题栏/右键的删除类 $(trash) 混淆', () => {
+		// 注意是过去式 sync-ignored——sync-ignore 不是有效 codicon，会静默渲染为空白方块
+		// （id 真实性由 codicon-validity 护栏统一把关）。
+		expect(commandById.get('hyperGit.pruneRemotes')?.icon).toBe('$(sync-ignored)');
 		// 该图标全扩展唯一：避免与 Refresh/Update Project 等同栏同步类图标、以及删除类图标撞脸。
-		const sameIcon = pkg.contributes.commands.filter((c) => c.icon === '$(sync-ignore)').map((c) => c.command);
+		const sameIcon = pkg.contributes.commands.filter((c) => c.icon === '$(sync-ignored)').map((c) => c.command);
 		expect(sameIcon).toEqual(['hyperGit.pruneRemotes']);
 	});
 

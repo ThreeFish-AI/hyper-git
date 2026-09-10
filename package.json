@@ -191,6 +191,11 @@
 				"category": "Hyper Git"
 			},
 			{
+				"command": "hyperGit.alwaysShowHeaderActions",
+				"title": "Always Show View Toolbar Icons",
+				"category": "Hyper Git"
+			},
+			{
 				"command": "hyperGit.refresh",
 				"title": "Refresh",
 				"category": "Hyper Git",
@@ -451,7 +456,7 @@
 				"command": "hyperGit.pruneRemotes",
 				"title": "Prune Deleted Remote Branches",
 				"category": "Hyper Git",
-				"icon": "$(sync-ignore)"
+				"icon": "$(sync-ignored)"
 			},
 			{
 				"command": "hyperGit.cherryPick",
@@ -503,7 +508,7 @@
 				"command": "hyperGit.compareWithCurrent",
 				"title": "Compare with Current Branch",
 				"category": "Hyper Git",
-				"icon": "$(compare)"
+				"icon": "$(git-compare)"
 			},
 			{
 				"command": "hyperGit.tagCreate",

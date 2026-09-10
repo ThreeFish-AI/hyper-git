@@ -46,6 +46,7 @@ suite('扩展冒烟测试', function () {
 			'hyperGit.stashApply',
 			'hyperGit.stashPop',
 			'hyperGit.stashDrop',
+			'hyperGit.alwaysShowHeaderActions',
 			'hyperGit.discardChanges',
 			'hyperGit.pull',
 			'hyperGit.push',
