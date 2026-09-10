@@ -651,6 +651,12 @@
 				"icon": "$(git-merge)"
 			},
 			{
+				"command": "hyperGit.pushBranch",
+				"title": "Push",
+				"category": "Hyper Git",
+				"icon": "$(arrow-up)"
+			},
+			{
 				"command": "hyperGit.resolveConflicts",
 				"title": "Resolve Conflicts (3-way Merge Editor)…",
 				"category": "Hyper Git",
@@ -966,14 +972,9 @@
 					"group": "navigation@3"
 				},
 				{
-					"command": "hyperGit.push",
+					"command": "hyperGit.pruneRemotes",
 					"when": "view == hyperGit.branches",
 					"group": "navigation@4"
-				},
-				{
-					"command": "hyperGit.mergeDialog",
-					"when": "view == hyperGit.branches",
-					"group": "navigation@5"
 				},
 				{
 					"command": "hyperGit.branchesGroupByPrefix",
@@ -989,11 +990,6 @@
 					"command": "hyperGit.fetch",
 					"when": "view == hyperGit.branches",
 					"group": "1_sync@1"
-				},
-				{
-					"command": "hyperGit.pruneRemotes",
-					"when": "view == hyperGit.branches",
-					"group": "1_sync@1.5"
 				},
 				{
 					"command": "hyperGit.updateProject",
@@ -1039,6 +1035,11 @@
 					"command": "hyperGit.worktreePrune",
 					"when": "view == hyperGit.worktrees",
 					"group": "navigation@3"
+				},
+				{
+					"command": "hyperGit.mergeDialog",
+					"when": "view == hyperGit.branches",
+					"group": "1_sync@2.5"
 				}
 			],
 			"view/item/context": [
@@ -1056,6 +1057,11 @@
 					"command": "hyperGit.deleteRemoteBranch",
 					"when": "view == hyperGit.branches && viewItem == hyperGit.remoteBranch",
 					"group": "9_dangerous@2"
+				},
+				{
+					"command": "hyperGit.pushBranch",
+					"when": "view == hyperGit.branches && viewItem == hyperGit.branch && !listMultiSelection",
+					"group": "1_branch@2"
 				},
 				{
 					"command": "hyperGit.mergeBranch",
@@ -1433,6 +1439,10 @@
 				{
 					"command": "hyperGit.acceptTheirs",
 					"when": "hyperGit.hasConflicts"
+				},
+				{
+					"command": "hyperGit.pushBranch",
+					"when": "false"
 				}
 			]
 		},

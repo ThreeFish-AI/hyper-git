@@ -8,10 +8,12 @@
 
 ### Added
 
+- **Branches 视图分支右键新增 Push（推送指定分支）**：右键任一本地分支 → `hyperGit.pushBranch`——已配置上游时按显式 refspec 推送到追踪分支（本地名/上游名不一致亦正确），无上游时选定 remote 并以 `-u` 建立追踪（语义同全局 Push 的双路径），推送后刷新视图并提示。
 - **Commit 视图标题栏新增 Discard Changes（最左 `$(discard)` 图标，批量撤销勾选文件）**：以文件列表勾选集为范围，单次 modal 确认（列示目标文件，超 10 个截断）后批量执行——未跟踪文件 `clean` 删除、已跟踪改动 `restore` 还原，语义与单文件右键 Discard Changes 一致；勾选集自 webview 单向同步 host 镜像（webview 仍为事实源），无勾选时给出提示，视图刷新经 `onDidChange → refreshAll` 驱动。同时 Set Active Changelist… 与 New Changelist… 两入口由标题栏图标位收入「…」菜单（`0_changelist` 组，居同步组之前）。
 
 ### Changed
 
+- **Branches 视图标题栏重排**：① 原 Push 图标下放至分支右键菜单（见上 Added；全局 Push 仍可用 Commit 视图标题栏与命令面板）。② 「Prune Deleted Remote Branches」由「…」菜单上移至标题栏 `$(clear-all)` 图标（`navigation@4`，即原 Push 位）。③ 「Merge…」由标题栏图标收入「…」菜单（同步组内，Update Project 与 New Tag… 之间），不再占用图标位。标题栏/视图头部图标「常驻显示」由 VS Code 平台设置控制（默认 hover/聚焦才显示）：开启 `workbench.view.alwaysShowHeaderActions` 即可常驻。
 - **CI 发布渠道重启双市场**:`publish` job 增回 Open VSX 发布步骤(`pnpm exec ovsx publish --packagePath ./*.vsix`,由仓库变量 `ENABLE_OVSX_PUBLISH` 门控 + `OVSX_PAT` 凭证,复用 `package` job 的同一枚 VSIX、共享 production 审批门),覆盖 Cursor / Windsurf / VSCodium 等 Open VSX 系编辑器;README 安装渠道同步加回 Open VSX。发布决策沿革见 [发布策略调研](./docs/research/04-publishing-cicd.md)。
 - **Commit 视图头部两行 UI 上移 VS Code 标题栏（省两行竖直空间）**：① 「Active Changelist」下拉与 `⋯` 管理菜单合并为标题栏「…」菜单的 Set Active Changelist… 入口（New Changelist… 亦收入「…」）——点击弹出 QuickPick：各列表带文件计数、当前活动项预选，分隔线后并入 New / Rename / Delete Changelist… 操作（默认列表不可改名/删除）；活动 changelist 名常驻视图副标题（标题「Commit」同行右侧，Default 活动列表时省略——无信息量不常驻）。② 文件列表 List ⇄ Tree 段控改为标题栏 `$(list-tree)`/`$(list-flat)` 互斥图标（交互同 Graph/Branches 切换范式），偏好移交 host `workspaceState` 按仓库持久化（`hyperGit.commit.dmode:<repo>`）——**原 webview state 中的旧 List/Tree 偏好一次性重置为默认 flat**（勾选集、目录折叠与提交草稿不受影响）。③ Select All 复选框吸顶于文件列表容器内首行（列表为空时随空态隐藏），原 `.cl-bar` 与 files-header 两行整体移除。
 

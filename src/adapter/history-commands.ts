@@ -315,6 +315,49 @@ export function registerHistoryCommands(
 	);
 
 	subs.push(
+		vscode.commands.registerCommand('hyperGit.pushBranch', async (node: BranchNode) => {
+			// 分支右键推送（原 Branches 标题栏 Push 下放）：仅本地分支；上游取自 RawRef.upstream
+			// （%(upstream:short)，非当前分支无 HEAD.upstream 可用），无上游路径与 hyperGit.push 一致。
+			const repo = service.repo;
+			if (!repo || node?.kind !== 'branch' || node.remote) {
+				return;
+			}
+			const name = node.ref.shortName;
+			try {
+				const up = node.ref.upstream;
+				if (up) {
+					// 已配置上游：显式 refspec 推送（本地名/上游名不一致亦正确；remote 名约定不含 /）。
+					const slash = up.indexOf('/');
+					const remote = slash >= 0 ? up.slice(0, slash) : up;
+					const upstreamName = slash >= 0 ? up.slice(slash + 1) : name;
+					await runWithProgress('Pushing…', () => repo.push(remote, `${name}:${upstreamName}`));
+				} else {
+					// 无上游：选定 remote 并以 -u 建立追踪（修复「Failed to execute git」根因）。
+					const remotes = repo.state.remotes.map((r) => r.name);
+					if (remotes.length === 0) {
+						void vscode.window.showWarningMessage('No remote configured; cannot push');
+						return;
+					}
+					const remote =
+						remotes.length === 1
+							? remotes[0]
+							: await vscode.window.showQuickPick(remotes, {
+								placeHolder: `Select a remote to push "${name}" to (will set upstream tracking -u)`,
+							});
+					if (!remote) {
+						return;
+					}
+					await runWithProgress('Pushing…', () => repo.push(remote, name, true));
+				}
+				branchesTree.refresh();
+				void vscode.window.showInformationMessage(`Pushed ${name}`);
+			} catch (e) {
+				void showGitError(`Failed to Push: ${errMsg(e)}`);
+			}
+		}),
+	);
+
+	subs.push(
 		vscode.commands.registerCommand('hyperGit.fetch', async () => {
 			const repo = service.repo;
 			if (!repo) {

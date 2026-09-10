@@ -49,6 +49,7 @@ suite('扩展冒烟测试', function () {
 			'hyperGit.discardChanges',
 			'hyperGit.pull',
 			'hyperGit.push',
+			'hyperGit.pushBranch',
 			'hyperGit.fetch',
 			'hyperGit.cherryPick',
 			'hyperGit.revertCommit',
