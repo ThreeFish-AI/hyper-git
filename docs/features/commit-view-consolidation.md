@@ -8,7 +8,7 @@
 |---|---|
 | 文件单击看 Diff | 文件行单击（勾选框除外）→ `commit/openFile` → 复用 `hyperGit.openDiff` |
 | 单文件右键菜单 | 文件行右键 → `commit/fileMenu` → 原生 `showQuickPick`：Open Diff / Move to Changelist… / Show History / Stage·Unstage Hunks… / Add to .gitignore / Discard Changes（复用既有命令，含 discard 确认框） |
-| Changelist 管理 | 头部 `<select>` 切换活动列表（`commit/setActive`）+ `⋯` 菜单（`commit/changelistMenu` → 新建 / 重命名 / 删除） |
+| Changelist 管理 | 标题栏 `$(checklist)` 图标（Refresh 左侧）→ `hyperGit.setActiveChangelist` QuickPick：各列表带文件计数、当前活动项 `picked` 预选，分隔线后并入 New / Rename / Delete…（默认列表不可改名删除）；活动列表名常驻 `view.description` 副标题（原头部 `<select>` + `⋯` 菜单行已上移，省一行竖直空间） |
 | Git 操作工具栏 | 标题栏（`view/title`）承接 refresh / push / pull / fetch / pushDialog / updateProject / createPatch / applyPatch；去掉与 webview 内 Commit·Commit&Push 按钮重复的两项 |
 | 活动栏未提交数角标 | 迁至 Commit `WebviewView.badge`（容器图标角标 = 各视图 badge 之和，总数不变） |
 
@@ -22,16 +22,16 @@
 
 ## 交互范围取舍
 
-Commit 视图文件区以**活动 Changelist** 为提交目标（勾选集即提交范围）；非活动 Changelist 通过头部下拉切换查看。相较旧树「同屏并列多 changelist」少了一处低频便利，换取窄侧栏下更聚焦的提交工作流。
+Commit 视图文件区以**活动 Changelist** 为提交目标（勾选集即提交范围）；非活动 Changelist 通过标题栏 `$(checklist)` 图标弹 QuickPick 切换，活动列表名常驻 `view.description` 副标题。相较旧树「同屏并列多 changelist」少了一处低频便利，换取窄侧栏下更聚焦的提交工作流。
 
 ## 实现
 
 - 视图与菜单：[`package.json`](../../package.json)（删 `hyperGit.changes` 视图 / viewsWelcome / 全部 `view == hyperGit.changes` 菜单；`view/title` 迁至 `view == hyperGit.commit`）。
-- 视图主体：[`adapter/webview/commit-webview.ts`](../../src/adapter/webview/commit-webview.ts)（groups/switcher/文件交互/菜单/角标/目录树）。
-- 命令：[`adapter/commands.ts`](../../src/adapter/commands.ts)（`resolveChange` + 签名重构）。
+- 视图主体：[`adapter/webview/commit-webview.ts`](../../src/adapter/webview/commit-webview.ts)（groups/文件交互/菜单/角标/目录树；changelist 切换与管理、List/Tree 切换已上移标题栏，mode 以 host 为事实源按仓库持久化）。
+- 命令：[`adapter/commands.ts`](../../src/adapter/commands.ts)（`resolveChange` + 签名重构；`setActiveChangelist` QuickPick 承载切换与管理）。
 - 装配：[`extension.ts`](../../src/extension.ts)（移除 tree/changesView，角标改由 `commitView.updateBadge`）。
-- 协议：[`shared/protocol.ts`](../../src/shared/protocol.ts)（`CommitChangelistItem`、`commit/openFile|fileMenu|setActive|changelistMenu`）。
+- 协议：[`shared/protocol.ts`](../../src/shared/protocol.ts)（`commit/openFile|fileMenu`；changelist 操作消息已随标题栏上移移除）。
 
 ## 验证
 
-`pnpm run check-types && pnpm run lint && pnpm run test:unit` 全绿；Extension Development Host（F5）：无 CHANGES 视图；Commit 顶部可切换/管理 changelist；文件单击开 Diff、右键出菜单（含 discard 确认）；标题栏 Git 动作可用；活动栏角标随未提交数增减；无 Git 仓库时降级不崩溃。
+`pnpm run check-types && pnpm run lint && pnpm run test:unit` 全绿；Extension Development Host（F5）：无 CHANGES 视图；标题栏 `$(checklist)` 图标可切换/管理 changelist、副标题显示活动列表名；文件单击开 Diff、右键出菜单（含 discard 确认）；标题栏 Git 动作可用；活动栏角标随未提交数增减；无 Git 仓库时降级不崩溃。

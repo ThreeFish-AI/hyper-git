@@ -9,6 +9,7 @@
 ### Changed
 
 - **CI 发布渠道重启双市场**:`publish` job 增回 Open VSX 发布步骤(`pnpm exec ovsx publish --packagePath ./*.vsix`,由仓库变量 `ENABLE_OVSX_PUBLISH` 门控 + `OVSX_PAT` 凭证,复用 `package` job 的同一枚 VSIX、共享 production 审批门),覆盖 Cursor / Windsurf / VSCodium 等 Open VSX 系编辑器;README 安装渠道同步加回 Open VSX。发布决策沿革见 [发布策略调研](./docs/research/04-publishing-cicd.md)。
+- **Commit 视图头部两行 UI 上移 VS Code 标题栏（省两行竖直空间）**：① 「Active Changelist」下拉与 `⋯` 管理菜单合并为标题栏 Refresh 图标左侧的 `$(checklist)` 图标按钮——点击弹出 QuickPick：各列表带文件计数、当前活动项预选，分隔线后并入 New / Rename / Delete Changelist… 操作（默认列表不可改名/删除）；活动 changelist 名常驻视图副标题（标题「Commit」同行右侧）。② 文件列表 List ⇄ Tree 段控改为标题栏 `$(list-tree)`/`$(list-flat)` 互斥图标（交互同 Graph/Branches 切换范式），偏好移交 host `workspaceState` 按仓库持久化（`hyperGit.commit.dmode:<repo>`）——**原 webview state 中的旧 List/Tree 偏好一次性重置为默认 flat**（勾选集、目录折叠与提交草稿不受影响）。③ Select All 复选框吸顶于文件列表容器内首行（列表为空时随空态隐藏），原 `.cl-bar` 与 files-header 两行整体移除。
 
 ## [0.0.17] - 2026-09-09 — Log 提交详情常驻面板 · VS Code 1.136 最佳实践对齐 · 稳定性与体验修复
 
