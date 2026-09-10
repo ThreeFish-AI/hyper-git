@@ -272,11 +272,11 @@ details.advanced[open] summary { margin-bottom: 4px; }
 </style>
 </head>
 <body>
-<div class="files" id="files" tabindex="0">
-  <div class="files-selectall" id="files-selectall" style="display:none">
+<div class="files" id="files" tabindex="0" role="tree" aria-label="Changed files">
+  <div class="files-selectall" id="files-selectall" role="presentation" style="display:none">
     <label class="opt" style="margin:0"><input type="checkbox" id="select-all"> Select All</label>
   </div>
-  <div id="files-rows" role="tree" aria-label="Changed files"></div>
+  <div id="files-rows" role="presentation"></div>
 </div>
 <textarea id="message" class="hg-input" rows="4" placeholder="Commit message (Conventional Commits: type(scope): description)" spellcheck="false"></textarea>
 <div id="validation" class="validation" role="status" aria-live="polite"></div>
