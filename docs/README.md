@@ -14,7 +14,7 @@
 - [Agentic Git 偏好配置](./features/agentic-git-preferences.md) — Agentic Git 预置：Base Branch + Commit / Create PR / Review 三项 agent 指令偏好（多行文本域 + 内置默认模板；M5 前置铺垫）。
 
 ## 发布说明
-- [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.17 Log 提交详情常驻面板 · VS Code 1.136 最佳实践对齐](./releases/v0.0.17.md)。
+- [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.18 Commit / Branches 标题栏重构 · 批量 Discard Changes · 分支级 Push](./releases/v0.0.18.md)。
 
 ## 调研报告（循证依据）
 - [02 · VS Code SCM API 与 vscode.git 集成路径](./research/02-vscode-scm-integration.md) — 路径 B 决策依据、SCM 稳定/proposed API 边界、changelist 模型映射。

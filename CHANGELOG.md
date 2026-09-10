@@ -6,21 +6,31 @@
 
 ## [Unreleased]
 
+## [0.0.18] - 2026-09-10 — Commit / Branches 标题栏重构 · 批量 Discard Changes · 分支级 Push · 双市场发布重启
+
+自 v0.0.17 以来的积累（PR #119 / #120 / #121）。核心变更：**Commit 与 Branches 两视图的头部与标题栏整体重构**——Commit 头部两行 UI（Active Changelist 选择器、List/Tree 段控）上移 VS Code 标题栏，净省两行竖直空间，并新增以文件勾选集为范围的批量 Discard Changes；Branches 的 Push 下放分支右键（按分支推送的显式 refspec / `-u` 双路径）、Prune 上移标题栏、Merge… 收入「…」菜单。同时修复无效 codicon 致 Compare with Current Branch 图标渲染空白与文件列表树的 A11y 语义回归，并重启 Open VSX 发布通道（与 Marketplace 对称门控），覆盖 Cursor / Windsurf / VSCodium 等编辑器。完整用户视角叙述见 [Release Note v0.0.18](./docs/releases/v0.0.18.md)。
+
 ### Added
 
-- **Branches 视图分支右键新增 Push（推送指定分支）**：右键任一本地分支 → `hyperGit.pushBranch`——已配置上游时按显式 refspec 推送到追踪分支（本地名/上游名不一致亦正确），无上游时选定 remote 并以 `-u` 建立追踪（语义同全局 Push 的双路径），推送后刷新视图并提示。
 - **Commit 视图标题栏新增 Discard Changes（最左 `$(discard)` 图标，批量撤销勾选文件）**：以文件列表勾选集为范围，单次 modal 确认（列示目标文件，超 10 个截断）后批量执行——未跟踪文件 `clean` 删除、已跟踪改动 `restore` 还原，语义与单文件右键 Discard Changes 一致；勾选集自 webview 单向同步 host 镜像（webview 仍为事实源），无勾选时给出提示，视图刷新经 `onDidChange → refreshAll` 驱动。同时 Set Active Changelist… 与 New Changelist… 两入口由标题栏图标位收入「…」菜单（`0_changelist` 组，居同步组之前）。
-
-### Fixed
-
-- **两处图标名无效导致标题栏/菜单渲染空白方块**：`$(sync-ignore)` → `$(sync-ignored)`（Prune Deleted Remote Branches）、`$(compare)` → `$(git-compare)`（Compare with Current Branch）。无效 codicon id 在 VS Code 中静默渲染为空白、无任何告警，现以 [`tests/unit/codicon-validity.test.ts`](./tests/unit/codicon-validity.test.ts) 白名单护栏全量校验命令与 submenu 图标，杜绝同类漏出。
+- **Branches 视图分支右键新增 Push（推送指定分支）**：右键任一本地分支 → `hyperGit.pushBranch`——已配置上游时按显式 refspec 推送到追踪分支（本地名/上游名不一致亦正确），无上游时选定 remote 并以 `-u` 建立追踪（语义同全局 Push 的双路径），推送后刷新视图并提示。
 
 ### Changed
 
+- **Commit 视图头部两行 UI 上移 VS Code 标题栏（省两行竖直空间）**：① 「Active Changelist」下拉与 `⋯` 管理菜单合并为标题栏「…」菜单的 Set Active Changelist… 入口（New Changelist… 亦收入「…」）——点击弹出 QuickPick：各列表带文件计数、当前活动项预选，分隔线后并入 New / Rename / Delete Changelist… 操作（默认列表不可改名/删除）；活动 changelist 名常驻视图副标题（标题「Commit」同行右侧，Default 活动列表时省略——无信息量不常驻）。② 文件列表 List ⇄ Tree 段控改为标题栏 `$(list-tree)`/`$(list-flat)` 互斥图标（交互同 Graph/Branches 切换范式），偏好移交 host `workspaceState` 按仓库持久化（`hyperGit.commit.dmode:<repo>`）——**原 webview state 中的旧 List/Tree 偏好一次性重置为默认 flat**（勾选集、目录折叠与提交草稿不受影响）。③ Select All 复选框吸顶于文件列表容器内首行（列表为空时随空态隐藏），原 `.cl-bar` 与 files-header 两行整体移除。
 - **Branches 视图标题栏重排**：① 原 Push 图标下放至分支右键菜单（见上 Added；全局 Push 仍可用 Commit 视图标题栏与命令面板）。② 「Prune Deleted Remote Branches」由「…」菜单上移至标题栏 `$(sync-ignored)` 图标（`navigation@4`，即原 Push 位；该图标全扩展唯一，既区别于同栏 `$(refresh)`/`$(sync)` 同步类，也不与右键删除类 `$(trash)` 混淆）。③ 「Merge…」由标题栏图标收入「…」菜单（同步组内，Update Project 与 New Tag… 之间），不再占用图标位。
 - **视图标题栏图标常驻引导**：VS Code 默认仅在 hover/聚焦视图时显示标题栏动作（平台行为，`ViewPane` 依 `workbench.view.alwaysShowHeaderActions` 切换 CSS 类 `actions-always-visible`，扩展贡献点无法覆盖）。现提供双入口：命令面板 **Hyper Git: Always Show View Toolbar Icons** 随时开启，以及首次激活的一次性提示（Always Show 写入全局设置并即时生效、Don't Show Again 不再打扰；设置已为 `true` 时不提示）。
-- **CI 发布渠道重启双市场**:`publish` job 增回 Open VSX 发布步骤(`pnpm exec ovsx publish --packagePath ./*.vsix`,由仓库变量 `ENABLE_OVSX_PUBLISH` 门控 + `OVSX_PAT` 凭证,复用 `package` job 的同一枚 VSIX、共享 production 审批门),覆盖 Cursor / Windsurf / VSCodium 等 Open VSX 系编辑器;README 安装渠道同步加回 Open VSX。发布决策沿革见 [发布策略调研](./docs/research/04-publishing-cicd.md)。
-- **Commit 视图头部两行 UI 上移 VS Code 标题栏（省两行竖直空间）**：① 「Active Changelist」下拉与 `⋯` 管理菜单合并为标题栏「…」菜单的 Set Active Changelist… 入口（New Changelist… 亦收入「…」）——点击弹出 QuickPick：各列表带文件计数、当前活动项预选，分隔线后并入 New / Rename / Delete Changelist… 操作（默认列表不可改名/删除）；活动 changelist 名常驻视图副标题（标题「Commit」同行右侧，Default 活动列表时省略——无信息量不常驻）。② 文件列表 List ⇄ Tree 段控改为标题栏 `$(list-tree)`/`$(list-flat)` 互斥图标（交互同 Graph/Branches 切换范式），偏好移交 host `workspaceState` 按仓库持久化（`hyperGit.commit.dmode:<repo>`）——**原 webview state 中的旧 List/Tree 偏好一次性重置为默认 flat**（勾选集、目录折叠与提交草稿不受影响）。③ Select All 复选框吸顶于文件列表容器内首行（列表为空时随空态隐藏），原 `.cl-bar` 与 files-header 两行整体移除。
+- **CI 发布渠道重启双市场**：`publish` job 增回 Open VSX 发布步骤（`pnpm exec ovsx publish --packagePath ./*.vsix`，由仓库变量 `ENABLE_OVSX_PUBLISH` 门控 + `OVSX_PAT` 凭证，复用 `package` job 的同一枚 VSIX、共享 production 审批门），覆盖 Cursor / Windsurf / VSCodium 等 Open VSX 系编辑器；README 安装渠道同步加回 Open VSX。发布决策沿革见 [发布策略调研](./docs/research/04-publishing-cicd.md)。
+
+### Fixed
+
+- **Compare with Current Branch 菜单图标渲染为空白方块**：`$(compare)` 并非有效 codicon id（自 v0.0.17 起即如此），修正为 `$(git-compare)`。无效 codicon id 在 VS Code 中静默渲染为空白、无任何告警，现以 [`tests/unit/codicon-validity.test.ts`](./tests/unit/codicon-validity.test.ts) 白名单护栏（取自 `microsoft/vscode-codicons` 的 `mapping.json`）全量校验命令与 submenu 图标，杜绝同类漏出——该护栏在本版开发期即拦下另一处新引入的 `$(sync-ignore)`（已修正为 `$(sync-ignored)`，见 Changed 中的 Branches 视图标题栏重排）。
+- **Commit 文件列表树语义回归**：吸顶 Select All 行引入后打断了树语义——`role="tree"` 与 `aria-label` 回归保留于可聚焦的 `#files` 容器，吸顶行 `#files-selectall` 与行区容器 `#files-rows` 降为 `role="presentation"`；并补 `scroll-margin-top`，避免键盘导航的 `scrollIntoView` 把首行滚到吸顶行之下被遮挡。
+
+### Docs
+
+- **`.agents` 文档去重**：移除仓库内 `docs/.agents/browser-validation.md` 与 `docs/.agents/reference-specifications.md` 两份副本，统一以全局 `~/.agents/docs/` 为单一事实源，并清理 [知识索引](./docs/.agents/knowledge-map.md) 与 [文档中心](./docs/README.md) 中的索引死链。
+- **特性与调研文档同步标题栏迁移口径**：[Commit 视图整合](./docs/features/commit-view-consolidation.md)（QuickPick 形态的 changelist 管理、`hyperGit.commit.dmode:<repo>` 持久化键、批量 Discard 验证步骤）、[变更文件目录树](./docs/features/file-list-group-by-directory.md)；[发布策略调研](./docs/research/04-publishing-cicd.md) §2.3 由「单市场」再次修订为「双市场」，保留完整决策沿革。
 
 ## [0.0.17] - 2026-09-09 — Log 提交详情常驻面板 · VS Code 1.136 最佳实践对齐 · 稳定性与体验修复
 
@@ -68,7 +78,7 @@
 
 - 新增 [Log 提交详情面板](./docs/features/log-commit-detail-panel.md)（布局分栏 / 交互数据流 Mermaid、边缘 Case、`forHash` 守卫语义）；移除被替代的 `docs/features/log-commit-tooltip.md`，同步更新 [知识索引](./docs/.agents/knowledge-map.md)、[文档中心](./docs/README.md) 与 [变更文件目录树](./docs/features/file-list-group-by-directory.md) 表述。
 
- - 2026-09-01 — 多根工作区仓库切换 · 分支分组树 · Agentic Git 预置 · 面板布局与 Diff 修复
+## [0.0.16] - 2026-09-01 — 多根工作区仓库切换 · 分支分组树 · Agentic Git 预置 · 面板布局与 Diff 修复
 
 自 v0.0.14 以来的全量积累（承载 0.0.15 版本号预置——该版本号已就位但未单独发布，本版一并发布）。核心新特性：多根工作区多仓库切换、Branches 按 `/` 前缀分组树、Agentic Git 偏好配置与 Claude Code 配置预置（M5 前置铺垫）、Diff 缺失端修复与面板默认布局调整；工程侧升级 pnpm 12 与一批开发依赖。完整用户视角叙述见 [Release Note v0.0.16](./docs/releases/v0.0.16.md)。
 
