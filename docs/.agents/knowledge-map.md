@@ -11,8 +11,7 @@
 
 ## Agents 知识库（本目录）
 - [Issue 记录](./issue.md) — 跨上下文问题处理经验（表因 / 根因 / 处理 / 防范）。
-- [引用规范 IEEE](./reference-specifications.md) — 文献引用格式与上标锚定。
-- [浏览器验证协议](./browser-validation.md) — OAuth/SSO 红线与 E2E 验证协议。
+- 引用规范（IEEE）与浏览器验证协议：以全局 `~/.agents/docs/` 为单一事实源（`reference-specifications.md` / `browser-validation.md`），仓库内不再留副本。
 
 ## 项目文档（docs/）
 - [文档中心](../docs/README.md) — 文档与调研资产总索引。

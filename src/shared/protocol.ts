@@ -78,7 +78,9 @@ export type WebviewToHostMessage =
 	// ── 由旧 Changes 树平移而来的文件操作（webview 点击/右键 → host 复用既有命令）；
 	// changelist 切换与管理已上移标题栏（hyperGit.setActiveChangelist QuickPick）── //
 	| { readonly type: 'commit/openFile'; readonly payload: { readonly path: string } }
-	| { readonly type: 'commit/fileMenu'; readonly payload: { readonly path: string } };
+	| { readonly type: 'commit/fileMenu'; readonly payload: { readonly path: string } }
+	// 勾选集单向同步（webview 事实源 → host 镜像）：Commit 标题栏「…」批量 Discard 的数据源。
+	| { readonly type: 'commit/checkedChanged'; readonly payload: { readonly paths: readonly string[] } };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Log Graph 视图（hyperGit.log，Webview）↔ Extension Host 消息契约。

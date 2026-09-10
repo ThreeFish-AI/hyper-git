@@ -22,7 +22,9 @@ import { getNonce } from './nonce';
  * 单文件右键操作 + 多行 Commit Message 编辑器 + Amend/sign-off/skip-hooks 选项 +
  * Commit/Commit and Push 按钮 + Conventional Commits 实时校验 + 最近消息复用。
  * changelist 切换与管理（New/Rename/Delete）由标题栏 $(checklist) 图标 → setActiveChangelist
- * QuickPick 承载，活动列表名常驻 view.description 副标题；Select All 吸顶于文件列表容器内首行。
+ * QuickPick 承载，活动列表名常驻 view.description 副标题（Default 省略——无信息量不常驻）；
+ * 标题栏「…」菜单 Discard Changes 批量撤销勾选文件（勾选集经 checkedChanged 单向镜像至 host）。
+ * Select All 吸顶于文件列表容器内首行。
  * 选中态由 webview 端管理（host 不回写，避免覆盖用户操作）。
  * 注：活动栏未提交数角标已迁至隐藏的 hyperGit.changesBadge TreeView 承载（见 extension.ts）。
  */
@@ -32,6 +34,8 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider, vscode
 	private currentMessage = '';
 	/** 文件列表展示模式（List/Tree，标题栏图标切换）：host 为事实源，随 state 整态下发。 */
 	private detailMode: 'flat' | 'tree' = 'flat';
+	/** 勾选集镜像（webview 事实源单向同步）：标题栏「…」批量 Discard 数据源，切仓库时置空待重推。 */
+	private checkedPaths: readonly string[] = [];
 	private readonly disposables: vscode.Disposable[] = [];
 
 	/** List/Tree 偏好按仓库持久化 key（issue #107 同 log.dmode 范式；第三视图复用时提炼共享 helper）。 */
@@ -67,11 +71,12 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider, vscode
 		this.disposables.length = 0;
 	}
 
-	/** 装载当前仓库的 List/Tree 偏好（memento → 内存 + context key）。 */
+	/** 装载当前仓库的 List/Tree 偏好（memento → 内存 + context key）；勾选镜像置空待 webview 重推。 */
 	private loadRepoScopedPrefs(): void {
 		const root = this.service.repoRoot;
 		this.detailMode =
 			(root ? this.workspaceState.get<'flat' | 'tree'>(CommitWebviewProvider.dmodeKey(root)) : undefined) ?? 'flat';
+		this.checkedPaths = [];
 		CommitWebviewProvider.setCtx('hyperGit.commit.tree', this.detailMode === 'tree');
 	}
 
@@ -105,6 +110,18 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider, vscode
 		this.pushState();
 	}
 
+	/**
+	 * 标题栏「…」批量 Discard：范围 = 勾选集镜像（已由 webview 调和至当前活动 changelist 文件），
+	 * 确认与执行统一复用 discardChanges（单/多同路径：modal 确认 + 未跟踪 clean / 已跟踪 restore）。
+	 */
+	discardChecked(): void {
+		if (this.checkedPaths.length === 0) {
+			void vscode.window.showInformationMessage('No checked files to discard.');
+			return;
+		}
+		void vscode.commands.executeCommand('hyperGit.discardChanges', this.checkedPaths);
+	}
+
 	private onMessage(msg: WebviewToHostMessage): void {
 		switch (msg.type) {
 			case 'requestState':
@@ -126,6 +143,9 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider, vscode
 			}
 			case 'commit/fileMenu':
 				void this.handleFileMenu(msg.payload.path);
+				break;
+			case 'commit/checkedChanged':
+				this.checkedPaths = msg.payload.paths;
 				break;
 		}
 	}
@@ -204,8 +224,8 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider, vscode
 			busy: false,
 			repoRoot: this.service.repoRoot ?? '',
 		};
-		// 标题栏副标题 = 活动 changelist 名（原 webview 头部切换行上移，省一行竖直空间）。
-		this.view.description = this.registry.getDef(activeId)?.name ?? 'Default';
+		// 标题栏副标题 = 活动 changelist 名（原 webview 头部切换行上移；Default 省略——无信息量不常驻）。
+		this.view.description = activeId === 'default' ? undefined : this.registry.getDef(activeId)?.name;
 		this.post({ type: 'state', payload: state });
 		this.sendValidation();
 	}
@@ -405,6 +425,11 @@ function reconcileChecked(files) {
   files.forEach(function (f) { present.add(f.path); if (!checked.has(f.path)) checked.add(f.path); });
   Array.from(checked).forEach(function (p) { if (!present.has(p)) checked.delete(p); });
   saveState();
+  notifyChecked();
+}
+// 勾选集单向同步 host（标题栏「…」批量 Discard 数据源）；与 saveState（含 draft）解耦，仅勾选变更时发送。
+function notifyChecked() {
+  vscode.postMessage({ type: 'commit/checkedChanged', payload: { paths: Array.from(checked) } });
 }
 
 function pruneCollapsed(tree) {
@@ -428,7 +453,7 @@ function makeLeafRow(f, depth) {
   cb.checked = checked.has(f.path);
   cb.addEventListener('change', function () {
     if (cb.checked) checked.add(f.path); else checked.delete(f.path);
-    saveState(); syncSelectAll(); updateDirStates();
+    saveState(); syncSelectAll(); updateDirStates(); notifyChecked();
   });
   // 状态字母标记（M/A/U/R/D/C…）替代色点：色盲可辨、对齐官方 SCM 角标（兜底空串）。
   const dot = document.createElement('span');
@@ -483,7 +508,7 @@ function renderNode(node, depth, parent, files) {
     const cb = document.createElement('input');
     cb.type = 'checkbox'; cb.className = 'dir-cb'; cb.dataset.dir = node.path;
     cb.addEventListener('click', function (e) { e.stopPropagation(); });
-    cb.addEventListener('change', function () { setSubtreeChecked(node, cb.checked); saveState(); syncSelectAll(); });
+    cb.addEventListener('change', function () { setSubtreeChecked(node, cb.checked); saveState(); syncSelectAll(); notifyChecked(); });
     const nm = document.createElement('span');
     nm.className = 'tree-name';
     nm.textContent = node.name;
@@ -586,7 +611,7 @@ selectAllEl.addEventListener('change', function () {
   const want = selectAllEl.checked;
   curFiles.forEach(function (f) { if (want) checked.add(f.path); else checked.delete(f.path); });
   filesEl.querySelectorAll('.file-cb').forEach(function (cb) { cb.checked = want; });
-  saveState(); updateDirStates();
+  saveState(); updateDirStates(); notifyChecked();
 });
 
 function renderRecent(messages) {

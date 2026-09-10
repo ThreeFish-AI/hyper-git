@@ -191,6 +191,11 @@
 				"category": "Hyper Git"
 			},
 			{
+				"command": "hyperGit.alwaysShowHeaderActions",
+				"title": "Always Show View Toolbar Icons",
+				"category": "Hyper Git"
+			},
+			{
 				"command": "hyperGit.refresh",
 				"title": "Refresh",
 				"category": "Hyper Git",
@@ -284,6 +289,12 @@
 				"title": "Show Changed Files as Flat List",
 				"category": "Hyper Git",
 				"icon": "$(list-flat)"
+			},
+			{
+				"command": "hyperGit.commit.discardSelected",
+				"title": "Discard Changes",
+				"category": "Hyper Git",
+				"icon": "$(discard)"
 			},
 			{
 				"command": "hyperGit.selectRepository",
@@ -445,7 +456,7 @@
 				"command": "hyperGit.pruneRemotes",
 				"title": "Prune Deleted Remote Branches",
 				"category": "Hyper Git",
-				"icon": "$(clear-all)"
+				"icon": "$(sync-ignored)"
 			},
 			{
 				"command": "hyperGit.cherryPick",
@@ -497,7 +508,7 @@
 				"command": "hyperGit.compareWithCurrent",
 				"title": "Compare with Current Branch",
 				"category": "Hyper Git",
-				"icon": "$(compare)"
+				"icon": "$(git-compare)"
 			},
 			{
 				"command": "hyperGit.tagCreate",
@@ -643,6 +654,12 @@
 				"title": "Merge…",
 				"category": "Hyper Git",
 				"icon": "$(git-merge)"
+			},
+			{
+				"command": "hyperGit.pushBranch",
+				"title": "Push",
+				"category": "Hyper Git",
+				"icon": "$(arrow-up)"
 			},
 			{
 				"command": "hyperGit.resolveConflicts",
@@ -830,7 +847,7 @@
 			],
 			"view/title": [
 				{
-					"command": "hyperGit.setActiveChangelist",
+					"command": "hyperGit.commit.discardSelected",
 					"when": "view == hyperGit.commit",
 					"group": "navigation@0.5"
 				},
@@ -845,14 +862,19 @@
 					"group": "navigation@0.75"
 				},
 				{
-					"command": "hyperGit.refresh",
+					"command": "hyperGit.setActiveChangelist",
 					"when": "view == hyperGit.commit",
-					"group": "navigation@1"
+					"group": "0_changelist@0"
 				},
 				{
 					"command": "hyperGit.newChangelist",
 					"when": "view == hyperGit.commit",
-					"group": "navigation@2"
+					"group": "0_changelist@1"
+				},
+				{
+					"command": "hyperGit.refresh",
+					"when": "view == hyperGit.commit",
+					"group": "navigation@1"
 				},
 				{
 					"command": "hyperGit.push",
@@ -955,14 +977,9 @@
 					"group": "navigation@3"
 				},
 				{
-					"command": "hyperGit.push",
+					"command": "hyperGit.pruneRemotes",
 					"when": "view == hyperGit.branches",
 					"group": "navigation@4"
-				},
-				{
-					"command": "hyperGit.mergeDialog",
-					"when": "view == hyperGit.branches",
-					"group": "navigation@5"
 				},
 				{
 					"command": "hyperGit.branchesGroupByPrefix",
@@ -978,11 +995,6 @@
 					"command": "hyperGit.fetch",
 					"when": "view == hyperGit.branches",
 					"group": "1_sync@1"
-				},
-				{
-					"command": "hyperGit.pruneRemotes",
-					"when": "view == hyperGit.branches",
-					"group": "1_sync@1.5"
 				},
 				{
 					"command": "hyperGit.updateProject",
@@ -1028,6 +1040,11 @@
 					"command": "hyperGit.worktreePrune",
 					"when": "view == hyperGit.worktrees",
 					"group": "navigation@3"
+				},
+				{
+					"command": "hyperGit.mergeDialog",
+					"when": "view == hyperGit.branches",
+					"group": "1_sync@2.5"
 				}
 			],
 			"view/item/context": [
@@ -1045,6 +1062,11 @@
 					"command": "hyperGit.deleteRemoteBranch",
 					"when": "view == hyperGit.branches && viewItem == hyperGit.remoteBranch",
 					"group": "9_dangerous@2"
+				},
+				{
+					"command": "hyperGit.pushBranch",
+					"when": "view == hyperGit.branches && viewItem == hyperGit.branch && !listMultiSelection",
+					"group": "1_branch@2"
 				},
 				{
 					"command": "hyperGit.mergeBranch",
@@ -1412,12 +1434,20 @@
 					"when": "view == hyperGit.commit"
 				},
 				{
+					"command": "hyperGit.commit.discardSelected",
+					"when": "view == hyperGit.commit"
+				},
+				{
 					"command": "hyperGit.acceptOurs",
 					"when": "hyperGit.hasConflicts"
 				},
 				{
 					"command": "hyperGit.acceptTheirs",
 					"when": "hyperGit.hasConflicts"
+				},
+				{
+					"command": "hyperGit.pushBranch",
+					"when": "false"
 				}
 			]
 		},
@@ -1540,7 +1570,7 @@
 		"esbuild": "^0.28.1",
 		"eslint": "^10.9.1",
 		"mocha": "^11.0.1",
-	"ovsx": "^1.1.1",
+		"ovsx": "^1.1.1",
 		"prettier": "^3.9.6",
 		"rimraf": "^6.0.1",
 		"typescript": "^6.0.3",

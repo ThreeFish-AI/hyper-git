@@ -243,6 +243,9 @@ export async function activate(
 		// commitView 的 onDidChangeRepository 订阅先于 refreshAll 注册，切库时 dmode 重载先于视图刷新）。
 		vscode.commands.registerCommand('hyperGit.commit.detailTree', () => commitView.setDetailMode('tree')),
 		vscode.commands.registerCommand('hyperGit.commit.detailFlat', () => commitView.setDetailMode('flat')),
+		// 标题栏「…」批量 Discard：范围 = 勾选集镜像（webview 经 checkedChanged 单向同步），
+		// 确认与执行复用 discardChanges（单/多统一路径）。
+		vscode.commands.registerCommand('hyperGit.commit.discardSelected', () => commitView.discardChecked()),
 		vscode.commands.registerCommand('hyperGit.showConsole', () => showGitConsole()),
 		vscode.commands.registerCommand('hyperGit.startRebase', () => RebaseWebview.open(service)),
 		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, inlineLens),
@@ -300,6 +303,40 @@ export async function activate(
 	);
 	// 首帧同步：即便后续无事件也确保角标初值正确。
 	updateBadge();
+
+	// 视图标题栏图标默认仅在 hover/聚焦时显示（VS Code 平台行为：ViewPane 依 workbench.view.alwaysShowHeaderActions
+	// 切换 CSS 类 actions-always-visible，扩展贡献点无法覆盖，只能引导用户改设置——改动即时生效，无需重载）。
+	// 双入口：① 命令 hyperGit.alwaysShowHeaderActions 随时手动开启；② 首次激活一次性提示（用户确认才写全局设置）。
+	const HEADER_ACTIONS_HINT_KEY = 'hyperGit.hint.alwaysShowHeaderActions';
+	const enableAlwaysShowHeaderActions = async (): Promise<void> => {
+		const cfg = vscode.workspace.getConfiguration('workbench.view');
+		if (cfg.get<boolean>('alwaysShowHeaderActions')) {
+			void vscode.window.showInformationMessage('View toolbar icons are already always visible.');
+			return;
+		}
+		await cfg.update('alwaysShowHeaderActions', true, vscode.ConfigurationTarget.Global);
+		await context.globalState.update(HEADER_ACTIONS_HINT_KEY, true);
+		void vscode.window.showInformationMessage('View toolbar icons are now always visible.');
+	};
+	context.subscriptions.push(
+		vscode.commands.registerCommand('hyperGit.alwaysShowHeaderActions', enableAlwaysShowHeaderActions),
+	);
+	void (async (): Promise<void> => {
+		const cfg = vscode.workspace.getConfiguration('workbench.view');
+		if (context.globalState.get<boolean>(HEADER_ACTIONS_HINT_KEY) || cfg.get<boolean>('alwaysShowHeaderActions')) {
+			return;
+		}
+		const pick = await vscode.window.showInformationMessage(
+			'Show Hyper Git view toolbar icons at all times? VS Code hides view header actions until hover by default.',
+			'Always Show',
+			'Don\'t Show Again',
+		);
+		if (pick === 'Always Show') {
+			await enableAlwaysShowHeaderActions();
+		} else if (pick === 'Don\'t Show Again') {
+			await context.globalState.update(HEADER_ACTIONS_HINT_KEY, true);
+		}
+	})();
 
 	// 首帧保险：若 repo 在 activate 前已就绪，GitRepositoryService 构造函数的 _onDidChange.fire()
 	// 早于任何订阅者挂载而被丢失，state.onDidChange 此后可能不再触发。主动刷新一次确保
