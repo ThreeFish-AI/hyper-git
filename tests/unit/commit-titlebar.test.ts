@@ -51,7 +51,7 @@ describe('commit-titlebar（Commit 视图标题栏控件声明护栏）', () => 
 		});
 	});
 
-	it('view/title 挂载于 Refresh 左侧且 List/Tree 以 hyperGit.commit.tree 互斥，批量 Discard 入 … 菜单', () => {
+	it('view/title：批量 Discard 居最左导航位，List/Tree 以 hyperGit.commit.tree 互斥，changelist 两入口入 … 菜单', () => {
 		const pick = (command: string): MenuEntry => {
 			const hit = titleEntries.find(
 				(e) => e.command === command && (e.when ?? '').includes('hyperGit.commit'),
@@ -59,8 +59,8 @@ describe('commit-titlebar（Commit 视图标题栏控件声明护栏）', () => 
 			expect(hit, `view/title 缺 ${command}`).toBeDefined();
 			return hit!;
 		};
-		expect(pick('hyperGit.setActiveChangelist')).toEqual({
-			command: 'hyperGit.setActiveChangelist',
+		expect(pick('hyperGit.commit.discardSelected')).toEqual({
+			command: 'hyperGit.commit.discardSelected',
 			when: 'view == hyperGit.commit',
 			group: 'navigation@0.5',
 		});
@@ -74,11 +74,16 @@ describe('commit-titlebar（Commit 视图标题栏控件声明护栏）', () => 
 			when: 'view == hyperGit.commit && hyperGit.commit.tree',
 			group: 'navigation@0.75',
 		});
-		// 非 navigation 组 → 落入标题栏「…」菜单（排序在 1_sync 同步组之后）。
-		expect(pick('hyperGit.commit.discardSelected')).toEqual({
-			command: 'hyperGit.commit.discardSelected',
+		// 非 navigation 组 → 落入标题栏「…」菜单：0_changelist（切换/新建）排在 1_sync 同步组之前。
+		expect(pick('hyperGit.setActiveChangelist')).toEqual({
+			command: 'hyperGit.setActiveChangelist',
 			when: 'view == hyperGit.commit',
-			group: '2_changes@0',
+			group: '0_changelist@0',
+		});
+		expect(pick('hyperGit.newChangelist')).toEqual({
+			command: 'hyperGit.newChangelist',
+			when: 'view == hyperGit.commit',
+			group: '0_changelist@1',
 		});
 	});
 

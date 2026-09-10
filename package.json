@@ -836,7 +836,7 @@
 			],
 			"view/title": [
 				{
-					"command": "hyperGit.setActiveChangelist",
+					"command": "hyperGit.commit.discardSelected",
 					"when": "view == hyperGit.commit",
 					"group": "navigation@0.5"
 				},
@@ -851,19 +851,19 @@
 					"group": "navigation@0.75"
 				},
 				{
-					"command": "hyperGit.commit.discardSelected",
+					"command": "hyperGit.setActiveChangelist",
 					"when": "view == hyperGit.commit",
-					"group": "2_changes@0"
+					"group": "0_changelist@0"
+				},
+				{
+					"command": "hyperGit.newChangelist",
+					"when": "view == hyperGit.commit",
+					"group": "0_changelist@1"
 				},
 				{
 					"command": "hyperGit.refresh",
 					"when": "view == hyperGit.commit",
 					"group": "navigation@1"
-				},
-				{
-					"command": "hyperGit.newChangelist",
-					"when": "view == hyperGit.commit",
-					"group": "navigation@2"
 				},
 				{
 					"command": "hyperGit.push",
@@ -1555,7 +1555,7 @@
 		"esbuild": "^0.28.1",
 		"eslint": "^10.9.1",
 		"mocha": "^11.0.1",
-	"ovsx": "^1.1.1",
+		"ovsx": "^1.1.1",
 		"prettier": "^3.9.6",
 		"rimraf": "^6.0.1",
 		"typescript": "^6.0.3",
