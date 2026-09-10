@@ -24,4 +24,4 @@
 
 ## 协作与规范
 - [AGENTS.md](../AGENTS.md) — 协作协议与工程行为准则。
-- [知识索引](./.agents/knowledge-map.md) · [Issue 记录](./.agents/issue.md) · [引用规范 IEEE](./.agents/reference-specifications.md)。
+- [知识索引](./.agents/knowledge-map.md) · [Issue 记录](./.agents/issue.md)。引用规范（IEEE）与浏览器验证协议以全局 `~/.agents/docs/` 为准（见 AGENTS.md）。
