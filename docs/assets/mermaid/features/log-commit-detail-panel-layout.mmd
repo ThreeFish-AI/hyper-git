@@ -1,0 +1,27 @@
+% Mermaid 源图（单一事实源）· 溯源矩阵: docs/assets/mermaid/README.md
+% 源文档: docs/features/log-commit-detail-panel.md L18-40（抽取 2026-09-11）
+% archify 成品: docs/assets/architecture/features/log-commit-detail-panel-layout.html
+
+flowchart TB
+  subgraph shell["VS Code 标题栏（view/title）"]
+    H["Graph + description(仓库路径)<br/>… [layers Scope▾] [list-tree/flat] [refresh] [sign-in*] [repo*] …"]
+  end
+  subgraph main["#main（≥560px 横向 flex / &lt;560px .stacked 纵向）"]
+    VP["#viewport<br/>提交图（flex:1，虚拟滚动）"]
+    G1["#gutter-main<br/>拖拽 ⇄ 面板宽/高（18%–75%，<br/>横向面板≥200px 且图≥280px）"]
+    subgraph panel["#commit-panel（flex-basis 拖拽钳制）"]
+      D["#details（独立滚动）<br/>Changed Files + ×"]
+      G2["#gutter-meta<br/>拖拽 ⇄ 上/下半区高（15%–85%）"]
+      M["#commit-meta（独立滚动）<br/>作者/引用分组/消息/统计/SHA"]
+    end
+  end
+  H --- main
+  VP --- G1 --- panel
+  D --- G2 --- M
+  style H fill:#6e7681,color:#fff
+  style VP fill:#1f6feb,color:#fff
+  style G1 fill:#8250df,color:#fff
+  style G2 fill:#8250df,color:#fff
+  style panel fill:#21262d,stroke:#d29922,color:#fff
+  style D fill:#d29922,color:#fff
+  style M fill:#238636,color:#fff

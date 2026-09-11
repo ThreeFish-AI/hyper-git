@@ -1,0 +1,29 @@
+% Mermaid 源图（单一事实源）· 溯源矩阵: docs/assets/mermaid/README.md
+% 源文档: docs/features/claude-code-config.md L18-42（抽取 2026-09-11）
+% archify 成品: docs/assets/architecture/features/claude-code-config-flow.html
+
+flowchart LR
+  subgraph UI["设置界面 / 命令面板"]
+    S["hyperGit.claudeCode.executablePath\n(string, 默认空 = PATH 自动探测)"]
+    C1["cmd: setClaudeCodePath"]
+    C2["cmd: openClaudeSettings"]
+  end
+  subgraph Adapter["adapter/claude-commands.ts（唯一触 vscode）"]
+    Q["QuickPick\nBrowse… / Use system"]
+    O["existsSync?\n缺失→确认→mkdir+写{}"]
+  end
+  subgraph Engine["engine/agent/claude-path.ts（纯函数,可单测）"]
+    P["defaultClaudeSettingsPath(home)\n→ &lt;home&gt;/.claude/settings.json"]
+  end
+  S -. "markdownDescription 命令链接" .-> C1
+  S -. "markdownDescription 命令链接" .-> C2
+  C1 --> Q
+  Q -->|Browse| S
+  Q -->|Use system| S
+  C2 --> O
+  O --> P
+  O --> D["openTextDocument + showTextDocument"]
+  style S fill:#1f6feb,color:#fff
+  style P fill:#238636,color:#fff
+  style O fill:#8957e5,color:#fff
+  style Q fill:#d29922,color:#000
