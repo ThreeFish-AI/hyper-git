@@ -1,0 +1,24 @@
+%% Mermaid 源图（单一事实源）· 溯源矩阵: docs/assets/mermaid/README.md
+%% 源文档: docs/features/agentic-git-preferences.md L11-30（抽取 2026-09-11）
+%% archify 成品: docs/assets/architecture/features/agentic-git-preferences-flow.html
+
+flowchart LR
+  subgraph Cfg["hyperGit.agent.* 设置"]
+    B["baseBranch\n(string, 默认空 = 仓库默认分支)"]
+    C["commitPreferences\n(multilineText)"]
+    P["createPrPreferences\n(multilineText)"]
+    R["reviewPreferences\n(multilineText)"]
+  end
+  subgraph Act["Agentic Git 动作(M5 消费)"]
+    AC["点击 Commit"]
+    AP["点击 Create PR"]
+    AR["点击 Review"]
+  end
+  C -. "自定义指令" .-> AC
+  P -. "自定义指令" .-> AP
+  B -. "PR 基线分支" .-> AP
+  R -. "自定义指令" .-> AR
+  style B fill:#1f6feb,color:#fff
+  style C fill:#238636,color:#fff
+  style P fill:#8957e5,color:#fff
+  style R fill:#d29922,color:#000

@@ -1,0 +1,47 @@
+%% Mermaid 源图（单一事实源）· 溯源矩阵: docs/assets/mermaid/README.md
+%% 源文档: docs/architecture/engineering-plan.md L36-84（抽取 2026-09-11；同日对照 v0.0.18 源码校准，校准记录见 README 矩阵）
+%% archify 成品: docs/assets/architecture/architecture/engineering-plan-layers.html
+
+flowchart TB
+    subgraph UI["视图层 (自绘 · 底部 Panel 容器 hyper-git · v0.0.13 起自活动栏迁入)"]
+        direction LR
+        V1["Commit<br/>WebviewView<br/>(changelist + 提交编辑器)"]
+        V2["Graph (Log)<br/>WebviewView<br/>(SVG 提交图 + 详情面板 + CI 图标)"]
+        V3["Branches · Stash · Shelf · Worktrees<br/>TreeView"]
+        V4["Rebase · MergeEditor<br/>Webview 面板 (serializer 恢复)"]
+    end
+    subgraph Adapter["Adapter 层 (唯一接触 vscode API)"]
+        GA["GitRepositoryService<br/>活跃仓库唯一持有者<br/>vscode.git API + execGit 双通道"]
+        CR["ChangelistRegistry · BranchFavorites<br/>ShelfService · CommitService<br/>(repo 作用域持久化)"]
+        CMD["命令注册组 ×12<br/>tree/ · editor/ (blame · CodeLens)"]
+        WV["webview/ 宿主 ×4<br/>shared/protocol.ts 消息契约"]
+    end
+    subgraph Engine["Engine 层 (纯逻辑 · 零 vscode 依赖 · Vitest 可单测)"]
+        M["model · diff · commit · changelist · log<br/>ref · tree · git-state · scm-mapping"]
+        DF["ci · merge · rebase · blame · worktree · agent"]
+    end
+    subgraph Agent["Agent 层 (AI 接缝 · Null 实现 · M5 实装)"]
+        LLM["ILlmProvider · ICommitMessageProvider<br/>IPreCommitInspector · IChangelistGrouper<br/>IConflictResolver"]
+    end
+    VSCodeGIT[("vscode.git 内置扩展<br/>getAPI(1) → Repository")]
+    GITBIN[("git CLI<br/>child_process · 同一二进制")]
+    NATIVE[("原生 Source Control 视图<br/>不动 · 共存")]
+
+    UI -->|"postMessage · shared/protocol.ts"| Adapter
+    Adapter --> Engine
+    Agent -. 接口注入 CommitService .-> Adapter
+    Agent -. 读领域模型 / hook 责任链 .-> Engine
+    Adapter --> VSCodeGIT
+    Adapter --> GITBIN
+    NATIVE -. 平行存在 .-> VSCodeGIT
+
+    classDef ui fill:#1f6feb,stroke:#4dabf7,stroke-width:2px,color:#fff
+    classDef ad fill:#7c3aed,stroke:#c4b5fd,stroke-width:2px,color:#fff
+    classDef eg fill:#0f766e,stroke:#5eead4,stroke-width:2px,color:#fff
+    classDef ag fill:#b45309,stroke:#fcd34d,stroke-width:2px,color:#fff
+    classDef ext fill:#444654,stroke:#8b8fa3,stroke-width:2px,color:#fff
+    class V1,V2,V3,V4 ui
+    class GA,CR,CMD,WV ad
+    class M,DF eg
+    class LLM ag
+    class VSCodeGIT,GITBIN,NATIVE ext

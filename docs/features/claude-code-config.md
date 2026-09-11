@@ -14,33 +14,12 @@
 
 采用**原生 VS Code 设置 + 命令**承载（与仓库既有 7 项配置一致，零新增 Webview 面板；符合最小干预 / 复用驱动）。路径解析下沉为纯函数（engine 层，可单测），adapter 层仅注入 `os.homedir()` 并触碰 vscode API。
 
-```mermaid
-flowchart LR
-  subgraph UI["设置界面 / 命令面板"]
-    S["hyperGit.claudeCode.executablePath\n(string, 默认空 = PATH 自动探测)"]
-    C1["cmd: setClaudeCodePath"]
-    C2["cmd: openClaudeSettings"]
-  end
-  subgraph Adapter["adapter/claude-commands.ts（唯一触 vscode）"]
-    Q["QuickPick\nBrowse… / Use system"]
-    O["existsSync?\n缺失→确认→mkdir+写{}"]
-  end
-  subgraph Engine["engine/agent/claude-path.ts（纯函数,可单测）"]
-    P["defaultClaudeSettingsPath(home)\n→ &lt;home&gt;/.claude/settings.json"]
-  end
-  S -. "markdownDescription 命令链接" .-> C1
-  S -. "markdownDescription 命令链接" .-> C2
-  C1 --> Q
-  Q -->|Browse| S
-  Q -->|Use system| S
-  C2 --> O
-  O --> P
-  O --> D["openTextDocument + showTextDocument"]
-  style S fill:#1f6feb,color:#fff
-  style P fill:#238636,color:#fff
-  style O fill:#8957e5,color:#fff
-  style Q fill:#d29922,color:#000
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/features/claude-code-config-flow.dark.svg">
+  <img src="../assets/architecture/features/claude-code-config-flow.light.svg" alt="Claude Code 配置的设置与命令流向">
+</picture>
+
+> [交互版](../assets/architecture/features/claude-code-config-flow.html) · [Mermaid 源图](../assets/mermaid/features/claude-code-config-flow.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
 
 ## 配置
 

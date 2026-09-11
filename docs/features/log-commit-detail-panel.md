@@ -14,31 +14,12 @@ VS Code 的 panel 视图容器（`hyper-git`）内多视图只能**垂直堆叠*
 | 登录 GitHub（CI） | `$(sign-in)` 图标按钮，授权完成自动隐藏 | `hyperGit.log.ciNeedsSignIn` |
 | 仓库路径 | `WebviewView.description` 副标题（标题「Graph」右侧常驻） | `pushState` 时随 `repoRoot` 更新 |
 
-```mermaid
-flowchart TB
-  subgraph shell["VS Code 标题栏（view/title）"]
-    H["Graph + description(仓库路径)<br/>… [layers Scope▾] [list-tree/flat] [refresh] [sign-in*] [repo*] …"]
-  end
-  subgraph main["#main（≥560px 横向 flex / &lt;560px .stacked 纵向）"]
-    VP["#viewport<br/>提交图（flex:1，虚拟滚动）"]
-    G1["#gutter-main<br/>拖拽 ⇄ 面板宽/高（18%–75%，<br/>横向面板≥200px 且图≥280px）"]
-    subgraph panel["#commit-panel（flex-basis 拖拽钳制）"]
-      D["#details（独立滚动）<br/>Changed Files + ×"]
-      G2["#gutter-meta<br/>拖拽 ⇄ 上/下半区高（15%–85%）"]
-      M["#commit-meta（独立滚动）<br/>作者/引用分组/消息/统计/SHA"]
-    end
-  end
-  H --- main
-  VP --- G1 --- panel
-  D --- G2 --- M
-  style H fill:#6e7681,color:#fff
-  style VP fill:#1f6feb,color:#fff
-  style G1 fill:#8250df,color:#fff
-  style G2 fill:#8250df,color:#fff
-  style panel fill:#21262d,stroke:#d29922,color:#fff
-  style D fill:#d29922,color:#fff
-  style M fill:#238636,color:#fff
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/features/log-commit-detail-panel-layout.dark.svg">
+  <img src="../assets/architecture/features/log-commit-detail-panel-layout.light.svg" alt="Commit 详情面板布局（Graph webview 内部左右分栏）">
+</picture>
+
+> [交互版](../assets/architecture/features/log-commit-detail-panel-layout.html) · [Mermaid 源图](../assets/mermaid/features/log-commit-detail-panel-layout.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
 
 gutter 交互：`pointerdown` 捕获指针 → `pointermove` 实时更新 flex-basis → `pointerup` 持久化（`panelPct`/`detailPct` 随选中/目录折叠一起按仓库入 webview state）；`role="separator"` + `tabindex` 键盘可达（方向键 ±2%、Home/End 归边界），`.dragging`/`:hover` 高亮分隔线。
 
@@ -47,22 +28,12 @@ gutter 交互：`pointerdown` 捕获指针 → `pointermove` 实时更新 flex-b
 
 ## 交互与数据流
 
-```mermaid
-flowchart LR
-  A["点击/方向键选中行"] --> B["selectRow → log/selectCommit"]
-  B --> C["host 并行取数<br/>sendCommitFiles + showCommitDetail"]
-  C -->|"log/commitFiles{hash}"| D["renderDetails → #details"]
-  C -->|"log/commitDetail{forHash, vm}"| E["renderCommitMeta → #commit-meta"]
-  B --> F["Loading 占位（两区即时反馈）"]
-  G["× / Esc → deselectRow"] --> H["面板隐藏 + 选中清除 + persist"]
-  I["log/graphData（刷新/切库/重载）"] -->|"选中消失"| G
-  I -->|"选中在 + 未装载"| B
-  style A fill:#1f6feb,color:#fff
-  style C fill:#8250df,color:#fff
-  style D fill:#d29922,color:#fff
-  style E fill:#238636,color:#fff
-  style G fill:#cf222e,color:#fff
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/features/log-commit-detail-panel-dataflow.dark.svg">
+  <img src="../assets/architecture/features/log-commit-detail-panel-dataflow.light.svg" alt="Commit 详情面板数据流（选中 → 取数 → 渲染）">
+</picture>
+
+> [交互版](../assets/architecture/features/log-commit-detail-panel-dataflow.html) · [Mermaid 源图](../assets/mermaid/features/log-commit-detail-panel-dataflow.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
 
 - **一次选中、两路并行**：host `log/selectCommit` 分支同时发起变更文件与详情取数，均沿用 `rootAtStart` 切库竞态守卫（issue #107）。
 - **过期回包丢弃**：`log/commitFiles` 按 `hash`、`log/commitDetail` 按 **`forHash`** 回显校验——失败回包 `vm=null` 无 hash 可比对，`forHash` 补齐该盲区，杜绝迟到失败在新选中下闪现占位。

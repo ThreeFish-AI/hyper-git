@@ -30,11 +30,15 @@
 - [调研报告](../docs/research/README.md) — SCM 集成 / 工程蓝图 / 发布 CI / AI 接缝四路循证报告。
 - [发布说明](../releases/README.md) — 各正式版 Release Notes（GitHub Release 正文单一事实源；最新 [v0.0.18](../releases/v0.0.18.md)）。
 
+## 图资产（docs/assets/）
+- [Mermaid 源图索引](../assets/mermaid/README.md) — 全项目 Mermaid 源图统一管理 + **溯源矩阵**（mermaid ↔ archify ↔ 嵌入文档的唯一权威映射）。
+- [archify 架构图索引](../assets/architecture/README.md) — 交互式架构图成品（HTML + 深浅色双 SVG）分类索引与绘制规范；文档嵌入图的唯一来源。
+
 ## 架构分层（src/）
 > 依赖方向单向：`UI → Adapter → Engine`；`Agent` 以接口注入 `Engine`/`CommitPipeline`，不反向依赖 UI。
 
-- `engine/` — 纯领域逻辑（零 vscode 依赖，Vitest 可测）：`model/`、`scm-mapping/`、`commit/pipeline.ts`、`diff/`(M4)。
-- `adapter/` — 唯一接触 vscode API：`GitRepositoryAdapter`、`ChangelistRegistry`、`tree/`、`webview/`、`diff/`、`storage/`（M1+）。
+- `engine/` — 纯领域逻辑（零 vscode 依赖，Vitest 可测，15 模块）：`model/`、`diff/`、`commit/`、`changelist/`、`log/`、`ref/`、`tree/`、`git-state/`、`scm-mapping/`、`ci/`、`merge/`、`rebase/`、`blame/`、`worktree/`、`agent/`。
+- `adapter/` — 唯一接触 vscode API：`git-api.ts`（getAPI(1)）、`GitRepositoryService`（活跃仓库唯一持有者，vscode.git API + execGit 双通道）、`ChangelistRegistry`、`BranchFavorites`、`ShelfService`、`CommitService`、命令注册组、`tree/`、`webview/`、`ci/`、`editor/`。
 - `agent/` — AI 接缝（当前 5 接口，均 Null 实现，完整逻辑延后至 M5）：`ILlmProvider`、`ICommitMessageProvider`、`IPreCommitInspector`、`IChangelistGrouper`、`IConflictResolver`（另有规划中的第 6 接缝 `IChatToolRegistrar`，详见[调研报告](../research/05-ai-agent-seams.md)）。
 - `shared/protocol.ts` — Webview ↔ Host 消息契约【单一事实源】。
 - `infra/` — 日志（OutputChannel）/ 错误处理 / 事件总线 / 配置。

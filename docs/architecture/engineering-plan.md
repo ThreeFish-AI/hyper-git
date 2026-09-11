@@ -31,57 +31,16 @@
 | **发布** | VS Code Marketplace 单市场 | 官方市场为唯一渠道；每个 `v*` tag 附 `.vsix` GitHub Release 作兜底安装 |
 | **AI** | 现仅定义接缝 + Null 实现，实现延后 M5 | YAGNI + 借鉴 JetBrains `CheckinHandler` 责任链语义 |
 
-**架构总览（Mermaid，深色模式高对比）**：
+**架构总览（已对照 v0.0.18 现状校准，深浅色自适应）**：
 
-```mermaid
-flowchart TB
-    subgraph UI["UI 层 (自绘, adapter/ui)"]
-        direction LR
-        V1["Changes<br/>TreeView"]
-        V2["Commit<br/>WebviewView"]
-        V3["Log<br/>Webview graph"]
-        V4["Branches/Shelf/Stash<br/>TreeView"]
-    end
-    subgraph Adapter["Adapter 层 (唯一接触 vscode API)"]
-        GA["GitRepositoryAdapter<br/>封装 vscode.git Repository"]
-        CR["ChangelistRegistry<br/>(active/分组/持久化)"]
-        WV["WebviewHost<br/>postMessage 协议"]
-        DI["DiffContentProvider<br/>自定义 scheme"]
-    end
-    subgraph Engine["Engine 层 (纯逻辑, 零 vscode 依赖, 可单测)"]
-        M["领域模型<br/>FileChange/Changelist/Commit/Branch/Stash"]
-        DF["Diff/行级 patch<br/>(partial commit 基础)"]
-        CK["CommitPipeline<br/>(Checkin hook 责任链)"]
-        SM["Status 色映射<br/>M/A/D/U/R/C"]
-    end
-    subgraph Agent["Agent 层 (AI 接缝, 预留)"]
-        LLM["ILlmProvider"]
-        AI1["ICommitMessageProvider"]
-        AI2["IPreCommitInspector"]
-        AI3["IChangelistGrouper"]
-        AI4["IConflictResolver"]
-    end
-    VSCodeGIT[("vscode.git<br/>内置 Repository API")]
-    NATIVE[("原生 Source Control 视图<br/>不动, 共存")]
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/architecture/engineering-plan-layers.dark.svg">
+  <img src="../assets/architecture/architecture/engineering-plan-layers.light.svg" alt="Hyper Git 核心架构分层总览：视图层（Commit/Graph webview 与四棵 TreeView）、Adapter 层（GitRepositoryService 双通道、webview 宿主、命令注册组、领域状态服务）、Engine 层（15 纯逻辑模块）、Agent 层（AI 接缝），底座为 vscode.git API 与 git CLI 双通道">
+</picture>
 
-    UI --> Adapter
-    Adapter --> Engine
-    Agent -. 读领域模型 / 注入 hook .-> Engine
-    Agent -. 读 .-> Adapter
-    Adapter --> VSCodeGIT
-    NATIVE -. 平行存在 .-> VSCodeGIT
-
-    classDef ui fill:#1f6feb,stroke:#4dabf7,stroke-width:2px,color:#fff
-    classDef ad fill:#7c3aed,stroke:#c4b5fd,stroke-width:2px,color:#fff
-    classDef eg fill:#0f766e,stroke:#5eead4,stroke-width:2px,color:#fff
-    classDef ag fill:#b45309,stroke:#fcd34d,stroke-width:2px,color:#fff
-    classDef ext fill:#444654,stroke:#8b8fa3,stroke-width:2px,color:#fff
-    class V1,V2,V3,V4 ui
-    class GA,CR,WV,DI ad
-    class M,DF,CK,SM eg
-    class LLM,AI1,AI2,AI3,AI4 ag
-    class VSCodeGIT,NATIVE ext
-```
+> [交互版架构图（聚焦/搜索/导出）](../assets/architecture/architecture/engineering-plan-layers.html) · [Mermaid 源图](../assets/mermaid/architecture/engineering-plan-layers.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
+>
+> **现状校准（2026-09-11）**：本图原为早期规划态，现已对齐 v0.0.18 实现——「Changes TreeView」随 v0.0.13 视图迁移移除（changelist 由 Commit WebviewView 承载）；视图容器落位**底部 Panel**；adapter 组件为现名（`GitRepositoryService` / `git-api.ts` / `webview/` 宿主 ×4 等）；Engine 层实际为 **15 个模块**；AI 接缝经 `CommitService` 注入（`extension.ts`）。正文中早期规划表述（如「以 TreeView 渲染 changelist」「活动栏视图容器」）保留为历史决策记录，以本图与源码为准。
 
 **依赖方向（单向，正交）**：`UI → Adapter → Engine`；`Agent` 以接口注入 `Engine`/`CommitPipeline`，不反向依赖 UI；`Engine` 零依赖 `vscode`（可被 Vitest 与未来 CLI 双复用，是项目核心 IP）。
 
