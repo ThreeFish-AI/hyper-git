@@ -1,7 +1,7 @@
-% Mermaid 源图（单一事实源）· 溯源矩阵: docs/assets/mermaid/README.md
-% 源文档: docs/research/05-ai-agent-seams.md L151-176（抽取 2026-09-11）
-% archify 成品: docs/assets/architecture/research/ai-agent-seams-pipeline.html
-% 校准 2026-09-11: 移除 class 行中不存在的 Hook3 节点引用；Hook A-F 语义与 src/agent/ 五接缝及 engine/commit/pipeline.ts 责任链核实一致
+%% Mermaid 源图（单一事实源）· 溯源矩阵: docs/assets/mermaid/README.md
+%% 源文档: docs/research/05-ai-agent-seams.md L151-176（抽取 2026-09-11）
+%% archify 成品: docs/assets/architecture/research/ai-agent-seams-pipeline.html
+%% 校准 2026-09-11: 移除 class 行中不存在的 Hook3 节点引用；Hook A-F 语义与 src/agent/ 五接缝及 engine/commit/pipeline.ts 责任链核实一致
 
 flowchart TD
     Start([用户点击 Commit]) --> Gather[Engine: 收集 staged diff<br/>+ 当前 changelist 上下文]
