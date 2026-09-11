@@ -4,26 +4,12 @@
 
 ## 效果：扁平 → 前缀树
 
-```mermaid
-flowchart LR
-  subgraph FLAT["平铺（切换前）"]
-    direction TB
-    a1["bak/2025"]
-    a2["bak/master-2025-07"]
-    a3["feature/1.0.0"]
-    a4["2022 / 2023 / 2024"]
-  end
-  subgraph TREE["前缀树（切换后）"]
-    direction TB
-    b0["📁 bak"] --> b1["2025"]
-    b0 --> b2["master-2025-07"]
-    b3["📁 feature"] --> b4["1.0.0"]
-    b5["2022 / 2023 / 2024"]
-  end
-  FLAT -->|Group by Prefix| TREE
-  style b0 fill:#8957e5,color:#fff
-  style b3 fill:#8957e5,color:#fff
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/features/branch-tree-group-by-prefix-effect.dark.svg">
+  <img src="../assets/architecture/features/branch-tree-group-by-prefix-effect.light.svg" alt="分支前缀分组 · 平铺变前缀树">
+</picture>
+
+> [交互版](../assets/architecture/features/branch-tree-group-by-prefix-effect.html) · [Mermaid 源图](../assets/mermaid/features/branch-tree-group-by-prefix-effect.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
 
 远程段整体收拢为单个 `origin` 文件夹，内部再嵌 `feature`：`origin/feature/1.0.0` → `origin` → `feature` → `1.0.0`。
 
@@ -31,16 +17,12 @@ flowchart LR
 
 分支前缀分组与「变更文件目录树」（见 [file-list-group-by-directory](./file-list-group-by-directory.md)）是同构问题，故沿用其成熟范式：纯逻辑引擎构树、上层仅渲染。
 
-```mermaid
-flowchart LR
-  A["RawRef[]<br/>(displayRefs，已滤 origin/HEAD)"] -->|adapter| B["buildRefTree()<br/>engine/ref/ref-tree"]
-  B -->|"RefTreeNode[]<br/>(folder / leaf)"| C["BranchesTreeProvider<br/>toBranchNodes()"]
-  C --> D{"grouping?"}
-  D -->|on| E["文件夹节点 + 后缀叶子"]
-  D -->|off| F["平铺（既有排序）"]
-  style B fill:#1f6feb,color:#fff
-  style E fill:#238636,color:#fff
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/features/branch-tree-group-by-prefix-dataflow.dark.svg">
+  <img src="../assets/architecture/features/branch-tree-group-by-prefix-dataflow.light.svg" alt="分支前缀分组 · 算树数据流">
+</picture>
+
+> [交互版](../assets/architecture/features/branch-tree-group-by-prefix-dataflow.html) · [Mermaid 源图](../assets/mermaid/features/branch-tree-group-by-prefix-dataflow.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
 
 - **纯逻辑 `buildRefTree`**（[`engine/ref/ref-tree.ts`](../../src/engine/ref/ref-tree.ts)，零 vscode 依赖、Vitest 覆盖）：按 `shortName` 的 `/` 分段建 trie；叶子携带完整 `RawRef`（短名不丢，命令仍以 `ref.shortName` 定位）、`label` 取末段后缀。**分支感知排序**——当前 HEAD（第 0 档）→ 收藏（第 1 档）→ 同档内**文件夹在前**、名称数字感知升序、稳定；**compact 折叠**单目录子链（如 `a/b/c` → `a/b`，遇含叶子或多子目录即停，对齐 VS Code `explorer.compactFolders`）。
 - **含 `/` 的远程名无需特判**：fork 场景 remote 名可含 `/`（如 `myorg/repo`），compact 折叠会把 `myorg/repo` 单目录子链渲染为单个文件夹，视觉上与「remote 为一层」等价；删除等**正确性敏感**逻辑仍走 [`resolveRemoteBranch`](../../src/engine/ref/remote-ref.ts) 的最长前缀匹配，两者正交不耦合。

@@ -4,18 +4,12 @@
 
 ## 交互形态
 
-```mermaid
-flowchart LR
-  subgraph TOOLBAR["Graph 工具栏"]
-    A["All · Current · Checkpoints"] --- B["repo-a ▾<br/>(可点击按钮)"]
-  end
-  B -->|click + postMessage log/selectRepo| C["QuickPick<br/>$(repo) repo-a /repo-a ✓<br/>$(repo) repo-b /workspace/repo-b"]
-  C -->|选中| D["service.selectRepository(root)"]
-  D --> E["全局活跃仓库切换<br/>七个视图 + 持久化状态级联跟随"]
-  style B fill:#1f6feb,color:#fff
-  style D fill:#238636,color:#fff
-  style E fill:#8957e5,color:#fff
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/features/multi-root-repo-selection-toolbar.dark.svg">
+  <img src="../assets/architecture/features/multi-root-repo-selection-toolbar.light.svg" alt="多根工作区 Graph 工具栏仓库切换交互流">
+</picture>
+
+> [交互版](../assets/architecture/features/multi-root-repo-selection-toolbar.html) · [Mermaid 源图](../assets/mermaid/features/multi-root-repo-selection-toolbar.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
 
 - **入口一（主）**：Graph 标题栏右侧「切换仓库」图标按钮（`when: hyperGit.log.multiRepo` 显隐；原 webview 工具栏仓库名按钮上移，省一行竖直空间）；
 - **入口二**：Command Palette → `Hyper Git: Select Repository…`（单仓库时提示 no-op）；
@@ -25,22 +19,12 @@ flowchart LR
 
 沿用既有架构事实源——`GitRepositoryService` 是唯一活跃仓库持有者，全部 `execGit` 调用（cwd 恒为活跃仓库根）**零改动自动跟随**。核心新增是仓库切换的**级联时序**：
 
-```mermaid
-sequenceDiagram
-  participant U as 用户
-  participant S as GitRepositoryService
-  participant R as rebind 订阅<br/>(extension.ts)
-  participant V as 视图刷新链
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/features/multi-root-repo-selection-sequence.dark.svg">
+  <img src="../assets/architecture/features/multi-root-repo-selection-sequence.light.svg" alt="仓库切换级联时序 · 三重顺序不变量">
+</picture>
 
-  U->>S: selectRepository(rootB)
-  S->>S: applyRepository(repoB)
-  S-->>R: ① onDidChangeRepository.fire（同步）
-  R->>R: registry/favorites/branchesTree.setRepoRoot
-  R->>R: branchesGrouping context key 同步
-  R->>R: blame 注解清理 · Graph filter 清空
-  S-->>V: ② onDidChange.fire（其后）
-  V->>V: refreshAll（150ms 防抖）重取数据
-```
+> [交互版](../assets/architecture/features/multi-root-repo-selection-sequence.html) · [Mermaid 源图](../assets/mermaid/features/multi-root-repo-selection-sequence.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
 
 - **① 先于 ②**：rebind（换 memento key、重载状态）在同步栈完成，任何视图重取数据必然发生在 rebind 之后；
 - **rebind 订阅先注册**：`extension.ts` 中先于 `service.onDidChange(refreshAll)` 挂载；

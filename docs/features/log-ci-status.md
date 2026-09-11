@@ -6,29 +6,12 @@
 
 ## 数据流
 
-```mermaid
-flowchart LR
-  subgraph Git["本地"]
-    A["git log → GraphRowVM"] --> B["图先渲染（CI 不阻塞）"]
-  end
-  subgraph WV["Webview（可见行懒加载）"]
-    B --> C["滚动收集未知 hash"]
-    C -->|"防抖 200ms"| D["log/requestCi"]
-  end
-  subgraph Host["Extension Host"]
-    D --> E["解析 origin 远程\nowner/repo/host"]
-    E --> F["vscode.authentication\n取 token（repo 范围）"]
-    F --> G["GraphQL 批量 ≤100 oid\nstatusCheckRollup"]
-    G --> H["按 oid 缓存\n终态永久 / pending 30s"]
-  end
-  H -->|"log/ciData"| I["webview 就地重绘图标"]
-  I --> J["悬停 → Tooltip 明细"]
-  J -->|"log/openExternal"| K["host 校验主机后\nopenExternal"]
-  style A fill:#1f6feb,color:#fff
-  style G fill:#238636,color:#fff
-  style H fill:#8957e5,color:#fff
-  style J fill:#d29922,color:#fff
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/features/log-ci-status-dataflow.dark.svg">
+  <img src="../assets/architecture/features/log-ci-status-dataflow.light.svg" alt="Log 视图 CI 状态数据流（GitHub Actions / Commit Status）">
+</picture>
+
+> [交互版](../assets/architecture/features/log-ci-status-dataflow.html) · [Mermaid 源图](../assets/mermaid/features/log-ci-status-dataflow.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
 
 ## 认证与安全
 

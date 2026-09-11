@@ -6,7 +6,7 @@ flowchart LR
   subgraph TOOLBAR["Graph 工具栏"]
     A["All · Current · Checkpoints"] --- B["repo-a ▾<br/>(可点击按钮)"]
   end
-  B -->|click + postMessage log/selectRepo| C["QuickPick<br/>$(repo) repo-a /repo-a ✓<br/>$(repo) repo-b /workspace/repo-b"]
+  B -->|click → 直调命令 hyperGit.selectRepository| C["QuickPick<br/>$(repo) repo-a /repo-a ✓<br/>$(repo) repo-b /workspace/repo-b"]
   C -->|选中| D["service.selectRepository(root)"]
   D --> E["全局活跃仓库切换<br/>七个视图 + 持久化状态级联跟随"]
   style B fill:#1f6feb,color:#fff
