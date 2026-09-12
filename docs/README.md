@@ -6,6 +6,7 @@
 - [实施状态总览（M0-M5）](./milestones/implementation-status.md) — 里程碑交付记录、P0/P1 达成矩阵、API 限制、M5 AI 设计、验证与发布状态（**实施看板**）。
 - [工程实施方案](./architecture/engineering-plan.md) — 全链路调研结论 + 路径 B 架构 + M0-M5 里程碑路线图 + 风险与验证（**开发蓝图**）。
 - [Git 功能完备性矩阵](./requirements/idea-feature-matrix.md) — 56 个原子功能点 / 8 组 + CheckinHandler 生命周期（**验收基线**）。
+- [图资产索引](./assets/mermaid/README.md) — Mermaid 源图统一管理 + 溯源矩阵；[archify 架构图成品](./assets/architecture/README.md)（交互 HTML + 深浅色 SVG）为文档嵌入图的唯一来源。
 
 ## 功能文档
 - [Log 视图 CI 状态](./features/log-ci-status.md) — 按提交显示 GitHub CI 最终状态（绿勾/红叉 + 悬停 Tooltip 明细）：认证、限流、懒加载、边界与配置。

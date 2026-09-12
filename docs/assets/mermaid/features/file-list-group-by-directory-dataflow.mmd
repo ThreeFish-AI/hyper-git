@@ -1,0 +1,12 @@
+%% Mermaid 源图（单一事实源）· 溯源矩阵: docs/assets/mermaid/README.md
+%% 源文档: docs/features/file-list-group-by-directory.md L10-17（抽取 2026-09-11）
+%% archify 成品: docs/assets/architecture/features/file-list-group-by-directory-dataflow.html
+
+flowchart LR
+  A["扁平文件路径[]<br/>(与 files[] 同序)"] -->|host| B["buildFileTree()<br/>engine/tree/file-tree"]
+  B -->|"随 payload 下发<br/>FileTreeNode[]"| C["webview 渲染"]
+  C --> D{"mode"}
+  D -->|flat| E["平铺：files[] 直接渲染"]
+  D -->|tree| F["树形：递归 FileTreeNode<br/>叶子取 files[fileIndex]"]
+  style B fill:#1f6feb,color:#fff
+  style F fill:#238636,color:#fff

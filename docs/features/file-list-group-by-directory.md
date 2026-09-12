@@ -6,16 +6,12 @@
 
 Webview 使用内联 `<script>` 字符串，无法 `import` engine TS。为避免同一「路径→树」逻辑两处实现（Split-Brain），沿用提交图布局的成熟范式（`graph-layout` 于 host 计算、随 `GraphRowVM.layout` 下发）：
 
-```mermaid
-flowchart LR
-  A["扁平文件路径[]<br/>(与 files[] 同序)"] -->|host| B["buildFileTree()<br/>engine/tree/file-tree"]
-  B -->|"随 payload 下发<br/>FileTreeNode[]"| C["webview 渲染"]
-  C --> D{"mode"}
-  D -->|flat| E["平铺：files[] 直接渲染"]
-  D -->|tree| F["树形：递归 FileTreeNode<br/>叶子取 files[fileIndex]"]
-  style B fill:#1f6feb,color:#fff
-  style F fill:#238636,color:#fff
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/features/file-list-group-by-directory-dataflow.dark.svg">
+  <img src="../assets/architecture/features/file-list-group-by-directory-dataflow.light.svg" alt="变更文件目录树 · 算树数据流">
+</picture>
+
+> [交互版](../assets/architecture/features/file-list-group-by-directory-dataflow.html) · [Mermaid 源图](../assets/mermaid/features/file-list-group-by-directory-dataflow.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
 
 - **视图无关的 `FileTreeNode`**（[`shared/protocol.ts`](../../src/shared/protocol.ts)）：目录带 `name/path/children`，叶子带 `fileIndex` 回指扁平 `files[]`。同一套渲染逻辑服务两视图，且不复制条目数据。
 - **构建算法**（[`engine/tree/file-tree.ts`](../../src/engine/tree/file-tree.ts)，纯逻辑、Vitest 覆盖）：`/` 分段建 trie；每级**目录在前、文件在后**，同类按名称数字感知升序、稳定（相等按插入序）；**compact 折叠**单目录子链（如 `a/b/c` → `a/b`，遇含叶子或多子目录即停，对齐 VS Code `explorer.compactFolders` 默认开启）；根级文件、同名异目录、空输入、重复路径（keep-first）均已覆盖。

@@ -1,0 +1,18 @@
+%% Mermaid 源图（单一事实源）· 溯源矩阵: docs/assets/mermaid/README.md
+%% 源文档: docs/features/log-commit-detail-panel.md L51-64（抽取 2026-09-11）
+%% archify 成品: docs/assets/architecture/features/log-commit-detail-panel-dataflow.html
+
+flowchart LR
+  A["点击/方向键选中行"] --> B["selectRow → log/selectCommit"]
+  B --> C["host 并行取数<br/>sendCommitFiles + showCommitDetail"]
+  C -->|"log/commitFiles{hash}"| D["renderDetails → #details"]
+  C -->|"log/commitDetail{forHash, vm}"| E["renderCommitMeta → #commit-meta"]
+  B --> F["Loading 占位（两区即时反馈）"]
+  G["× / Esc → deselectRow"] --> H["面板隐藏 + 选中清除 + persist"]
+  I["log/graphData（刷新/切库/重载）"] -->|"选中消失"| G
+  I -->|"选中在 + 未装载"| B
+  style A fill:#1f6feb,color:#fff
+  style C fill:#8250df,color:#fff
+  style D fill:#d29922,color:#fff
+  style E fill:#238636,color:#fff
+  style G fill:#cf222e,color:#fff

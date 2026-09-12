@@ -7,28 +7,12 @@
 
 采用**原生 VS Code 设置**承载（与仓库既有配置一致，零新增 Webview / 命令 / TS）。三项偏好用 `editPresentation: "multilineText"` 渲染为多行文本域，内置默认模板内联于 `package.json` 的 `default`（`.vscodeignore` 排除除 `media/` 外一切、且 VS Code 无「默认取自文件」机制，故默认值必须内联方能在设置界面直接呈现模板）。
 
-```mermaid
-flowchart LR
-  subgraph Cfg["hyperGit.agent.* 设置"]
-    B["baseBranch\n(string, 默认空 = 仓库默认分支)"]
-    C["commitPreferences\n(multilineText)"]
-    P["createPrPreferences\n(multilineText)"]
-    R["reviewPreferences\n(multilineText)"]
-  end
-  subgraph Act["Agentic Git 动作(M5 消费)"]
-    AC["点击 Commit"]
-    AP["点击 Create PR"]
-    AR["点击 Review"]
-  end
-  C -. "自定义指令" .-> AC
-  P -. "自定义指令" .-> AP
-  B -. "PR 基线分支" .-> AP
-  R -. "自定义指令" .-> AR
-  style B fill:#1f6feb,color:#fff
-  style C fill:#238636,color:#fff
-  style P fill:#8957e5,color:#fff
-  style R fill:#d29922,color:#000
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/features/agentic-git-preferences-flow.dark.svg">
+  <img src="../assets/architecture/features/agentic-git-preferences-flow.light.svg" alt="hyperGit.agent.* 设置到 Agentic Git 动作的映射">
+</picture>
+
+> [交互版](../assets/architecture/features/agentic-git-preferences-flow.html) · [Mermaid 源图](../assets/mermaid/features/agentic-git-preferences-flow.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
 
 ## 配置
 

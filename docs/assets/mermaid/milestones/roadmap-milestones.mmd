@@ -1,0 +1,26 @@
+%% Mermaid 源图（单一事实源）· 溯源矩阵: docs/assets/mermaid/README.md
+%% 源文档: README.md L68-75 / docs/i18n/zh-CN/README.md L67-74（路线图表，嵌入后由本图取代；交付台账: docs/milestones/implementation-status.md）
+%% archify 成品: docs/assets/architecture/milestones/roadmap-milestones.html
+
+flowchart LR
+    subgraph Shipped["已交付（M0-M4 · 截至 v0.0.18）"]
+        direction LR
+        M0["M0 脚手架 + CI<br/>正交分层骨架 · 三平台 CI"]
+        M1["M1 Git Adapter<br/>多 Changelist Changes"]
+        M2["M2 Commit 窗口<br/>CC 校验 · Hook 链"]
+        M3["M3 Log + Branches<br/>Graph DAG · Diff/Blame"]
+        M4["M4 Stash / Shelf<br/>行级提交 · Worktrees"]
+    end
+    subgraph Planned["规划中（M5）"]
+        M5["M5 AI Agent<br/>5 接缝实装（当前 Null）"]
+    end
+    M0 --> M1
+    M1 --> M2
+    M2 --> M3
+    M3 --> M4
+    M4 -. 待启动 .-> M5
+
+    classDef done fill:#0f766e,stroke:#5eead4,stroke-width:2px,color:#fff
+    classDef todo fill:#b45309,stroke:#fcd34d,stroke-width:2px,color:#fff,stroke-dasharray:6 3
+    class M0,M1,M2,M3,M4 done
+    class M5 todo

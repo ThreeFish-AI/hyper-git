@@ -1,0 +1,22 @@
+%% Mermaid 源图（单一事实源）· 溯源矩阵: docs/assets/mermaid/README.md
+%% 源文档: docs/features/branch-tree-group-by-prefix.md L8-25（抽取 2026-09-11）
+%% archify 成品: docs/assets/architecture/features/branch-tree-group-by-prefix-effect.html
+
+flowchart LR
+  subgraph FLAT["平铺（切换前）"]
+    direction TB
+    a1["bak/2025"]
+    a2["bak/master-2025-07"]
+    a3["feature/1.0.0"]
+    a4["2022 / 2023 / 2024"]
+  end
+  subgraph TREE["前缀树（切换后）"]
+    direction TB
+    b0["📁 bak"] --> b1["2025"]
+    b0 --> b2["master-2025-07"]
+    b3["📁 feature"] --> b4["1.0.0"]
+    b5["2022 / 2023 / 2024"]
+  end
+  FLAT -->|Group by Prefix| TREE
+  style b0 fill:#8957e5,color:#fff
+  style b3 fill:#8957e5,color:#fff

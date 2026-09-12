@@ -44,8 +44,13 @@
 - **AI seams**: 5 interfaces (`ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver`) are reserved (design inspired by JetBrains' `CheckinHandler` commit lifecycle), currently shipped as Null implementations; the full implementation is deferred to M5. As pre-M5 groundwork, a **Claude Code executable path** setting (`hyperGit.claudeCode.executablePath`) and a **`~/.claude/settings.json` shortcut** are already configurable — see [Claude Code configuration](./docs/features/claude-code-config.md); plus **`hyperGit.agent.*` preferences** (base branch + Commit / Create PR / Review agent instructions) — see [Agentic Git preferences](./docs/features/agentic-git-preferences.md).
 
 <p align="center">
-  <img src="media/framework.png" alt="Framework"/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="media/diagrams/engineering-plan-layers-en.dark.png">
+    <img src="media/diagrams/engineering-plan-layers-en.light.png" alt="Hyper Git core architecture layers: Views layer (Commit/Graph webviews plus four TreeViews in the bottom-panel hyper-git container), Adapter layer (GitRepositoryService dual-channel vscode.git API + execGit, webview hosts, command groups, repo-scoped domain state), Engine layer (15 pure-logic modules, zero vscode dependency), Agent layer (5 AI seams, currently Null implementations), on top of the vscode.git built-in extension and the git CLI">
+  </picture>
 </p>
+
+> [Interactive diagram](./docs/assets/architecture/architecture/engineering-plan-layers-en.html) · [Mermaid source](./docs/assets/mermaid/architecture/engineering-plan-layers-en.mmd) (asset provenance: [diagram index](./docs/assets/mermaid/README.md))
 
 ## Install
 
@@ -65,14 +70,14 @@ See the [Engineering Plan](./docs/architecture/engineering-plan.md), the [Implem
 
 ## Roadmap
 
-| Milestone | Theme                                                        | Status |
-| --------- | ------------------------------------------------------------ | ------ |
-| M0        | Scaffolding + CI                                             | ✅      |
-| M1        | Git adapter + Changes TreeView (multi-changelist)            | ✅      |
-| M2        | Commit panel (template / Amend / CC validation / hook chain) | ✅      |
-| M3        | Log (Graph DAG) + Branches + Diff/Blame                      | ✅      |
-| M4        | Stash / Shelf / line-level commits / Worktrees               | ✅      |
-| M5        | AI agent (seams reserved, implementation pending)            | ⏳      |
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="media/diagrams/roadmap-milestones-en.dark.png">
+    <img src="media/diagrams/roadmap-milestones-en.light.png" alt="Hyper Git roadmap M0 to M5: M0 Scaffolding + CI, M1 Git adapter + multi-changelist Changes, M2 Commit panel, M3 Log graph + Branches + Diff/Blame, M4 Stash / Shelf / line-level commits / Worktrees — all shipped; M5 AI agent (seams reserved) pending">
+  </picture>
+</p>
+
+> [Interactive diagram](./docs/assets/architecture/milestones/roadmap-milestones-en.html) · [Mermaid source](./docs/assets/mermaid/milestones/roadmap-milestones-en.mmd) · Full delivery ledger: [Implementation Status](./docs/milestones/implementation-status.md)
 
 ## Development
 

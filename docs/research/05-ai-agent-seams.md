@@ -147,34 +147,12 @@
 
 ## 4. Commit 流水线的可插拔点
 
-```mermaid
-flowchart TD
-    Start([用户点击 Commit]) --> Gather[Engine: 收集 staged diff<br/>+ 当前 changelist 上下文]
-    Gather --> Hook1{"【Hook A: 提交信息生成】<br/>ICommitMessageProvider<br/>默认 Null, 可选 LM"}
-    Hook1 -- 未启用AI/用户已手填 --> Msg[提交消息定稿]
-    Hook1 -- 启用 --> GenMsg[Agent: 流式生成建议消息<br/>+ Conventional Commits 校验]
-    GenMsg --> MsgConfirm{用户确认/编辑消息}
-    MsgConfirm --> Msg
-    Msg --> Hook2{"【Hook B: 提交前检查】<br/>IPreCommitInspector 链<br/>= IDEA beforeCheckin"}
-    Hook2 -- 检查通过 --> Group{"【Hook C: 分组校验】<br/>IChangelistGrouper<br/>可选: 提示拆分多 commit"}
-    Hook2 -- 阻断 --> Block[展示问题列表<br/>阻断提交, 返回 Gather]
-    Group -- 单组/用户确认 --> Commit[Engine: git commit]
-    Group -- 建议拆分 --> Split[提示用户拆分<br/>回 Hook A]
-    Commit --> Hook4{"【Hook D: 成功后处理】<br/>= IDEA checkinSuccessful"}
-    Hook4 --> Push[可选: Commit and Push]
-    Push --> Hook5{"【Hook E: 失败处理】<br/>= IDEA checkinFailed<br/>可触发 IConflictResolver"}
-    Hook5 -. 冲突 .-> Resolve["【Hook F: 冲突解决】<br/>IConflictResolver<br/>用户逐块确认"]
-    Resolve --> Commit
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture/research/ai-agent-seams-pipeline.dark.svg">
+  <img src="../assets/architecture/research/ai-agent-seams-pipeline.light.svg" alt="Commit 流水线 Hook A–F 责任链">
+</picture>
 
-    classDef hook fill:#ffe082,stroke:#f57f17,stroke-width:2px,color:#000
-    classDef engine fill:#b3e5fc,stroke:#0277bd,stroke-width:2px,color:#000
-    classDef agent fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px,color:#000
-    classDef decision fill:#fff9c4,stroke:#f57f17,color:#000
-    class Hook1,Hook2,Group,Hook4,Hook5,Resolve hook
-    class Gather,Commit,Push engine
-    class GenMsg,Split agent
-    class Hook3,MsgConfirm,Block decision
-```
+> [交互版](../assets/architecture/research/ai-agent-seams-pipeline.html) · [Mermaid 源图](../assets/mermaid/research/ai-agent-seams-pipeline.mmd)（图资产溯源见 [图资产索引](../assets/mermaid/README.md)）
 
 **Hook 注入点说明**(每个 Hook 对应一个接缝,默认全部 Null 实现,通过配置开关启用):
 

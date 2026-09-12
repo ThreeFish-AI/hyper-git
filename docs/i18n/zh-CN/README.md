@@ -44,8 +44,13 @@
 - **AI 接缝**：预留 `ILlmProvider` / `ICommitMessageProvider` / `IPreCommitInspector` / `IChangelistGrouper` / `IConflictResolver` 共 5 个接口（设计参考 JetBrains `CheckinHandler` 提交生命周期），当前以 Null 实现交付，完整实现延后至 M5。作为 M5 前置铺垫，已可配置 **Claude Code 可执行路径**（`hyperGit.claudeCode.executablePath`）与 **`~/.claude/settings.json` 快捷入口**（详见 [Claude Code 配置](../../features/claude-code-config.md)），以及 **`hyperGit.agent.*` 偏好**（基线分支 + Commit / Create PR / Review 的 agent 指令，详见 [Agentic Git 偏好配置](../../features/agentic-git-preferences.md)）。
 
 <p align="center">
-  <img src="../../../media/framework.png" alt="Framework"/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../../assets/architecture/architecture/engineering-plan-layers.dark.svg">
+    <img src="../../assets/architecture/architecture/engineering-plan-layers.light.svg" alt="Hyper Git 核心架构分层总览：视图层（Commit/Graph webview 与四棵 TreeView）、Adapter 层（GitRepositoryService 双通道、webview 宿主、命令注册组、领域状态服务）、Engine 层（15 纯逻辑模块）、Agent 层（AI 接缝），底座为 vscode.git API 与 git CLI 双通道">
+  </picture>
 </p>
+
+> [交互版架构图（聚焦/搜索/导出）](../../assets/architecture/architecture/engineering-plan-layers.html) · [Mermaid 源图](../../assets/mermaid/architecture/engineering-plan-layers.mmd)（图资产溯源见 [图资产索引](../../assets/mermaid/README.md)）
 
 ## 安装
 
@@ -64,14 +69,14 @@
 
 ## 路线图
 
-| 里程碑 | 主题                                                | 状态 |
-| ------ | --------------------------------------------------- | ---- |
-| M0     | 脚手架 + CI                                         | ✅    |
-| M1     | Git Adapter + Changes TreeView（多 Changelist）     | ✅    |
-| M2     | Commit 提交窗口（模板 / Amend / CC 校验 / Hook 链） | ✅    |
-| M3     | Log（Graph DAG） + Branches + Diff/Blame            | ✅    |
-| M4     | Stash / Shelf / 行级提交 / Worktrees                | ✅    |
-| M5     | AI Agent（接缝已预留，实现待启动）                  | ⏳    |
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../../assets/architecture/milestones/roadmap-milestones.dark.svg">
+    <img src="../../assets/architecture/milestones/roadmap-milestones.light.svg" alt="Hyper Git 路线图 M0-M5：M0 脚手架+CI、M1 Git Adapter+多 Changelist、M2 Commit 窗口、M3 Log 提交图+Branches+Diff/Blame、M4 Stash/Shelf/行级提交/Worktrees 均已交付；M5 AI Agent（接缝已预留）待启动">
+  </picture>
+</p>
+
+> [交互版](../../assets/architecture/milestones/roadmap-milestones.html) · [Mermaid 源图](../../assets/mermaid/milestones/roadmap-milestones.mmd) · 详细交付台账见[实施状态总览](../../milestones/implementation-status.md)（图资产溯源见 [图资产索引](../../assets/mermaid/README.md)）
 
 ## 开发
 
