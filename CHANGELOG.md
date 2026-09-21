@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Build
+
+- **开发依赖批量升级**（dependabot）：`@vscode/vsce` 3.9.2 → **4.0.0**（#131）、`vitest` 4.1.10 → **5.0.1**（#127）、`ovsx` 1.1.1 → 1.2.0（#130）、`typescript-eslint` 8.68.0 → 8.70.0（#129）、`esbuild` 0.28.1 → 0.28.2（#128）；两项 major 均把 Node 基线抬至 22（vitest 5 实际要求 ≥ 22.12），与 CI 的 `node-version: 22` 一致。五个 PR 共改 `pnpm-lock.yaml`，顺序合并必连环冲突，故合成单个 PR 只重生一次 lockfile，组合兼容性由 CI 在 `feature/1.x.x` 基线上一次验证。`pnpm-workspace.yaml` 的 `allowBuilds` 三项维持不变——`ovsx@1.2.0` 仍传递依赖 `@vscode/vsce@^3.7.1`，`keytar` 与 `@vscode/vsce-sign`（现 2.0.9 / 2.1.0 双版本）继续在依赖树中，删任一项都会重现 `ERR_PNPM_IGNORED_BUILDS`。
+- **dependabot 聚合升级 PR**（根因修复）：`.github/dependabot.yml` 为两个 ecosystem 补 `groups`——npm 的开发依赖 minor/patch 聚合为单个 PR（major 仍逐项单开，保留逐个评估与回滚的粒度），github-actions 全量聚合（爆炸半径限于工作流本身，且 major 升级属例行）。根除「每周多个 deps PR 共改 lockfile 引发连环冲突」的复发源。
+
 ## [0.0.18] - 2026-09-10 — Commit / Branches 标题栏重构 · 批量 Discard Changes · 分支级 Push · 双市场发布重启
 
 自 v0.0.17 以来的积累（PR #119 / #120 / #121）。核心变更：**Commit 与 Branches 两视图的头部与标题栏整体重构**——Commit 头部两行 UI（Active Changelist 选择器、List/Tree 段控）上移 VS Code 标题栏，净省两行竖直空间，并新增以文件勾选集为范围的批量 Discard Changes；Branches 的 Push 下放分支右键（按分支推送的显式 refspec / `-u` 双路径）、Prune 上移标题栏、Merge… 收入「…」菜单。同时修复无效 codicon 致 Compare with Current Branch 图标渲染空白与文件列表树的 A11y 语义回归，并重启 Open VSX 发布通道（与 Marketplace 对称门控），覆盖 Cursor / Windsurf / VSCodium 等编辑器。完整用户视角叙述见 [Release Note v0.0.18](./docs/releases/v0.0.18.md)。
