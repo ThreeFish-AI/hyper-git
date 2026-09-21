@@ -8,6 +8,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      # 五项 deps PR 共改 pnpm-lock.yaml 时顺序合并必连环冲突（须逐个 @dependabot rebase 并重跑
+      # 整轮 CI）。聚合后每周只产生一个 PR、只重生一次 lockfile，组合兼容性由同一轮 CI 一次验证。
+      # major 刻意不入组——逐项单开以保留逐个评估与回滚的粒度。
+      dev-minor-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
     ignore:
       # @types/vscode 须与 package.json 的 engines.vscode 手动联动（vsce package 强制要求
       # @types/vscode 的 major.minor ≤ engines.vscode）。Dependabot 单方面 bump 会破坏该约束
@@ -25,3 +34,9 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      # Actions 的爆炸半径限于 CI 工作流本身，且 major 升级频繁（checkout 4→7、setup-node v6→v7
+      # 均属例行），故全量聚合——与 npm 的「major 单开」取不同取舍，避免制造同类 PR 噪声。
+      github-actions:
+        patterns:
+          - '*'
