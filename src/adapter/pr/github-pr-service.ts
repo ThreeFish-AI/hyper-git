@@ -17,12 +17,12 @@ import type { GitRepositoryService } from '../git-repository-service';
 import type { Logger } from '../../infra/logger';
 import type { GitHubAuth, GitHubAuthProviderId } from '../ci/github-auth';
 import type { GitHubCiService } from '../ci/github-ci-service';
-import { graphqlEndpoint, isAllowedGitHubHost, type GitHubRemote } from '../../engine/ci/remote-parser';
+import { graphqlEndpoint, isAllowedGitHubHost, parseGitHubRemote, type GitHubRemote } from '../../engine/ci/remote-parser';
 import { extractRateLimit, parseRetryAfterMs } from '../../engine/ci/model';
 import { fetchWithTimeout } from '../ci/graphql-http';
 import { buildPrQuery } from '../../engine/pr/graphql-query';
 import { parsePullRequestsResponse, prsEqual } from '../../engine/pr/model';
-import { buildPrIndex, type RemotePrIndex } from '../../engine/pr/match';
+import { buildPrIndex, type PrRemoteInfo, type RemotePrIndex } from '../../engine/pr/match';
 import type { PullRequestVM } from '../../engine/pr/types';
 
 /** 单页 PR 数（GitHub 单页上限 100，取 50 平衡时延与点数）。 */
@@ -42,14 +42,17 @@ interface CacheEntry {
 	readonly repoRoot: string;
 	readonly prs: readonly PullRequestVM[];
 	readonly index: RemotePrIndex;
-	/** 构建索引时的输入快照（remote 增删/改名影响 Tier b/c 匹配），续期须连同比较。 */
-	readonly init: { readonly repoOwner: string; readonly remotes: readonly string[] };
+	/** 构建索引时的输入快照（remote 增删/改名/改址影响三级匹配），续期须连同比较。 */
+	readonly init: { readonly repoOwner: string; readonly repoHost: string; readonly remotes: readonly PrRemoteInfo[] };
 	readonly expires: number;
 }
 
-/** remotes 快照相等（顺序敏感；git 返回顺序稳定，只判逐项相等）。 */
-function sameRemotes(a: readonly string[], b: readonly string[]): boolean {
-	return a.length === b.length && a.every((v, i) => v === b[i]);
+/** remotes 快照相等（顺序敏感；git 返回顺序稳定，逐项比较 name + 解析 host/owner/repo）。 */
+function sameRemotes(a: readonly PrRemoteInfo[], b: readonly PrRemoteInfo[]): boolean {
+	return (
+		a.length === b.length &&
+		a.every((v, i) => v.name === b[i].name && v.host === b[i].host && v.owner === b[i].owner && v.repo === b[i].repo)
+	);
 }
 
 export class GitHubPrService implements vscode.Disposable {
@@ -107,6 +110,9 @@ export class GitHubPrService implements vscode.Disposable {
 		if (!ctx) {
 			return null; // 非 GitHub 远程 / provider 不匹配 → 静默休眠
 		}
+		if (!this.isTrustedRemoteHost(ctx.remote)) {
+			return null; // 「形态可解析」但非 github.com 且非已配置 GHE 实例的远程 → 视同非 GitHub（防 token 外发任意主机）
+		}
 		if (this.cache && this.cache.repoRoot === repoRoot && Date.now() < this.cache.expires) {
 			return this.cache.index;
 		}
@@ -146,6 +152,28 @@ export class GitHubPrService implements vscode.Disposable {
 
 	// ─── 内部 ────────────────────────────────────────────────────────────────
 
+	/**
+	 * 取数主机策略（engine `parseGitHubRemote` 只辨形态不辨主机——机制/策略分离，策略在此落地）：
+	 * 仅 github.com 或与已配置 `github-enterprise.uri` 一致的实例主机可取数；其余「GitHub 形态」
+	 * 远程（如 origin 指向任意第三方主机）视同非 GitHub（零徽标、零请求），杜绝把 GHE token
+	 * 发往任意主机。
+	 */
+	private isTrustedRemoteHost(remote: GitHubRemote): boolean {
+		if (remote.isGitHubDotCom) {
+			return true;
+		}
+		const uri = vscode.workspace.getConfiguration('github-enterprise').get<string>('uri') ?? '';
+		if (!uri) {
+			return false;
+		}
+		try {
+			const withScheme = /^https?:\/\//i.test(uri) ? uri : `https://${uri}`;
+			return new URL(withScheme).hostname.toLowerCase() === remote.host;
+		} catch {
+			return false;
+		}
+	}
+
 	private enabled(): boolean {
 		return vscode.workspace.getConfiguration('hyperGit').get<boolean>('branches.pr.enabled', true);
 	}
@@ -158,7 +186,12 @@ export class GitHubPrService implements vscode.Disposable {
 	private async fetchAll(remote: GitHubRemote, provider: GitHubAuthProviderId, repoRoot: string): Promise<RemotePrIndex | null> {
 		const generation = this.authGeneration; // 取数期间的登录态代次（完成后已变则作废）
 		// remotes 与 repoRoot 同时采样（首个 await 之前）：完成后才读会取到切库后他仓的列表，错配写入缓存。
-		const remotes = (this.service.repo?.state.remotes ?? []).map((r) => r.name);
+		// name + URL 解析 host/owner/repo：供 Tier a 身份校验（不可解析 → null；可解析但 host 与本仓
+		// 不同实例的 remote 也被 Tier a 排除——fork 与 base 同 forge 实例）。
+		const remotes: readonly PrRemoteInfo[] = (this.service.repo?.state.remotes ?? []).map((r) => {
+			const g = parseGitHubRemote(r.pushUrl ?? r.fetchUrl ?? '');
+			return { name: r.name, host: g?.host ?? null, owner: g?.owner ?? null, repo: g?.repo ?? null };
+		});
 		const fetchImpl = globalThis.fetch;
 		if (typeof fetchImpl !== 'function') {
 			this.logger.warn('当前运行时无全局 fetch，PR 徽标不可用');
@@ -205,6 +238,7 @@ export class GitHubPrService implements vscode.Disposable {
 			this.cache.repoRoot === repoRoot &&
 			prsEqual(this.cache.prs, prs) &&
 			this.cache.init.repoOwner === remote.owner &&
+			this.cache.init.repoHost === remote.host &&
 			sameRemotes(this.cache.init.remotes, remotes)
 		) {
 			this.cache = { ...this.cache, expires: Date.now() + TTL_MS };
@@ -213,8 +247,8 @@ export class GitHubPrService implements vscode.Disposable {
 		if (generation !== this.authGeneration) {
 			return null; // 取数期间登录态已变（登出/换号）：结果作废，不写缓存
 		}
-		const index = buildPrIndex(prs, { repoOwner: remote.owner, remotes });
-		this.cache = { repoRoot, prs, index, init: { repoOwner: remote.owner, remotes }, expires: Date.now() + TTL_MS };
+		const index = buildPrIndex(prs, { repoOwner: remote.owner, repoHost: remote.host, remotes });
+		this.cache = { repoRoot, prs, index, init: { repoOwner: remote.owner, repoHost: remote.host, remotes }, expires: Date.now() + TTL_MS };
 		return index;
 	}
 

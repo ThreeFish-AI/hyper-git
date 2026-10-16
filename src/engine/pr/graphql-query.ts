@@ -36,7 +36,7 @@ export function buildPrQuery(input: PrQueryInput): PrQueryOutput {
   repository(owner: $owner, name: $name) {
     pullRequests(first: ${first}, states: [OPEN, MERGED, CLOSED], orderBy: {field: UPDATED_AT, direction: DESC}, after: $after) {
       pageInfo { hasNextPage endCursor }
-      nodes { number state isDraft title url updatedAt headRefName headRepositoryOwner { login } }
+      nodes { number state isDraft title url updatedAt headRefName headRepositoryOwner { login } headRepository { name } }
     }
   }
 }`;

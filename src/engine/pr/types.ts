@@ -23,4 +23,6 @@ export interface PullRequestVM {
 	readonly headRefName: string;
 	/** head 仓库 owner login；fork 元数据缺失（null）→ ''（不参与 fork 全名匹配）。 */
 	readonly headOwner: string;
+	/** head 仓库名；fork 惯例保留 base 名（Tier a 身份校验的 repo 维度，缺失 → ''）。 */
+	readonly headRepo: string;
 }

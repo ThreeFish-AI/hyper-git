@@ -55,9 +55,10 @@ function singleLine(s: string): string {
 	return s.replace(/[\r\n]+/g, ' ');
 }
 
-/** MarkdownString 转义：单行化 + 反斜杠转义反引号/管道/反斜杠与 `[]()`（防链接/图片语法注入）。 */
+/** MarkdownString 转义：单行化 + 反斜杠转义反引号/管道/反斜杠、`[]()`（防链接/图片语法注入）
+ * 与 `<>`（防 CommonMark 角括号 autolink 在 isTrusted 实例中生成非白名单可点链接）。 */
 function escapeMd(s: string): string {
-	return singleLine(s).replace(/([\\`|[\]()])/g, '\\$1');
+	return singleLine(s).replace(/([\\`|[\]()<>])/g, '\\$1');
 }
 
 /** 任意值安全入 code span：fence 长于值内最长反引号串（code span 内反斜杠转义无效，须按长度压制）。 */

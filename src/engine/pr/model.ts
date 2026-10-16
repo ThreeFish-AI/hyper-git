@@ -38,6 +38,7 @@ function parseNode(node: RawNode): PullRequestVM | null {
 		return null;
 	}
 	const owner = (node.headRepositoryOwner as { login?: unknown } | null | undefined)?.login;
+	const repo = (node.headRepository as { name?: unknown } | null | undefined)?.name;
 	return {
 		number: number_,
 		state: state as PrState,
@@ -48,6 +49,7 @@ function parseNode(node: RawNode): PullRequestVM | null {
 		headRefName: asString(node.headRefName),
 		// fork 元数据可能为 null（如 head 仓库被删除）→ ''，不参与 fork 全名匹配。
 		headOwner: typeof owner === 'string' ? owner : '',
+		headRepo: asString(repo),
 	};
 }
 
@@ -109,7 +111,8 @@ export function prsEqual(a: readonly PullRequestVM[], b: readonly PullRequestVM[
 			x.url !== y.url ||
 			x.updatedAt !== y.updatedAt ||
 			x.headRefName !== y.headRefName ||
-			x.headOwner !== y.headOwner
+			x.headOwner !== y.headOwner ||
+			x.headRepo !== y.headRepo
 		) {
 			return false;
 		}

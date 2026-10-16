@@ -20,7 +20,7 @@ describe('buildPrQuery', () => {
 		expect(query).toContain('states: [OPEN, MERGED, CLOSED]');
 		expect(query).toContain('orderBy: {field: UPDATED_AT, direction: DESC}');
 		expect(query).toContain('pageInfo { hasNextPage endCursor }');
-		expect(query).toContain('number state isDraft title url updatedAt headRefName headRepositoryOwner { login }');
+		expect(query).toContain('number state isDraft title url updatedAt headRefName headRepositoryOwner { login } headRepository { name }');
 		expect(query).toContain('rateLimit { cost remaining resetAt }');
 	});
 

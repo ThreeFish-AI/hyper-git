@@ -28,7 +28,7 @@
 
 | Tier | 规则 | 场景 |
 |---|---|---|
-| a | `shortName === ${headOwner}/${headRefName}` | remote 本身以 fork owner 命名（如 `mylogin/feature`） |
+| a | `shortName === ${headOwner}/${headRefName}`，且首段 remote 的 URL host/owner/repo 与本仓 host 及 head owner/head repo 一致（owner/repo 大小写不敏感；fork 与 base 同实例、保留 base 仓库名） | remote 本身以 fork owner 命名（如 `mylogin/feature`）；撞名劫持（login 与 remote 名撞名、含 `/` remote 名与键同形、remote 指向同 owner 他仓或异 forge 实例）被身份校验排除 |
 | b | 剥离后 `branch === headRefName && headOwner === repoOwner` | dependabot / 仓内功能分支（主场景） |
 | c | 剥离后 `branch === headRefName` 且候选**唯一** | 专属 fork remote；歧义（多 fork 同名）→ 不显示 |
 
@@ -39,6 +39,7 @@
 - 复用 **VS Code 内置 GitHub 认证**（`vscode.authentication`，范围 `repo`），凭证绝不经过 chat / 日志 / webview；与 CI 状态共享同一会话。
 - **静默优先**：`peek({createIfNone:false})` 绝不弹窗；未登录 → 零徽标、零请求。登录入口复用 Graph 视图标题栏「登录 GitHub」按钮（`hyperGit.ci.signIn`）；该按钮由 CI 状态驱动，需 `hyperGit.log.ci.enabled` 开启（默认开启）——「CI 关 / PR 开」的组合下 Branches 视图暂无独立登录入口。
 - **反 SSRF**：Tooltip 链接经 `safePrUrl` 校验（https 且主机 ∈ {github.com, `*.github.com`, 仓库主机, api.仓库主机}）后才入 `isTrusted` MarkdownString。
+- **取数主机策略**：仅 github.com 与已配置 `github-enterprise.uri` 的实例主机取数；其余「GitHub 形态」远程（origin 指向任意第三方主机）视同非 GitHub——零徽标、零请求，杜绝 token 外发。
 
 ## 限流与性能
 
@@ -64,6 +65,8 @@
 | 键 | 默认 | 说明 |
 |---|---|---|
 | `hyperGit.branches.pr.enabled` | `true` | 总开关。关闭后零徽标、零请求。 |
+
+provider 与取数仓判定复用 `hyperGit.log.ci.provider` / `hyperGit.log.ci.remote`（默认 auto：按 origin 主机自动判定；provider 钉死为与远程主机不符的值时徽标休眠，remote 可重定向取数仓）——详见 [Log 视图 CI 状态](./log-ci-status.md)。
 
 ## 实现
 

@@ -12,6 +12,7 @@ function node(overrides: Record<string, unknown> = {}): Record<string, unknown> 
 		updatedAt: '2026-10-01T00:00:00Z',
 		headRefName: 'dependabot/npm_and_yarn/x',
 		headRepositoryOwner: { login: 'o' },
+		headRepository: { name: 'r' },
 		...overrides,
 	};
 }
@@ -29,6 +30,7 @@ const VM: PullRequestVM = {
 	updatedAt: '2026-10-01T00:00:00Z',
 	headRefName: 'dependabot/npm_and_yarn/x',
 	headOwner: 'o',
+	headRepo: 'r',
 };
 
 describe('parsePullRequestsResponse', () => {
@@ -38,9 +40,10 @@ describe('parsePullRequestsResponse', () => {
 		expect(out?.prs[0]).toEqual(VM);
 	});
 
-	it('headRepositoryOwner null → headOwner 空串', () => {
-		const out = parsePullRequestsResponse(page([node({ headRepositoryOwner: null })]));
+	it('headRepositoryOwner null → headOwner 空串；headRepository null → headRepo 空串', () => {
+		const out = parsePullRequestsResponse(page([node({ headRepositoryOwner: null, headRepository: null })]));
 		expect(out?.prs[0]?.headOwner).toBe('');
+		expect(out?.prs[0]?.headRepo).toBe('');
 	});
 
 	it('非法 state / 非正数 number 的节点被丢弃，其余保留', () => {
@@ -111,6 +114,7 @@ describe('prsEqual', () => {
 		expect(prsEqual([VM], [{ ...VM, updatedAt: 'x' }])).toBe(false);
 		expect(prsEqual([VM], [{ ...VM, headRefName: 'x' }])).toBe(false);
 		expect(prsEqual([VM], [{ ...VM, headOwner: 'x' }])).toBe(false);
+		expect(prsEqual([VM], [{ ...VM, headRepo: 'x' }])).toBe(false);
 		expect(prsEqual([VM], [])).toBe(false);
 	});
 });
