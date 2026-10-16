@@ -32,6 +32,7 @@
 | [agentic-git-preferences-flow](features/agentic-git-preferences-flow.html) | workflow | [.mmd](../mermaid/features/agentic-git-preferences-flow.mmd) | [agentic-git-preferences.md](../../features/agentic-git-preferences.md) |
 | [claude-code-config-flow](features/claude-code-config-flow.html) | workflow | [.mmd](../mermaid/features/claude-code-config-flow.mmd) | [claude-code-config.md](../../features/claude-code-config.md) |
 | [log-ci-status-dataflow](features/log-ci-status-dataflow.html) | dataflow | [.mmd](../mermaid/features/log-ci-status-dataflow.mmd) | [log-ci-status.md](../../features/log-ci-status.md) |
+| [branches-pr-status-dataflow](features/branches-pr-status-dataflow.html) | dataflow | [.mmd](../mermaid/features/branches-pr-status-dataflow.mmd) | [branches-pr-status.md](../../features/branches-pr-status.md) |
 
 ### research/（调研设计）
 | 基名 | archify 类型 | 源 Mermaid | 嵌入文档 |

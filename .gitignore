@@ -18,3 +18,4 @@ out/
 .DS_Store
 Thumbs.db
 *visual-check*
+.archify/
