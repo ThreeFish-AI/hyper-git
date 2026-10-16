@@ -49,8 +49,21 @@ describe('parsePullRequestsResponse', () => {
 		expect(out?.prs[0]?.number).toBe(139);
 	});
 
-	it('nodes: null / [] → 空页（合法）', () => {
+	it('字段级非字符串值归空串（title/url/updatedAt/headRefName 守卫，节点不丢弃）', () => {
+		const out = parsePullRequestsResponse(page([node({ title: 42, url: null, updatedAt: true, headRefName: { x: 1 } })]));
+		expect(out?.prs).toHaveLength(1);
+		expect(out?.prs[0]).toMatchObject({ number: 138, title: '', url: '', updatedAt: '', headRefName: '' });
+	});
+
+	it('nodes 数组内 null 元素被丢弃', () => {
 		expect(parsePullRequestsResponse(page([null]))?.prs).toEqual([]);
+	});
+
+	it('连接级 nodes: null / 非数组 / [] → 空页（合法，不抛错）', () => {
+		const nullNodes = { data: { repository: { pullRequests: { nodes: null, pageInfo: { hasNextPage: false, endCursor: null } } } } };
+		expect(parsePullRequestsResponse(nullNodes)?.prs).toEqual([]);
+		const objectNodes = { data: { repository: { pullRequests: { nodes: { '0': node() }, pageInfo: null } } } };
+		expect(parsePullRequestsResponse(objectNodes)?.prs).toEqual([]);
 		const empty = parsePullRequestsResponse(page([]));
 		expect(empty?.prs).toEqual([]);
 		expect(empty?.hasNextPage).toBe(false);

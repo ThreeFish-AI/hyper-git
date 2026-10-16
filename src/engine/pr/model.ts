@@ -19,6 +19,11 @@ const KNOWN_STATES: readonly PrState[] = ['OPEN', 'MERGED', 'CLOSED'];
 
 type RawNode = Record<string, unknown> | null | undefined;
 
+/** 字段级字符串守卫：非字符串（含缺失）→ ''，杜绝盲转型把 number/boolean/object 放进 VM。 */
+function asString(v: unknown): string {
+	return typeof v === 'string' ? v : '';
+}
+
 /** 单节点 → {@link PullRequestVM}；state 未知 / number 非正数 → null（丢弃）。 */
 function parseNode(node: RawNode): PullRequestVM | null {
 	if (!node || typeof node !== 'object') {
@@ -37,10 +42,10 @@ function parseNode(node: RawNode): PullRequestVM | null {
 		number: number_,
 		state: state as PrState,
 		isDraft: node.isDraft === true,
-		title: (node.title as string | undefined) ?? '',
-		url: (node.url as string | undefined) ?? '',
-		updatedAt: (node.updatedAt as string | undefined) ?? '',
-		headRefName: (node.headRefName as string | undefined) ?? '',
+		title: asString(node.title),
+		url: asString(node.url),
+		updatedAt: asString(node.updatedAt),
+		headRefName: asString(node.headRefName),
 		// fork 元数据可能为 null（如 head 仓库被删除）→ ''，不参与 fork 全名匹配。
 		headOwner: typeof owner === 'string' ? owner : '',
 	};
@@ -48,14 +53,15 @@ function parseNode(node: RawNode): PullRequestVM | null {
 
 /**
  * 解析整页响应。缺 `data`/`repository`/`pullRequests` → null（不缓存，留待重试）；
- * `nodes: null` → 空页（合法：仓库无 PR）。
+ * `nodes: null` / 非数组 → 空页（合法：仓库无 PR / 宽容降级）。
  */
 export function parsePullRequestsResponse(json: unknown): PrPage | null {
 	const conn = (json as { data?: { repository?: { pullRequests?: RawConn } } })?.data?.repository?.pullRequests;
 	if (!conn) {
 		return null;
 	}
-	const nodes = (conn as RawConn).nodes ?? [];
+	const rawNodes = (conn as RawConn).nodes;
+	const nodes = Array.isArray(rawNodes) ? rawNodes : [];
 	const prs = nodes.map((n) => parseNode(n)).filter((p): p is PullRequestVM => p !== null);
 	const pageInfo = (conn as RawConn).pageInfo;
 	return {

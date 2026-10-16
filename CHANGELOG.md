@@ -8,7 +8,7 @@
 
 ### Added
 
-- **Branches 视图远程分支行右侧显示关联 GitHub Pull Request 状态徽标**（`#138 Merged` 形态 + 云图标按状态着色：Merged 紫 / Closed 红 / Open 绿 / Draft 弱化；悬停见 PR 号、标题与经反 SSRF 主机白名单校验的 Open on GitHub 链接）。分支 → PR 三级匹配（fork 全名 → 同仓 headRefName → 唯一兜底，歧义宁缺勿错）；复用 CI 状态的 GitHub 认证与 remote/provider 单一事实源（`getGitHubContext()`），GraphQL 按 UPDATED_AT 倒序取最近 100 条全态 PR，TTL 60s 缓存 + 同实例引用相等守卫（无刷新循环、首轮无徽标先行不阻塞建树）；未登录 / 非 GitHub 远程 / 配置关闭 → 零徽标零请求静默休眠。新增配置 `hyperGit.branches.pr.enabled`（默认开启）；engine 纯逻辑 `engine/pr/` 四模块 + 25 例单测。详见 [功能文档](./docs/features/branches-pr-status.md)。
+- **Branches 视图远程分支行右侧显示关联 GitHub Pull Request 状态徽标**（`#138 Merged` 形态 + 云图标按状态着色：Merged 紫 / Closed 红 / Open 绿 / Draft 弱化；悬停见 PR 号、标题与经反 SSRF 主机白名单校验的 Open on GitHub 链接）。分支 → PR 三级匹配（fork 全名 → 同仓 headRefName → 唯一兜底，歧义宁缺勿错）；复用 CI 状态的 GitHub 认证与 remote/provider 单一事实源（`getGitHubContext()`），GraphQL 按 UPDATED_AT 倒序取最近 100 条全态 PR，TTL 60s 缓存 + 同实例引用相等守卫（无刷新循环、首轮无徽标先行不阻塞建树）；未登录 / 非 GitHub 远程 / 配置关闭 → 零徽标零请求静默休眠。新增配置 `hyperGit.branches.pr.enabled`（默认开启）；engine 纯逻辑 `engine/pr/` 四模块 + 全量单测。详见 [功能文档](./docs/features/branches-pr-status.md)。
 
 ### Build
 

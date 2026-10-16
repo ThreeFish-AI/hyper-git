@@ -32,11 +32,35 @@ describe('buildPrIndex / matchRemoteBranchPr', () => {
 		expect(hit?.state).toBe('MERGED');
 	});
 
-	it('Tier a 优先于 Tier b（同名双语义时 fork 全名先命中）', () => {
+	it('Tier a 优先于 Tier b（fork 全名与同仓分支双候选时 fork 全名先命中）', () => {
 		const fork = pr({ headOwner: 'mylogin', headRefName: 'feature', number: 7 });
-		const sameRepo = pr({ headOwner: 'acme', headRefName: 'mylogin/feature', number: 8 });
+		// 同仓 PR 也用 headRefName 'feature'：若无 Tier a，剥 mylogin 前缀后 Tier b 会命中 #8 —— 优先级真正被钉住。
+		const sameRepo = pr({ headOwner: 'acme', headRefName: 'feature', number: 8 });
 		const hit = matchRemoteBranchPr('mylogin/feature', { repoOwner: 'acme', remotes: ['origin', 'mylogin'] }, [fork, sameRepo]);
 		expect(hit?.number).toBe(7);
+	});
+
+	it('Tier a 判别：Tier c 歧义（两 fork 同名）时 remote 以 fork owner 命名仍精确命中', () => {
+		const prs = [
+			pr({ headOwner: 'fork1', headRefName: 'patch-1', number: 10 }),
+			pr({ headOwner: 'fork2', headRefName: 'patch-1', number: 11 }),
+		];
+		// 若无 Tier a：剥 fork1 前缀后 Tier b 无候选、Tier c 二歧义 → undefined；Tier a 须命中 #10。
+		const hit = matchRemoteBranchPr('fork1/patch-1', { repoOwner: 'acme', remotes: ['origin', 'fork1'] }, prs);
+		expect(hit?.number).toBe(10);
+	});
+
+	it('owner 大小写不敏感：URL 形 repoOwner 与规范形 headOwner 仍走 Tier b', () => {
+		const prs = [pr({ headOwner: 'Acme-Inc', headRefName: 'feature', number: 14 })];
+		const hit = matchRemoteBranchPr('origin/feature', { repoOwner: 'acme-inc', remotes: ['origin'] }, prs);
+		expect(hit?.number).toBe(14);
+	});
+
+	it('Tier a 键 owner 段大小写不敏感（remote 名与规范 login 大小写互异）', () => {
+		const prs = [pr({ headOwner: 'MyLogin', headRefName: 'feature', number: 7 })];
+		// remote 名小写 / login 规范形混合大小写，双向均须命中。
+		expect(matchRemoteBranchPr('mylogin/feature', { repoOwner: 'acme', remotes: ['mylogin'] }, prs)?.number).toBe(7);
+		expect(matchRemoteBranchPr('MyLogin/feature', { repoOwner: 'acme', remotes: ['MyLogin'] }, prs)?.number).toBe(7);
 	});
 
 	it('Tier c：非同仓 fork PR 且候选唯一 → 兜底命中', () => {

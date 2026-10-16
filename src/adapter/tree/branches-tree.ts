@@ -89,6 +89,8 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 	/** PR 匹配索引快照（null = 无数据：未登录/非 GitHub/未就绪 → 行为与无徽标一致）。 */
 	private prIndex: RemotePrIndex | null = null;
 	private prEnsureInFlight: Promise<void> | undefined;
+	/** PR 取数代次：切库/登录态/配置任一变化即 +1；在途取数完成时代次已变则弃结果并对当前态补拉。 */
+	private prKickEpoch = 0;
 
 	constructor(
 		private readonly service: GitRepositoryService,
@@ -106,12 +108,14 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 			vscode.workspace.onDidChangeConfiguration((e) => {
 				if (e.affectsConfiguration('hyperGit.branches.pr')) {
 					this.prIndex = null;
+					this.prKickEpoch++;
 					this.refresh();
 				}
 			}),
 			// 登录/登出：清快照重取（登出即隐去徽标；登录后无需等待 git 事件）。
 			this.prService.onDidChangeAuth(() => {
 				this.prIndex = null;
+				this.prKickEpoch++;
 				this.refresh();
 			}),
 		);
@@ -128,7 +132,8 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		}
 		this.groupingKey = key;
 		this.groupingEnabled = this.workspaceState.get<boolean>(this.groupingKey) ?? true;
-		this.prIndex = null; // 服务端缓存按 repoRoot 独立分键，切库后重取
+		this.prIndex = null; // 服务端为携带 repoRoot 校验的单槽缓存，切库即失效重取
+		this.prKickEpoch++;
 		this.refresh();
 	}
 
@@ -313,20 +318,28 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 	}
 
 	/**
-	 * 异步取 PR 索引（fire-and-forget，不阻塞建树）：索引就绪且与快照不同才 fire 一次。
-	 * 终止性：服务端 TTL 命中与数据未变均返回同一实例 → 引用相等守卫不再 fire；多根切换竞态由
-	 * 「完成后 repoRoot 已变则丢弃」守卫兜住。服务自身保证不抛（此处 catch 纯防御）。
+	 * 异步取 PR 索引（fire-and-forget，不阻塞建树）：索引就绪且与快照不同才 fire 一次；
+	 * 结果为 null 且快照非空（如登出）时清快照 fire 隐去徽标（快照已空则不再 fire，无循环）。
+	 * 终止性：服务端 TTL 命中与数据未变均返回同一实例 → 引用相等守卫不再 fire；切库/登录态/配置
+	 * 变化统一推进 prKickEpoch，在途取数完成时代次已变则弃结果并由链尾按当前态补拉（事件用户驱动，有界）。
+	 * 服务自身保证不抛（此处 catch 纯防御）。
 	 */
 	private ensurePrData(): void {
 		if (this.prEnsureInFlight) {
 			return;
 		}
-		const root = this.service.repoRoot;
+		const epoch = this.prKickEpoch;
 		this.prEnsureInFlight = this.prService
 			.getPullRequests()
 			.then((index) => {
-				if (index && index !== this.prIndex && this.service.repoRoot === root) {
+				if (this.prKickEpoch !== epoch) {
+					return; // 在途期间切库/登录态/配置已变：弃结果（防串仓/旧会话），链尾按当前态补拉
+				}
+				if (index && index !== this.prIndex) {
 					this.prIndex = index;
+					this._onDidChange.fire(undefined);
+				} else if (!index && this.prIndex !== null) {
+					this.prIndex = null;
 					this._onDidChange.fire(undefined);
 				}
 			})
@@ -335,6 +348,12 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 			})
 			.finally(() => {
 				this.prEnsureInFlight = undefined;
+			})
+			.then(() => {
+				// 在途期间代次已变（切库/登录/配置）则按当前态补拉一次（用户驱动，有界不循环）。
+				if (this.prKickEpoch !== epoch) {
+					this.ensurePrData();
+				}
 			});
 	}
 
@@ -431,11 +450,11 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 			}
 			rows.push(['Upstream', `${ref.upstream}${track.length ? ` (${track.join(', ')})` : ''}`]);
 		}
-		// 链接行经服务端主机白名单校验（反 SSRF）后才入 Tooltip。
+		// 链接行经服务端主机白名单校验（反 SSRF）后才入 Tooltip；措辞与功能文档同口径（Open on GitHub）。
 		const safeUrl = pr ? this.prService.safePrUrl(pr.url) : null;
 		return mdTooltip(rows, {
 			title: ref.shortName,
-			links: safeUrl ? [{ label: 'Open', text: `Pull Request #${pr?.number}`, href: safeUrl }] : undefined,
+			links: safeUrl ? [{ label: 'Open on GitHub', text: `#${pr?.number}`, href: safeUrl }] : undefined,
 		});
 	}
 

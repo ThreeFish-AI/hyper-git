@@ -3,8 +3,10 @@
  *
  * 编排：复用 CI 服务的 remote/provider 单一事实源（getGitHubContext）→ 取 token → GraphQL
  * 分页拉取最近更新的 PR（UPDATED_AT 倒序，全态）→ engine `buildPrIndex` 预计算匹配索引 →
- * 按 repoRoot + TTL 60s 缓存（数据未变续期并返回同一实例，供树侧引用相等判无变化）。
- * 未授权不缓存（登录后即取），失败/限流降级为「无徽标 / 走缓存」，绝不抛错、绝不阻塞建树。
+ * 单槽缓存（条目携带 repoRoot 供读路径校验，切库即失效重取）+ TTL 60s；数据与索引输入均未变才
+ * 续期并返回同一实例，供树侧引用相等判无变化。登录态变化即清缓存并作废在途取数（登出不留旧会话
+ * 数据）；未授权不缓存（登录后即取），失败按 60s 退避、限流冷却降级为「无徽标 / 走缓存」，
+ * 绝不抛错、绝不阻塞建树。
  *
  * 安全：token 仅用于 Authorization 头；`safePrUrl` 对入 Tooltip 的链接做 https + GitHub
  * 主机白名单校验（反 SSRF，镜像 CI 服务 openExternal 的姿态）。
@@ -15,8 +17,9 @@ import type { GitRepositoryService } from '../git-repository-service';
 import type { Logger } from '../../infra/logger';
 import type { GitHubAuth, GitHubAuthProviderId } from '../ci/github-auth';
 import type { GitHubCiService } from '../ci/github-ci-service';
-import { graphqlEndpoint, type GitHubRemote } from '../../engine/ci/remote-parser';
-import { extractRateLimit } from '../../engine/ci/model';
+import { graphqlEndpoint, isAllowedGitHubHost, type GitHubRemote } from '../../engine/ci/remote-parser';
+import { extractRateLimit, parseRetryAfterMs } from '../../engine/ci/model';
+import { fetchWithTimeout } from '../ci/graphql-http';
 import { buildPrQuery } from '../../engine/pr/graphql-query';
 import { parsePullRequestsResponse, prsEqual } from '../../engine/pr/model';
 import { buildPrIndex, type RemotePrIndex } from '../../engine/pr/match';
@@ -28,6 +31,8 @@ const PAGE_SIZE = 50;
 const MAX_PAGES = 2;
 /** 索引 TTL（ms）：分支 PR 状态变化经下一次树刷新 + TTL 到期后自然更新。 */
 const TTL_MS = 60_000;
+/** 失败退避（ms）：持续失败态限频重试，与 TTL 同口径（成功/失败路径均最坏 2 请求/分钟）。 */
+const FAILURE_BACKOFF_MS = 60_000;
 /** 单请求超时（ms）。 */
 const REQUEST_TIMEOUT_MS = 15_000;
 /** 剩余点数低于此阈值进入限流冷却（与 CI 服务同阈值，冷却互相独立）。 */
@@ -37,7 +42,14 @@ interface CacheEntry {
 	readonly repoRoot: string;
 	readonly prs: readonly PullRequestVM[];
 	readonly index: RemotePrIndex;
+	/** 构建索引时的输入快照（remote 增删/改名影响 Tier b/c 匹配），续期须连同比较。 */
+	readonly init: { readonly repoOwner: string; readonly remotes: readonly string[] };
 	readonly expires: number;
+}
+
+/** remotes 快照相等（顺序敏感；git 返回顺序稳定，只判逐项相等）。 */
+function sameRemotes(a: readonly string[], b: readonly string[]): boolean {
+	return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
 export class GitHubPrService implements vscode.Disposable {
@@ -45,8 +57,12 @@ export class GitHubPrService implements vscode.Disposable {
 	readonly onDidChangeAuth: vscode.Event<void>;
 
 	private cache: CacheEntry | null = null;
-	private inflight: Promise<RemotePrIndex | null> | undefined;
+	private inflight: { readonly root: string; readonly promise: Promise<RemotePrIndex | null> } | undefined;
+	/** 登录态代次：登出/换号即推进并清缓存，在途取数完成时据此作废（防写回复活旧会话数据）。 */
+	private authGeneration = 0;
 	private cooldownUntil = 0;
+	/** 失败退避截止：网络/解析失败后限频重试（登录/配置变化即重置，登录后立即重取）。 */
+	private failureCooldownUntil = 0;
 	private readonly abortController = new AbortController();
 	private readonly disposables: vscode.Disposable[] = [];
 
@@ -58,11 +74,18 @@ export class GitHubPrService implements vscode.Disposable {
 	) {
 		this.onDidChangeAuth = this.auth.onDidChange;
 		this.disposables.push(
-			// 配置开关变化后清缓存（树侧同订阅触发重渲染）。
+			// 配置开关变化后清缓存与退避（树侧同订阅触发重渲染）。
 			vscode.workspace.onDidChangeConfiguration((e) => {
 				if (e.affectsConfiguration('hyperGit.branches.pr')) {
 					this.cache = null;
+					this.failureCooldownUntil = 0;
 				}
+			}),
+			// 登录/登出：清缓存与退避 + 代次推进（作废在途取数写回），保证「登出即隐去徽标、登录后即取」。
+			this.auth.onDidChange(() => {
+				this.authGeneration++;
+				this.cache = null;
+				this.failureCooldownUntil = 0;
 			}),
 		);
 	}
@@ -75,29 +98,33 @@ export class GitHubPrService implements vscode.Disposable {
 		if (!this.enabled()) {
 			return null;
 		}
-		if (this.inCooldown()) {
-			return this.cache?.index ?? null; // 冷却期只走缓存（镜像 CI 策略）
+		const repoRoot = this.service.repoRoot ?? '';
+		if (this.inCooldown() || Date.now() < this.failureCooldownUntil) {
+			// 限流冷却 / 失败退避期只走缓存（镜像 CI 策略）；单槽缓存须校验仓根，防切库后返回他仓索引。
+			return this.cache?.repoRoot === repoRoot ? this.cache.index : null;
 		}
 		const ctx = this.ci.getGitHubContext();
 		if (!ctx) {
 			return null; // 非 GitHub 远程 / provider 不匹配 → 静默休眠
 		}
-		const repoRoot = this.service.repoRoot ?? '';
 		if (this.cache && this.cache.repoRoot === repoRoot && Date.now() < this.cache.expires) {
 			return this.cache.index;
 		}
-		if (this.inflight) {
-			return this.inflight;
+		if (this.inflight && this.inflight.root === repoRoot) {
+			return this.inflight.promise; // 同根在途去重；跨根不共用（各自按 repoRoot 写缓存）
 		}
-		this.inflight = this.fetchAll(ctx.remote, ctx.provider, repoRoot);
+		this.inflight = { root: repoRoot, promise: this.fetchAll(ctx.remote, ctx.provider, repoRoot) };
 		try {
-			return await this.inflight;
+			return await this.inflight.promise;
 		} finally {
-			this.inflight = undefined;
+			// 只清自己的在途（跨根并发时后起者已占位，不得误清）。
+			if (this.inflight?.root === repoRoot) {
+				this.inflight = undefined;
+			}
 		}
 	}
 
-	/** Tooltip 链接防 SSRF 校验：https 且主机 ∈ {github.com, *.github.com, 仓库主机, api.仓库主机}。 */
+	/** Tooltip 链接防 SSRF 校验：https 且主机过共享白名单谓词（github.com、*.github.com、仓库主机、api.仓库主机）。 */
 	safePrUrl(rawUrl: string): string | null {
 		let uri: URL;
 		try {
@@ -108,13 +135,8 @@ export class GitHubPrService implements vscode.Disposable {
 		if (uri.protocol !== 'https:') {
 			return null;
 		}
-		const host = uri.hostname.toLowerCase();
 		const remote = this.ci.getGitHubContext()?.remote;
-		const allowed =
-			host === 'github.com' ||
-			host.endsWith('.github.com') ||
-			(!!remote && (host === remote.host || host === `api.${remote.host}`));
-		return allowed ? uri.toString() : null;
+		return isAllowedGitHubHost(uri.hostname, remote?.host) ? uri.toString() : null;
 	}
 
 	dispose(): void {
@@ -134,6 +156,9 @@ export class GitHubPrService implements vscode.Disposable {
 
 	/** 全量取数（分页 ≤ MAX_PAGES）→ 建索引 + 写缓存；任一页失败 → null（不缓存，留待重试）。 */
 	private async fetchAll(remote: GitHubRemote, provider: GitHubAuthProviderId, repoRoot: string): Promise<RemotePrIndex | null> {
+		const generation = this.authGeneration; // 取数期间的登录态代次（完成后已变则作废）
+		// remotes 与 repoRoot 同时采样（首个 await 之前）：完成后才读会取到切库后他仓的列表，错配写入缓存。
+		const remotes = (this.service.repo?.state.remotes ?? []).map((r) => r.name);
 		const fetchImpl = globalThis.fetch;
 		if (typeof fetchImpl !== 'function') {
 			this.logger.warn('当前运行时无全局 fetch，PR 徽标不可用');
@@ -148,6 +173,12 @@ export class GitHubPrService implements vscode.Disposable {
 		if (!token) {
 			return null; // 未授权：不缓存，登录后即取
 		}
+		// 网络已尝试后的失败统一走 fail()：写失败退避（限频重试），失败走同根旧缓存（与退避读路径
+		// 同口径——旧索引续显而非闪烁隐现），无缓存才无徽标。
+		const fail = (): RemotePrIndex | null => {
+			this.failureCooldownUntil = Date.now() + FAILURE_BACKOFF_MS;
+			return this.cache?.repoRoot === repoRoot ? this.cache.index : null;
+		};
 
 		const prs: PullRequestVM[] = [];
 		let after: string | null = null;
@@ -155,11 +186,11 @@ export class GitHubPrService implements vscode.Disposable {
 			const { query } = buildPrQuery({ first: PAGE_SIZE, after });
 			const json = await this.gql(remote, provider, token, query, after);
 			if (!json) {
-				return null;
+				return fail();
 			}
 			const parsed = parsePullRequestsResponse(json);
 			if (!parsed) {
-				return null;
+				return fail();
 			}
 			prs.push(...parsed.prs);
 			if (!parsed.hasNextPage || !parsed.endCursor) {
@@ -168,14 +199,22 @@ export class GitHubPrService implements vscode.Disposable {
 			after = parsed.endCursor;
 		}
 
-		// 数据未变：续期并返回同一索引实例（树侧引用相等 → 免 fire）。
-		if (this.cache && this.cache.repoRoot === repoRoot && prsEqual(this.cache.prs, prs)) {
+		// 数据与索引输入（owner/remotes 快照）均未变：续期并返回同一索引实例（树侧引用相等 → 免 fire）。
+		if (
+			this.cache &&
+			this.cache.repoRoot === repoRoot &&
+			prsEqual(this.cache.prs, prs) &&
+			this.cache.init.repoOwner === remote.owner &&
+			sameRemotes(this.cache.init.remotes, remotes)
+		) {
 			this.cache = { ...this.cache, expires: Date.now() + TTL_MS };
 			return this.cache.index;
 		}
-		const remotes = (this.service.repo?.state.remotes ?? []).map((r) => r.name);
+		if (generation !== this.authGeneration) {
+			return null; // 取数期间登录态已变（登出/换号）：结果作废，不写缓存
+		}
 		const index = buildPrIndex(prs, { repoOwner: remote.owner, remotes });
-		this.cache = { repoRoot, prs, index, expires: Date.now() + TTL_MS };
+		this.cache = { repoRoot, prs, index, init: { repoOwner: remote.owner, remotes }, expires: Date.now() + TTL_MS };
 		return index;
 	}
 
@@ -189,11 +228,17 @@ export class GitHubPrService implements vscode.Disposable {
 	): Promise<unknown | null> {
 		let res: Response;
 		try {
-			res = await this.fetchWithTimeout(globalThis.fetch, graphqlEndpoint(remote), {
-				method: 'POST',
-				headers: { Authorization: `bearer ${token}`, 'Content-Type': 'application/json', 'User-Agent': 'hyper-git-vscode' },
-				body: JSON.stringify({ query, variables: { owner: remote.owner, name: remote.repo, after } }),
-			});
+			res = await fetchWithTimeout(
+				globalThis.fetch,
+				graphqlEndpoint(remote),
+				{
+					method: 'POST',
+					headers: { Authorization: `bearer ${token}`, 'Content-Type': 'application/json', 'User-Agent': 'hyper-git-vscode' },
+					body: JSON.stringify({ query, variables: { owner: remote.owner, name: remote.repo, after } }),
+				},
+				REQUEST_TIMEOUT_MS,
+				this.abortController.signal,
+			);
 		} catch (e) {
 			if ((e as Error)?.name !== 'AbortError') {
 				this.logger.warn(`PR 请求失败：${(e as Error).message ?? e}`);
@@ -205,9 +250,9 @@ export class GitHubPrService implements vscode.Disposable {
 			return null;
 		}
 		if (res.status === 403) {
-			const retryAfter = res.headers.get('retry-after');
-			if (retryAfter) {
-				this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + Number(retryAfter) * 1000);
+			const ms = parseRetryAfterMs(res.headers.get('retry-after'));
+			if (ms !== null) {
+				this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + ms);
 			}
 			return null;
 		}
@@ -227,23 +272,5 @@ export class GitHubPrService implements vscode.Disposable {
 			this.cooldownUntil = Math.max(this.cooldownUntil, Number.isNaN(until) ? Date.now() + 60_000 : until);
 		}
 		return json;
-	}
-
-	/** fetch + 超时/销毁可中止（每请求独立 AbortController，挂到全局 dispose 信号）。 */
-	private async fetchWithTimeout(
-		fetchImpl: typeof globalThis.fetch,
-		url: string,
-		init: RequestInit,
-	): Promise<Response> {
-		const reqAc = new AbortController();
-		const onDispose = (): void => reqAc.abort();
-		this.abortController.signal.addEventListener('abort', onDispose, { once: true });
-		const timer = setTimeout(() => reqAc.abort(), REQUEST_TIMEOUT_MS);
-		try {
-			return await fetchImpl(url, { ...init, signal: reqAc.signal });
-		} finally {
-			clearTimeout(timer);
-			this.abortController.signal.removeEventListener('abort', onDispose);
-		}
 	}
 }

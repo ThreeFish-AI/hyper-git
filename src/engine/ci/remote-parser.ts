@@ -98,3 +98,14 @@ export function authProviderId(remote: GitHubRemote): 'github' | 'github-enterpr
 export function commitWebUrl(remote: GitHubRemote, hash: string): string {
 	return `https://${remote.host}/${remote.owner}/${remote.repo}/commit/${hash}`;
 }
+
+/**
+ * GitHub 主机白名单判定（单一事实源，CI openExternal 与 Branches PR safePrUrl 共用）。
+ * host 传**不含端口/userinfo** 的主机名；github.com 及其子域恒放行，GHE 按仓库远程主机
+ * （含 `api.` 前缀的 API 域）放行。统一为 hostname 语义，消除两调用方端口/userinfo 口径漂移。
+ */
+export function isAllowedGitHubHost(host: string, remoteHost?: string): boolean {
+	const h = host.toLowerCase();
+	const rh = remoteHost?.toLowerCase();
+	return h === 'github.com' || h.endsWith('.github.com') || (!!rh && (h === rh || h === `api.${rh}`));
+}

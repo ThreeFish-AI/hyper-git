@@ -19,7 +19,7 @@
 - **首轮先行渲染**：树刷新即渲染（无徽标），`ensurePrData` 异步 kick 取索引，**不阻塞建树**。
 - **无刷新循环**：索引就绪且与快照不同才 fire 一次二次渲染；TTL 命中与数据未变（`prsEqual`）均返回
   **同一索引实例** → 引用相等守卫不再 fire。最坏每 TTL 到期多一轮渲染。
-- **多根切换**：`setRepoRoot` 清快照；取数完成后 `repoRoot` 已变则丢弃（防串仓）；服务缓存按 repoRoot 分键。
+- **多根切换**：`setRepoRoot` 清快照；取数完成后 `repoRoot` 已变则丢弃（防串仓）；服务端为携带 repoRoot 校验的单槽缓存，切库即失效重取。
 - **登录/登出**：`GitHubAuth.onDidChange` 透传 → 清快照重取（登出即隐去徽标）。
 
 ## 分支 → PR 匹配（三级优先，宁缺勿错）
@@ -37,15 +37,15 @@
 ## 认证与安全
 
 - 复用 **VS Code 内置 GitHub 认证**（`vscode.authentication`，范围 `repo`），凭证绝不经过 chat / 日志 / webview；与 CI 状态共享同一会话。
-- **静默优先**：`peek({createIfNone:false})` 绝不弹窗；未登录 → 零徽标、零请求。登录入口复用 Graph 视图标题栏「登录 GitHub」按钮（`hyperGit.ci.signIn`）。
+- **静默优先**：`peek({createIfNone:false})` 绝不弹窗；未登录 → 零徽标、零请求。登录入口复用 Graph 视图标题栏「登录 GitHub」按钮（`hyperGit.ci.signIn`）；该按钮由 CI 状态驱动，需 `hyperGit.log.ci.enabled` 开启（默认开启）——「CI 关 / PR 开」的组合下 Branches 视图暂无独立登录入口。
 - **反 SSRF**：Tooltip 链接经 `safePrUrl` 校验（https 且主机 ∈ {github.com, `*.github.com`, 仓库主机, api.仓库主机}）后才入 `isTrusted` MarkdownString。
 
 ## 限流与性能
 
 - **分页硬上限 100 条**（UPDATED_AT 倒序 × 2×50）：高流量仓中掉出前 100 的旧分支 PR 静默不显示（宁缺勿错），不做配置项。
-- **TTL 60s 缓存 + in-flight 去重**：最坏 2 请求/分钟；数据未变续期并返回同一实例。
+- **TTL 60s 缓存 + in-flight 去重**：最坏 2 请求/分钟（持续失败按 60s 退避，同口径限频）；数据未变续期并返回同一实例。
 - **限流冷却独立**：读取 `rateLimit{remaining,resetAt}` 与 `Retry-After`，剩余点数 <100 或 403 时冷却（期间只走缓存）；与 CI 服务冷却互不联动。
-- **降级**：失败/超时 → null 不缓存、留待重试；401 → 失效会话；断网/限流不崩溃、建树正常。
+- **降级**：失败/超时 → 走既有缓存（无缓存则无徽标）、60s 退避后重试；401 → 失效会话；断网/限流不崩溃、建树正常。
 
 ## 边界行为
 
@@ -73,5 +73,5 @@
 
 ## 验证
 
-1. `pnpm run check-types` + `pnpm run lint` + `pnpm run test:unit`（含 `tests/unit/pr-*.test.ts`，25 例）全绿。
+1. `pnpm run check-types` + `pnpm run lint` + `pnpm run test:unit`（含 `tests/unit/pr-*.test.ts`）全绿。
 2. Extension Development Host（F5）在 GitHub 仓库：远程分支行右侧出现 `#N Open/Merged/Closed/Draft` + 图标着色；悬停见 PR 号/标题/可点击 Open on GitHub；收藏远程条目同样生效（黄标优先）；未登录/非 GitHub/配置关闭 → 零徽标零请求；PR 状态变化 ≤60s（下次树刷新 + TTL 到期）自然更新；多根切换无串仓残留。
