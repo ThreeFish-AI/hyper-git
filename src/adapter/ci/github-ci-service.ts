@@ -251,6 +251,17 @@ export class GitHubCiService implements vscode.Disposable {
 		return this.resolveRemote();
 	}
 
+	/**
+	 * 对外暴露远程坐标 + 认证 provider（复用内部 repoRoot 缓存与 provider 策略），供 Branches
+	 * PR 徽标等同域 GitHub 集成复用——remote 解析与 provider 判定的单一事实源，避免 PR 侧复制策略。
+	 * 与 `hyperGit.log.ci.enabled` 开关无关（该开关只门控 CI 取数），PR 功能独立启停。
+	 */
+	getGitHubContext(): { remote: GitHubRemote; provider: GitHubAuthProviderId } | null {
+		const remote = this.resolveRemote();
+		const provider = remote ? this.providerIdFor(remote) : null;
+		return remote && provider ? { remote, provider } : null;
+	}
+
 	/** 解析当前仓库远程为 GitHub 坐标（按 repoRoot 缓存；优先配置名 → origin → 首个可解析）。 */
 	private resolveRemote(): GitHubRemote | null {
 		const repoRoot = this.service.repoRoot ?? '';

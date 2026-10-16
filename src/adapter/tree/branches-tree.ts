@@ -2,8 +2,12 @@ import * as vscode from 'vscode';
 import type { Ref } from '../../types/git';
 import type { GitRepositoryService } from '../git-repository-service';
 import type { BranchFavorites } from '../branch-favorites';
+import type { GitHubPrService } from '../pr/github-pr-service';
 import { FOR_EACH_REF_FORMAT, type RawRef, parseForEachRef } from '../../engine/ref/for-each-ref';
 import { buildRefTree, type RefTreeNode } from '../../engine/ref/ref-tree';
+import { prBadge, prStateLabel } from '../../engine/pr/model';
+import type { RemotePrIndex } from '../../engine/pr/match';
+import type { PullRequestVM } from '../../engine/pr/types';
 import { mdTooltip } from './tree-tooltip';
 
 export type BranchGroupId = 'favorites' | 'local' | 'remote' | 'tags';
@@ -47,6 +51,20 @@ function isRemoteHead(r: RawRef): boolean {
 	return r.isRemote && (!r.shortName.includes('/') || r.shortName.endsWith('/HEAD') || r.refname.endsWith('/HEAD'));
 }
 
+/** PR 状态 → 云图标着色（渲染策略归视图层，状态语义归引擎，同 CI 范式）；Draft 弱化前景与 Open 区分。 */
+function prThemeColor(pr: PullRequestVM): vscode.ThemeColor {
+	if (pr.state === 'MERGED') {
+		return new vscode.ThemeColor('charts.purple');
+	}
+	if (pr.state === 'CLOSED') {
+		return new vscode.ThemeColor('charts.red');
+	}
+	if (pr.isDraft) {
+		return new vscode.ThemeColor('descriptionForeground');
+	}
+	return new vscode.ThemeColor('charts.green');
+}
+
 /**
  * Branches 视图 TreeDataProvider。
  *
@@ -54,6 +72,10 @@ function isRemoteHead(r: RawRef): boolean {
  * 为空（首帧未填充 / 仓库初始化竞态）时经 CLI 通道 `git for-each-ref` 兜底（含 ahead/behind track）。
  * 四段分组：Favorites（收藏置顶，参考 JetBrains 分组设计）/ Local / Remote / Tags。
  * 构造函数自订阅 service.onDidChange + favorites.onDidChange 做即时刷新。
+ *
+ * PR 徽标：远程分支行右侧 description 显示关联 PR（`#138 Merged`，GitHub 图标着色）。
+ * 数据经 {@link GitHubPrService} 异步拉取（TTL 缓存）：首轮无徽标先行渲染，索引就绪且与快照
+ * 不同才 fire 一次二次渲染（引用相等守卫 + 服务端同实例返回 → 无刷新循环）。
  */
 export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>, vscode.Disposable {
 	private readonly _onDidChange = new vscode.EventEmitter<BranchNode | undefined>();
@@ -64,17 +86,35 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 	private groupingKey: string;
 	/** 「按前缀分组为文件夹树」开关（工具栏切换、按仓库持久化，默认开启）。 */
 	private groupingEnabled: boolean;
+	/** PR 匹配索引快照（null = 无数据：未登录/非 GitHub/未就绪 → 行为与无徽标一致）。 */
+	private prIndex: RemotePrIndex | null = null;
+	private prEnsureInFlight: Promise<void> | undefined;
 
 	constructor(
 		private readonly service: GitRepositoryService,
 		private readonly favorites: BranchFavorites,
 		private readonly workspaceState: vscode.Memento,
+		private readonly prService: GitHubPrService,
 		repoRoot: string,
 	) {
 		this.groupingKey = `hyperGit.branchesGrouping:${repoRoot}`;
 		this.groupingEnabled = this.workspaceState.get<boolean>(this.groupingKey) ?? true;
 		this.disposables.push(service.onDidChange(() => this.refresh()));
 		this.disposables.push(favorites.onDidChange(() => this.refresh()));
+		this.disposables.push(
+			// PR 开关变化：清快照 + 刷新（服务端缓存由服务自身订阅同配置复位）。
+			vscode.workspace.onDidChangeConfiguration((e) => {
+				if (e.affectsConfiguration('hyperGit.branches.pr')) {
+					this.prIndex = null;
+					this.refresh();
+				}
+			}),
+			// 登录/登出：清快照重取（登出即隐去徽标；登录后无需等待 git 事件）。
+			this.prService.onDidChangeAuth(() => {
+				this.prIndex = null;
+				this.refresh();
+			}),
+		);
 	}
 
 	/**
@@ -88,6 +128,7 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		}
 		this.groupingKey = key;
 		this.groupingEnabled = this.workspaceState.get<boolean>(this.groupingKey) ?? true;
+		this.prIndex = null; // 服务端缓存按 repoRoot 独立分键，切库后重取
 		this.refresh();
 	}
 
@@ -122,6 +163,7 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		// displayRefs：隐藏远程 HEAD 符号引用（origin/HEAD），供计数 / 收藏 / 分组一致取用。
 		const refs = (await this.loadRefs()).filter((r) => !isRemoteHead(r));
 		if (!element) {
+			this.ensurePrData(); // 异步 kick：索引就绪后 fire 一次二次渲染（首轮无徽标先行）
 			const byName = new Map(refs.map((r) => [r.shortName, r] as const));
 			const favCount = this.favorites.list().filter((n) => byName.has(n)).length;
 			const localCount = refs.filter((r) => !r.isRemote && !r.isTag).length;
@@ -270,6 +312,32 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		}
 	}
 
+	/**
+	 * 异步取 PR 索引（fire-and-forget，不阻塞建树）：索引就绪且与快照不同才 fire 一次。
+	 * 终止性：服务端 TTL 命中与数据未变均返回同一实例 → 引用相等守卫不再 fire；多根切换竞态由
+	 * 「完成后 repoRoot 已变则丢弃」守卫兜住。服务自身保证不抛（此处 catch 纯防御）。
+	 */
+	private ensurePrData(): void {
+		if (this.prEnsureInFlight) {
+			return;
+		}
+		const root = this.service.repoRoot;
+		this.prEnsureInFlight = this.prService
+			.getPullRequests()
+			.then((index) => {
+				if (index && index !== this.prIndex && this.service.repoRoot === root) {
+					this.prIndex = index;
+					this._onDidChange.fire(undefined);
+				}
+			})
+			.catch(() => {
+				// 服务已保证静默降级；此处仅防未预期异常逃逸刷屏。
+			})
+			.finally(() => {
+				this.prEnsureInFlight = undefined;
+			});
+	}
+
 	getTreeItem(element: BranchNode): vscode.TreeItem {
 		if (element.kind === 'group') {
 			const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Expanded);
@@ -298,23 +366,28 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		const active = this.isActive(ref);
 		const fav = this.favorites.isFavorite(ref.shortName);
 		const isTag = ref.isTag;
+		// PR 徽标仅远程分支（Favorites 里的远程条目同路径自动生效）。
+		const pr = !isTag && element.remote ? this.prIndex?.lookup(ref.shortName) : undefined;
 		// 分组形态下展示后缀（element.label）；平铺/收藏回退完整短名。命令仍以 ref.shortName 定位。
 		const item = new vscode.TreeItem(element.label ?? ref.shortName, vscode.TreeItemCollapsibleState.None);
-		item.description = this.describe(ref, active);
+		item.description = this.describe(ref, active, pr);
 		item.contextValue = isTag ? 'hyperGit.tag' : element.remote ? 'hyperGit.remoteBranch' : 'hyperGit.branch';
-		item.tooltip = this.tooltip(ref, active, fav);
+		item.tooltip = this.tooltip(ref, active, fav, pr);
 		const icon = isTag ? 'tag' : element.remote ? 'cloud' : 'git-branch';
-		// 活动分支 = charts.blue（与 Log 本地分支 chip 同语义，全局一致）；收藏（非活动）= charts.yellow。
+		// 活动分支 = charts.blue（与 Log 本地分支 chip 同语义，全局一致）；收藏（非活动）= charts.yellow；
+		// 其余远程分支带 PR → 按状态着色（远程行 active 恒 false，实际即收藏优先于 PR 色）。
 		const color = active
 			? new vscode.ThemeColor('charts.blue')
 			: fav
 				? new vscode.ThemeColor('charts.yellow')
-				: undefined;
+				: pr
+					? prThemeColor(pr)
+					: undefined;
 		item.iconPath = new vscode.ThemeIcon(icon, color);
 		return item;
 	}
 
-	private describe(ref: RawRef, active: boolean): string {
+	private describe(ref: RawRef, active: boolean, pr?: PullRequestVM): string {
 		const parts: string[] = [];
 		if (active) {
 			parts.push('active');
@@ -326,15 +399,24 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 				parts.push(`↓${ref.behind}`);
 			}
 		}
+		if (pr) {
+			parts.push(prBadge(pr)); // `#138 Merged` —— 远程行右侧 PR 徽标
+		}
 		return parts.join(' ');
 	}
 
-	private tooltip(ref: RawRef, active: boolean, fav: boolean): vscode.MarkdownString {
+	private tooltip(ref: RawRef, active: boolean, fav: boolean, pr?: PullRequestVM): vscode.MarkdownString {
 		const rows: Array<[string, string]> = [];
 		if (active) {
 			rows.push(['State', 'Current branch (HEAD)']);
 		} else if (fav) {
 			rows.push(['State', 'Favorite']);
+		}
+		if (pr) {
+			rows.push(['Pull Request', `#${pr.number} ${prStateLabel(pr)}`]);
+			if (pr.title) {
+				rows.push(['Title', pr.title]);
+			}
 		}
 		if (ref.objectname) {
 			rows.push([ref.isTag ? 'Tag' : 'Commit', ref.objectname]);
@@ -349,7 +431,12 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 			}
 			rows.push(['Upstream', `${ref.upstream}${track.length ? ` (${track.join(', ')})` : ''}`]);
 		}
-		return mdTooltip(rows, { title: ref.shortName });
+		// 链接行经服务端主机白名单校验（反 SSRF）后才入 Tooltip。
+		const safeUrl = pr ? this.prService.safePrUrl(pr.url) : null;
+		return mdTooltip(rows, {
+			title: ref.shortName,
+			links: safeUrl ? [{ label: 'Open', text: `Pull Request #${pr?.number}`, href: safeUrl }] : undefined,
+		});
 	}
 
 	/** 判定分支是否当前 HEAD：CLI 解析的 head 标记优先，API 路径回退与 state.HEAD.name 比较。 */
