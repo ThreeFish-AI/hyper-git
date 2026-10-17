@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-10-17 — Branches 视图 PR 状态徽标 · 取数安全加固 · 开发依赖升级
+
 ### Fixed
 
 - **CI 状态与 Branches PR 徽标注入取数主机策略**：仅 github.com 与已配置 `github-enterprise.uri` 的实例主机发送取数请求；其余「GitHub 形态」远程（origin 指向任意第三方主机）视同非 GitHub（零徽标、零请求），杜绝把 GitHub/GHE token 发往任意主机的凭证外发面。
