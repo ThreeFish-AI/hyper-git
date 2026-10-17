@@ -14,6 +14,7 @@ import { selectedBranchRefs } from './branch-selection';
 import { diffPrunedRefs, formatBranchDeleteConfirm, partitionByMerged, truncateNames } from '../engine/ref/cleanup';
 import { diffShapeFromCode } from '../engine/diff/change-side';
 import { resolveDiffSides } from './diff-sides';
+import { gitErrorText } from '../engine/git-state/git-error';
 
 /** 注册 Log/Branches/Blame/History/Tags 相关命令。 */
 export function registerHistoryCommands(
@@ -23,20 +24,6 @@ export function registerHistoryCommands(
 	favorites: BranchFavorites,
 ): vscode.Disposable[] {
 	const subs: vscode.Disposable[] = [];
-	// vscode.git 在 git 非零退出时抛出 GitError，其 .message 为通用串「Failed to execute git」，
-	// 真实原因落在 .stderr。优先暴露 stderr，使「无上游」「non-fast-forward」等失败可读。
-	const errMsg = (e: unknown): string => {
-		if (e && typeof e === 'object') {
-			const ge = e as { stderr?: unknown; message?: unknown };
-			if (typeof ge.stderr === 'string' && ge.stderr.trim()) {
-				return ge.stderr.trim();
-			}
-			if (typeof ge.message === 'string' && ge.message) {
-				return ge.message;
-			}
-		}
-		return String(e);
-	};
 
 	subs.push(vscode.commands.registerCommand('hyperGit.refreshLog', () => logTree.refresh()));
 	subs.push(vscode.commands.registerCommand('hyperGit.refreshBranches', () => branchesTree.refresh()));
@@ -115,7 +102,7 @@ export function registerHistoryCommands(
 					await repo.createBranch(name.trim(), true);
 					branchesTree.refresh();
 				} catch (e) {
-					void showGitError(`Failed to create branch: ${errMsg(e)}`);
+					void showGitError(`Failed to create branch: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -131,7 +118,7 @@ export function registerHistoryCommands(
 				await repo.checkout(node.ref.shortName);
 				branchesTree.refresh();
 			} catch (e) {
-				void showGitError(`Failed to checkout: ${errMsg(e)}`);
+				void showGitError(`Failed to checkout: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -202,7 +189,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Merge'))) {
-					void showGitError(`Failed to merge: ${errMsg(e)}`);
+					void showGitError(`Failed to merge: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -224,7 +211,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Rebase'))) {
-					void showGitError(`Failed to rebase: ${errMsg(e)}`);
+					void showGitError(`Failed to rebase: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -251,7 +238,7 @@ export function registerHistoryCommands(
 				const doc = await vscode.workspace.openTextDocument({ content: blame, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void showGitError(`Failed to Blame: ${errMsg(e)}`);
+				void showGitError(`Failed to Blame: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -267,7 +254,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Pull'))) {
-					void showGitError(`Failed to Pull: ${errMsg(e)}`);
+					void showGitError(`Failed to Pull: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -309,7 +296,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Pushed ${head.name}`);
 			} catch (e) {
-				void showGitError(`Failed to Push: ${errMsg(e)}`);
+				void showGitError(`Failed to Push: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -352,7 +339,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Pushed ${name}`);
 			} catch (e) {
-				void showGitError(`Failed to Push: ${errMsg(e)}`);
+				void showGitError(`Failed to Push: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -375,7 +362,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				logTree.refresh();
 			} catch (e) {
-				void showGitError(`Failed to Fetch: ${errMsg(e)}`);
+				void showGitError(`Failed to Fetch: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -451,7 +438,7 @@ export function registerHistoryCommands(
 				await repo.createBranch(name.trim(), true, source);
 				branchesTree.refresh();
 			} catch (e) {
-				void showGitError(`Failed to create branch: ${errMsg(e)}`);
+				void showGitError(`Failed to create branch: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -468,7 +455,7 @@ export function registerHistoryCommands(
 				const doc = await vscode.workspace.openTextDocument({ content: `$ git diff --stat HEAD...${selected}\n\n${out}`, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void showGitError(`Failed to compare: ${errMsg(e)}`);
+				void showGitError(`Failed to compare: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -507,7 +494,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Created tag ${name.trim()} @ ${pick.target === 'HEAD' ? 'HEAD' : pick.target.slice(0, 7)}`);
 			} catch (e) {
-				void showGitError(`Failed to create tag: ${errMsg(e)}`);
+				void showGitError(`Failed to create tag: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -558,7 +545,7 @@ export function registerHistoryCommands(
 				await repo.checkout(name);
 				branchesTree.refresh();
 			} catch (e) {
-				void showGitError(`Failed to checkout tag: ${errMsg(e)}`);
+				void showGitError(`Failed to checkout tag: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -587,7 +574,7 @@ export function registerHistoryCommands(
 			try {
 				await vscode.commands.executeCommand('vscode.diff', left, right, `${filePath} · ${hash.slice(0, 7)} (commit diff)`, { preview: true });
 			} catch (e) {
-				void showGitError(`Failed to open diff: ${errMsg(e)}`);
+				void showGitError(`Failed to open diff: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -621,7 +608,7 @@ export function registerHistoryCommands(
 				void vscode.window.showInformationMessage(`Reset (--${pick.label} ${hash.slice(0, 7)}) complete`);
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Reset'))) {
-					void showGitError(`Failed to Reset: ${errMsg(e)}`);
+					void showGitError(`Failed to Reset: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -646,7 +633,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Created and checked out ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
 			} catch (e) {
-				void showGitError(`Failed to create branch: ${errMsg(e)}`);
+				void showGitError(`Failed to create branch: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -669,7 +656,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Created tag ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
 			} catch (e) {
-				void showGitError(`Failed to create tag: ${errMsg(e)}`);
+				void showGitError(`Failed to create tag: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -687,7 +674,7 @@ export function registerHistoryCommands(
 				});
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void showGitError(`Failed to query: ${errMsg(e)}`);
+				void showGitError(`Failed to query: ${gitErrorText(e)}`);
 			}
 		}),
 	);

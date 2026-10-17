@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { resolveRemoteBranch, partitionRemoteByProtected, formatRemoteDeleteConfirm } from '../../src/engine/ref/remote-ref';
+import {
+	resolveRemoteBranch,
+	partitionRemoteByProtected,
+	formatRemoteDeleteConfirm,
+	isRemoteRefMissingError,
+	formatRemoteDeleteResult,
+} from '../../src/engine/ref/remote-ref';
 
 describe('resolveRemoteBranch', () => {
 	it('普通 remote：origin/foo → {origin, foo}', () => {
@@ -107,5 +113,115 @@ describe('formatRemoteDeleteConfirm', () => {
 	it('非 origin remote 也回显 remote 名', () => {
 		const r = formatRemoteDeleteConfirm([t('upstream/bar', 'upstream', 'bar')]);
 		expect(r.detail).toContain('upstream');
+	});
+});
+
+describe('isRemoteRefMissingError', () => {
+	// 本机 git 2.54 对「服务端已无此分支」push --delete 的实测 stderr。
+	const REAL_STDERR = 'error: unable to delete \'rsi/fixture-terminology\': remote ref does not exist\nerror: failed to push some refs to \'github.com:ThreeFish-AI/rsi.git\'';
+
+	it('实测 stderr 文案（remote ref does not exist）→ true', () => {
+		const e = Object.assign(new Error('Command failed: git push'), { stderr: REAL_STDERR });
+		expect(isRemoteRefMissingError(e)).toBe(true);
+	});
+
+	it('旧服务端变体（delete of non-existent ref）→ true', () => {
+		expect(isRemoteRefMissingError(Object.assign(new Error('x'), { stderr: ' ! [remote rejected] foo (delete of non-existent ref)' }))).toBe(true);
+	});
+
+	it('大小写不敏感', () => {
+		expect(isRemoteRefMissingError(Object.assign(new Error('x'), { stderr: 'Remote Ref Does Not Exist' }))).toBe(true);
+	});
+
+	it('无 stderr 时回退 message', () => {
+		expect(isRemoteRefMissingError(new Error('unable to delete: remote ref does not exist'))).toBe(true);
+	});
+
+	it('保护分支拒绝 → false（真失败）', () => {
+		const e = Object.assign(new Error('Command failed: git push'), {
+			stderr: 'remote: error: refusing to delete the current branch: refs/heads/main\n ! [remote rejected] main (remote failure)',
+		});
+		expect(isRemoteRefMissingError(e)).toBe(false);
+	});
+
+	it('网络/认证错误等无关报错 → false', () => {
+		expect(isRemoteRefMissingError(Object.assign(new Error('x'), { stderr: 'fatal: Could not read from remote repository.' }))).toBe(false);
+		expect(isRemoteRefMissingError(new Error('Command failed: git push origin --delete foo'))).toBe(false);
+	});
+
+	it('非对象抛出值 / 空对象 / 空文本 → false（裸字符串走 String(e) 兜底，命中文案为 true）', () => {
+		expect(isRemoteRefMissingError('remote ref does not exist')).toBe(true);
+		expect(isRemoteRefMissingError('boom')).toBe(false);
+		expect(isRemoteRefMissingError(null)).toBe(false);
+		expect(isRemoteRefMissingError({})).toBe(false);
+		expect(isRemoteRefMissingError(Object.assign(new Error(''), { stderr: '' }))).toBe(false);
+		expect(isRemoteRefMissingError(Object.assign(new Error(''), { stderr: '   ' }))).toBe(false);
+	});
+
+	it('stderr 空白但 message 命中 → 回退 message（与 errMsg 守卫语义一致）', () => {
+		expect(isRemoteRefMissingError(Object.assign(new Error('push: remote ref does not exist'), { stderr: '  ' }))).toBe(true);
+	});
+});
+
+describe('formatRemoteDeleteResult', () => {
+	const t = (shortName: string, remote = 'origin', branch = shortName.slice(remote.length + 1)) => ({ remote, branch, shortName });
+
+	it('仅单条成功 → 单数文案 + info', () => {
+		const r = formatRemoteDeleteResult([t('origin/foo')], [], []);
+		expect(r).toEqual({ level: 'info', message: 'Deleted remote branch origin/foo' });
+	});
+
+	it('多条成功 → 复数计数 + info', () => {
+		const r = formatRemoteDeleteResult([t('origin/a'), t('origin/b')], [], []);
+		expect(r.level).toBe('info');
+		expect(r.message).toBe('Deleted 2 remote branches');
+	});
+
+	it('成功 + 服务端已不存在 → 诚实并列 already gone + info', () => {
+		const r = formatRemoteDeleteResult([t('origin/a')], [t('origin/rsi/fixture-terminology')], []);
+		expect(r.level).toBe('info');
+		expect(r.message).toBe('Deleted remote branch origin/a; 1 already gone on remote (pruned local tracking ref)');
+	});
+
+	it('仅 alreadyGone（本次报错场景：0 删除 1 陈旧）→ info 且不以 Deleted 0 开头', () => {
+		const r = formatRemoteDeleteResult([], [t('origin/x')], []);
+		expect(r.level).toBe('info');
+		expect(r.message).toBe('1 already gone on remote (pruned local tracking ref)');
+	});
+
+	it('alreadyGone 复数 → tracking refs', () => {
+		const r = formatRemoteDeleteResult([], [t('origin/x'), t('origin/y')], []);
+		expect(r.message).toContain('pruned local tracking refs');
+	});
+
+	it('含失败 → error 级，附分支名与折叠后的单行原因', () => {
+		const r = formatRemoteDeleteResult([t('origin/a')], [], [
+			{ name: 'origin/main', reason: 'remote: error: refusing to delete the current branch\n ! [remote rejected] main (remote failure)' },
+		]);
+		expect(r.level).toBe('error');
+		expect(r.message).toContain('1 failed: origin/main (');
+		expect(r.message).toContain('refusing to delete the current branch; ! [remote rejected] main (remote failure))');
+		expect(r.message).not.toContain('\n');
+	});
+
+	it('失败原因超长 → 截断加省略号', () => {
+		const r = formatRemoteDeleteResult([], [], [{ name: 'origin/x', reason: `line\n${'e'.repeat(300)}` }]);
+		expect(r.message.length).toBeLessThan(300);
+		expect(r.message).toContain('…');
+	});
+
+	it('失败超 4 条 → 截断标注 and N more', () => {
+		const failures = Array.from({ length: 6 }, (_, i) => ({ name: `origin/f${i}`, reason: 'boom' }));
+		const r = formatRemoteDeleteResult([], [], failures);
+		expect(r.level).toBe('error');
+		expect(r.message).toContain('6 failed: ');
+		expect(r.message).toContain('… and 2 more');
+		expect(r.message).not.toContain('origin/f5 (');
+	});
+
+	it('三桶共存 → 一条消息完整覆盖', () => {
+		const r = formatRemoteDeleteResult([t('origin/a')], [t('origin/b')], [{ name: 'origin/c', reason: 'denied' }]);
+		expect(r.level).toBe('error');
+		expect(r.message).toBe('Deleted remote branch origin/a; 1 already gone on remote (pruned local tracking ref); 1 failed: origin/c (denied)');
 	});
 });
