@@ -63,11 +63,12 @@ export function buildPrIndex(prs: readonly PullRequestVM[], init: PrIndexInit): 
 	// Tier c 兜底：全部 PR 按 headRefName（唯一才采用）。
 	const byBranchAll = new Map<string, PullRequestVM[]>();
 	// Tier b/c 最长前缀剥离用纯名列表；Tier a 身份校验用 remote 名 → URL host/owner/repo（owner/repo 双侧小写）。
+	// 身份表按 remote 名**精确大小写**取键（git remote 名大小写敏感，折叠会使互异名坍缩、身份张冠李戴）。
 	const remoteNames = init.remotes.map((r) => r.name);
 	const repoHost = init.repoHost.toLowerCase();
 	const remoteIdentity = new Map<string, { host: string; owner: string; repo: string } | null>(
 		init.remotes.map((r) =>
-			[r.name.toLowerCase(), !r.host || !r.owner || !r.repo ? null : { host: r.host.toLowerCase(), owner: r.owner.toLowerCase(), repo: r.repo.toLowerCase() }] as const,
+			[r.name, !r.host || !r.owner || !r.repo ? null : { host: r.host.toLowerCase(), owner: r.owner.toLowerCase(), repo: r.repo.toLowerCase() }] as const,
 		),
 	);
 	const repoOwner = init.repoOwner.toLowerCase();
@@ -93,9 +94,9 @@ export function buildPrIndex(prs: readonly PullRequestVM[], init: PrIndexInit): 
 			// owner/head repo 双侧小写一致（防撞名与异仓劫持，见模块头注；headRepo 缺失 → '' 恒不匹配，宁缺勿错）。
 			const slash = shortName.indexOf('/');
 			if (slash >= 0) {
-				const seg = shortName.slice(0, slash).toLowerCase();
-				const forkHit = byForkFullName.get(seg + shortName.slice(slash));
-				const identity = remoteIdentity.get(seg);
+				const seg = shortName.slice(0, slash);
+				const forkHit = byForkFullName.get(seg.toLowerCase() + shortName.slice(slash)); // owner 段折叠小写查 fork 键
+				const identity = remoteIdentity.get(seg); // remote 名精确大小写查身份表
 				if (
 					forkHit &&
 					identity &&

@@ -17,7 +17,7 @@ import type { GitRepositoryService } from '../git-repository-service';
 import type { Logger } from '../../infra/logger';
 import type { GitHubAuth, GitHubAuthProviderId } from '../ci/github-auth';
 import type { GitHubCiService } from '../ci/github-ci-service';
-import { graphqlEndpoint, isAllowedGitHubHost, parseGitHubRemote, type GitHubRemote } from '../../engine/ci/remote-parser';
+import { graphqlEndpoint, isAllowedGitHubHost, isGitHubInstanceHost, parseGitHubRemote, type GitHubRemote } from '../../engine/ci/remote-parser';
 import { extractRateLimit, parseRetryAfterMs } from '../../engine/ci/model';
 import { fetchWithTimeout } from '../ci/graphql-http';
 import { buildPrQuery } from '../../engine/pr/graphql-query';
@@ -153,25 +153,12 @@ export class GitHubPrService implements vscode.Disposable {
 	// ─── 内部 ────────────────────────────────────────────────────────────────
 
 	/**
-	 * 取数主机策略（engine `parseGitHubRemote` 只辨形态不辨主机——机制/策略分离，策略在此落地）：
-	 * 仅 github.com 或与已配置 `github-enterprise.uri` 一致的实例主机可取数；其余「GitHub 形态」
-	 * 远程（如 origin 指向任意第三方主机）视同非 GitHub（零徽标、零请求），杜绝把 GHE token
-	 * 发往任意主机。
+	 * 取数主机策略（SSOT：{@link isGitHubInstanceHost}，CI 服务同源共用）：仅 github.com 或与
+	 * 已配置 `github-enterprise.uri` 一致的实例主机可取数；其余「GitHub 形态」远程视同非 GitHub
+	 * （零徽标、零请求），杜绝把 GHE token 发往任意主机。
 	 */
 	private isTrustedRemoteHost(remote: GitHubRemote): boolean {
-		if (remote.isGitHubDotCom) {
-			return true;
-		}
-		const uri = vscode.workspace.getConfiguration('github-enterprise').get<string>('uri') ?? '';
-		if (!uri) {
-			return false;
-		}
-		try {
-			const withScheme = /^https?:\/\//i.test(uri) ? uri : `https://${uri}`;
-			return new URL(withScheme).hostname.toLowerCase() === remote.host;
-		} catch {
-			return false;
-		}
+		return isGitHubInstanceHost(remote.host, vscode.workspace.getConfiguration('github-enterprise').get<string>('uri'));
 	}
 
 	private enabled(): boolean {
@@ -261,8 +248,9 @@ export class GitHubPrService implements vscode.Disposable {
 		after: string | null,
 	): Promise<unknown | null> {
 		let res: Response;
+		let done: () => void;
 		try {
-			res = await fetchWithTimeout(
+			({ res, done } = await fetchWithTimeout(
 				globalThis.fetch,
 				graphqlEndpoint(remote),
 				{
@@ -272,29 +260,33 @@ export class GitHubPrService implements vscode.Disposable {
 				},
 				REQUEST_TIMEOUT_MS,
 				this.abortController.signal,
-			);
+			));
 		} catch (e) {
 			if ((e as Error)?.name !== 'AbortError') {
 				this.logger.warn(`PR 请求失败：${(e as Error).message ?? e}`);
 			}
 			return null;
 		}
-		if (res.status === 401) {
-			this.auth.invalidate(provider); // token 失效，强制下次重解析会话
-			return null;
-		}
-		if (res.status === 403) {
-			const ms = parseRetryAfterMs(res.headers.get('retry-after'));
-			if (ms !== null) {
-				this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + ms);
-			}
-			return null;
-		}
 		let json: unknown;
 		try {
-			json = await res.json();
-		} catch {
-			return null;
+			if (res.status === 401) {
+				this.auth.invalidate(provider); // token 失效，强制下次重解析会话
+				return null;
+			}
+			if (res.status === 403) {
+				const ms = parseRetryAfterMs(res.headers.get('retry-after'));
+				if (ms !== null) {
+					this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + ms);
+				}
+				return null;
+			}
+			try {
+				json = await res.json(); // 超时/dispose 保护伞覆盖到 body 读毕（done 前）
+			} catch {
+				return null;
+			}
+		} finally {
+			done(); // 解除定时器与 dispose 监听（401/403 早退与 body 失败同样覆盖）
 		}
 		const errors = (json as { errors?: unknown[] })?.errors;
 		if (Array.isArray(errors) && errors.length > 0) {

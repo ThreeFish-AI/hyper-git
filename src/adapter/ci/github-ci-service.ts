@@ -15,7 +15,7 @@ import type { Logger } from '../../infra/logger';
 import { GitHubAuth, type GitHubAuthProviderId } from './github-auth';
 import { buildCiQuery } from '../../engine/ci/graphql-query';
 import { extractRateLimit, parseCiResponse, parseRetryAfterMs } from '../../engine/ci/model';
-import { authProviderId, graphqlEndpoint, isAllowedGitHubHost, parseGitHubRemote, type GitHubRemote } from '../../engine/ci/remote-parser';
+import { authProviderId, graphqlEndpoint, isAllowedGitHubHost, isGitHubInstanceHost, parseGitHubRemote, type GitHubRemote } from '../../engine/ci/remote-parser';
 import { fetchWithTimeout } from './graphql-http';
 import type { CiStatusVM } from '../../engine/ci/types';
 
@@ -105,8 +105,8 @@ export class GitHubCiService implements vscode.Disposable {
 		}
 		const remote = this.resolveRemote();
 		const provider = remote ? this.providerIdFor(remote) : null;
-		if (!remote || !provider) {
-			return { available: false, needsAuth: false };
+		if (!remote || !provider || !isGitHubInstanceHost(remote.host, this.enterpriseUri())) {
+			return { available: false, needsAuth: false }; // 含「形态可解析」但非已知 GitHub 实例的远程 → 视同非 GitHub
 		}
 		if (typeof globalThis.fetch !== 'function') {
 			return { available: false, needsAuth: false, error: 'No global fetch in current runtime' };
@@ -128,8 +128,8 @@ export class GitHubCiService implements vscode.Disposable {
 		}
 		const remote = this.resolveRemote();
 		const provider = remote ? this.providerIdFor(remote) : null;
-		if (!remote || !provider) {
-			return result;
+		if (!remote || !provider || !isGitHubInstanceHost(remote.host, this.enterpriseUri())) {
+			return result; // 含「形态可解析」但非已知 GitHub 实例的远程 → 视同非 GitHub（零请求，防 token 外发）
 		}
 
 		const uniq = [...new Set(hashes)];
@@ -191,24 +191,24 @@ export class GitHubCiService implements vscode.Disposable {
 
 	/** 校验后打开外部链接（反 SSRF：仅放行 GitHub 主机）。 */
 	async openExternal(rawUrl: string): Promise<void> {
-		let uri: vscode.Uri;
+		// 用 WHATWG URL 解析（与浏览器同规范）：vscode.Uri 的 authority 提取与浏览器对 `\` 等字符
+		// 的归一存在分歧（如 `https://evil.com\@github.com/` 浏览器实际访问 evil.com），会绕过白名单。
+		let url: URL;
 		try {
-			uri = vscode.Uri.parse(rawUrl, true);
+			url = new URL(rawUrl);
 		} catch {
 			return;
 		}
-		if (uri.scheme !== 'https') {
+		if (url.protocol !== 'https:') {
 			return;
 		}
-		// 主机白名单走共享谓词（单一事实源，与 Branches PR safePrUrl 同口径）；authority 剥离 userinfo/端口取纯主机名。
-		const authority = uri.authority;
-		const host = (authority.split('@').pop() ?? authority).replace(/:\d+$/, '');
+		// 主机白名单走共享谓词（单一事实源，与 Branches PR safePrUrl 同口径）；hostname 已归一（无端口/userinfo）。
 		const remote = this.resolveRemote();
-		if (!isAllowedGitHubHost(host, remote?.host)) {
+		if (!isAllowedGitHubHost(url.hostname, remote?.host)) {
 			this.logger.warn(`拒绝打开非 GitHub 链接：${rawUrl}`);
 			return;
 		}
-		await vscode.env.openExternal(uri);
+		await vscode.env.openExternal(vscode.Uri.parse(url.toString(), true));
 	}
 
 	dispose(): void {
@@ -221,6 +221,11 @@ export class GitHubCiService implements vscode.Disposable {
 
 	private enabled(): boolean {
 		return vscode.workspace.getConfiguration('hyperGit').get<boolean>('log.ci.enabled', true);
+	}
+
+	/** 已配置的 GHE 实例 uri（github-enterprise provider 的事实源；空 = 未配置）。 */
+	private enterpriseUri(): string | undefined {
+		return vscode.workspace.getConfiguration('github-enterprise').get<string>('uri');
 	}
 
 	private providerConfig(): 'auto' | 'github.com' | 'github-enterprise' {
@@ -365,27 +370,31 @@ export class GitHubCiService implements vscode.Disposable {
 
 		await this.semaphore.acquire();
 		try {
-			const res = await fetchWithTimeout(fetchImpl, endpoint, {
+			const { res, done } = await fetchWithTimeout(fetchImpl, endpoint, {
 				method: 'POST',
 				headers: { Authorization: `bearer ${token}`, 'Content-Type': 'application/json', 'User-Agent': 'hyper-git-vscode' },
 				body,
 			}, REQUEST_TIMEOUT_MS, this.abortController.signal);
-			if (res.status === 401) {
-				this.auth.invalidate(provider); // token 失效，强制下次重解析会话
-				return map;
-			}
-			if (res.status === 403) {
-				const ms = parseRetryAfterMs(res.headers.get('retry-after'));
-				if (ms !== null) {
-					this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + ms);
-				}
-				return map;
-			}
 			let json: unknown;
 			try {
-				json = await res.json();
-			} catch {
-				return map;
+				if (res.status === 401) {
+					this.auth.invalidate(provider); // token 失效，强制下次重解析会话
+					return map;
+				}
+				if (res.status === 403) {
+					const ms = parseRetryAfterMs(res.headers.get('retry-after'));
+					if (ms !== null) {
+						this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + ms);
+					}
+					return map;
+				}
+				try {
+					json = await res.json(); // 超时/dispose 保护伞覆盖到 body 读毕（done 前）
+				} catch {
+					return map;
+				}
+			} finally {
+				done(); // 解除定时器与 dispose 监听（401/403 早退与 body 失败同样覆盖）
 			}
 			const errors = (json as { errors?: unknown[] })?.errors;
 			if (Array.isArray(errors) && errors.length > 0) {
