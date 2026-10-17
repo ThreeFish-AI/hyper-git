@@ -6,9 +6,15 @@
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-10-17 — Delete Remote Branch 陈旧远程分支修复 · 删除失败可诊断
+
 ### Fixed
 
 - **Branches 视图「Delete Remote Branch」对陈旧远程分支误报失败且无原因**：PR 合并后远端自动删除的分支，本地 remote-tracking ref 在下次 `fetch --prune` 前一直保留，视图仍列出；右键删除时 `git push --delete` 被服务端拒绝（`remote ref does not exist`），且 `catch {}` 吞掉真实报错，只回显笼统的「N failed」。现在「服务端已无此 ref」被识别为目标态已达成——按成功收尾并清理本地陈旧 tracking ref（通知如实标注 *already gone on remote*）；真失败（保护分支拒绝 / 认证 / 网络）则经 stderr 优先提取，在通知中逐分支附上真实原因，并联动 Show Output 查看完整输出。engine 纯逻辑 `isRemoteRefMissingError` / `formatRemoteDeleteResult` 落于 `engine/ref/remote-ref.ts`，全量单测覆盖。
+
+### Changed
+
+- **错误文本提取单一事实源（`gitErrorText`）**：新增 `engine/git-state/git-error.ts` 统一「非空白 stderr 优先 → message → String 兜底」提取语义，`remote-commands` / `history-commands` 两处内联拷贝改为引用；Push 对话框 / Update Project / Merge 对话框的失败通知随之升级为 stderr 优先（真实原因直达，不再只显通用串）。
 
 ## [0.0.19] - 2026-10-17 — Branches 视图 PR 状态徽标 · 取数安全加固 · 开发依赖升级
 
