@@ -7,7 +7,7 @@
 		"theme": "dark"
 	},
 	"description": "Hyper Git brings IntelliJ IDEA's powerful Git & Commit modules to VS Code, enhanced with AI-powered autonomous agents for intelligent repository management. Experience Git in a higher dimension.",
-	"version": "0.0.18",
+	"version": "0.0.19",
 	"publisher": "ThreeFish-AI",
 	"license": "MIT",
 	"preview": true,
@@ -1530,7 +1530,13 @@
 						"GitHub Enterprise (self-hosted)"
 					],
 					"default": "auto",
-					"markdownDescription": "CI data source. `auto` is resolved by the origin host (github.com → github.com, otherwise GitHub Enterprise).",
+					"markdownDescription": "CI data source. `auto` resolves github.com remotes to GitHub.com and remotes on the configured `github-enterprise.uri` host to GitHub Enterprise; any other host is treated as non-GitHub (feature hidden, zero requests).",
+					"scope": "resource"
+				},
+				"hyperGit.branches.pr.enabled": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show the associated GitHub pull request (e.g. `#138 Merged`) on the right of each remote branch in the Branches view, with the branch icon tinted by PR state. Uses the most recently updated 100 pull requests; hover a branch for the title and an Open on GitHub link. Requires a GitHub remote — if nothing appears, sign in via the Graph view's GitHub sign-in action (shown when CI status is enabled, on by default).",
 					"scope": "resource"
 				}
 			}

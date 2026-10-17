@@ -17,13 +17,18 @@ const GITHUB_SCOPES = ['repo'] as const;
 export class GitHubAuth {
 	/** 已缓存的会话（undefined 表示「已探测且无会话」；has() 区分「未探测」与「无会话」避免重复 getSession）。 */
 	private readonly cached = new Map<GitHubAuthProviderId, vscode.AuthenticationSession | undefined>();
+	private readonly _onDidChange = new vscode.EventEmitter<void>();
+	/** 会话增删/失效时 fire（与内部缓存失效同一时机），供 Branches PR 徽标等依赖方刷新。 */
+	readonly onDidChange = this._onDidChange.event;
 
 	constructor(disposables: vscode.Disposable[]) {
 		disposables.push(
+			this._onDidChange,
 			vscode.authentication.onDidChangeSessions((e) => {
 				const id = e.provider.id;
 				if (id === 'github' || id === 'github-enterprise') {
 					this.cached.delete(id as GitHubAuthProviderId);
+					this._onDidChange.fire();
 				}
 			}),
 		);

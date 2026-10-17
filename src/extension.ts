@@ -33,6 +33,7 @@ import { getGitApi } from './adapter/git-api';
 import { GitRepositoryService } from './adapter/git-repository-service';
 import { GitHubAuth } from './adapter/ci/github-auth';
 import { GitHubCiService } from './adapter/ci/github-ci-service';
+import { GitHubPrService } from './adapter/pr/github-pr-service';
 import { createLogger } from './infra/logger';
 
 /** 无 git 时的占位树 provider（空树，触发 viewsWelcome）。原 EmptyChangesProvider 随 Changes 视图移除后内联于此。 */
@@ -104,6 +105,7 @@ export async function activate(
 	const favorites = new BranchFavorites(context.workspaceState, service.repoRoot ?? workspaceRoot);
 	const githubAuth = new GitHubAuth(context.subscriptions);
 	const ciService = new GitHubCiService(service, githubAuth, logger);
+	const prService = new GitHubPrService(service, ciService, githubAuth, logger);
 
 	// AI 接缝注入（Null 实现，M5 替换为真实 provider）
 	const commit = new CommitService(context, service, context.workspaceState, {
@@ -119,6 +121,7 @@ export async function activate(
 		service,
 		favorites,
 		context.workspaceState,
+		prService,
 		service.repoRoot ?? workspaceRoot,
 	);
 	// Branches 视图启用多选（canSelectMany 仅 createTreeView 支持，registerTreeDataProvider 不支持）；
@@ -196,6 +199,7 @@ export async function activate(
 		favorites,
 		commit,
 		ciService,
+		prService,
 		commitView,
 		logTree,
 		branchesTree,

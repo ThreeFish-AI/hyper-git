@@ -57,7 +57,15 @@ export function parseGitHubRemote(input: string): GitHubRemote | null {
 		path = scp[1];
 	}
 
-	let p = decodeURIComponent(path).replace(/^\/+/, '').replace(/\/+$/, '');
+	// decode 容错：路径含非法百分号序列（如 `100%`、`%ZZ`）时 decodeURIComponent 抛 URIError，
+	// 视同不可解析形态返回 null（兑现本函数契约；fetchAll 对全部 remotes 逐个调用，不容抛错）。
+	let p: string;
+	try {
+		p = decodeURIComponent(path);
+	} catch {
+		return null;
+	}
+	p = p.replace(/^\/+/, '').replace(/\/+$/, '');
 	if (/\.git$/i.test(p)) {
 		p = p.slice(0, -4);
 	}
@@ -97,4 +105,36 @@ export function authProviderId(remote: GitHubRemote): 'github' | 'github-enterpr
  */
 export function commitWebUrl(remote: GitHubRemote, hash: string): string {
 	return `https://${remote.host}/${remote.owner}/${remote.repo}/commit/${hash}`;
+}
+
+/**
+ * GitHub 主机白名单判定（单一事实源，CI openExternal 与 Branches PR safePrUrl 共用）。
+ * host 传**不含端口/userinfo** 的主机名；github.com 及其子域恒放行，GHE 按仓库远程主机
+ * （含 `api.` 前缀的 API 域）放行。统一为 hostname 语义，消除两调用方端口/userinfo 口径漂移。
+ */
+export function isAllowedGitHubHost(host: string, remoteHost?: string): boolean {
+	const h = host.toLowerCase();
+	const rh = remoteHost?.toLowerCase();
+	return h === 'github.com' || h.endsWith('.github.com') || (!!rh && (h === rh || h === `api.${rh}`));
+}
+
+/**
+ * 该主机是否为可取数的已知 GitHub 实例（单一事实源，CI 与 Branches PR 两个服务共用）：
+ * github.com，或与已配置 `github-enterprise.uri` 一致的实例主机。`parseGitHubRemote` 只辨
+ * 形态不辨主机（机制/策略分离）——「是否把 token 发往该主机」的策略由此谓词落地：其余
+ * 「GitHub 形态」远程（如 origin 指向任意第三方主机）视同非 GitHub（零请求）。
+ */
+export function isGitHubInstanceHost(host: string, enterpriseUri?: string): boolean {
+	if (host.toLowerCase() === 'github.com') {
+		return true;
+	}
+	if (!enterpriseUri) {
+		return false;
+	}
+	try {
+		const withScheme = /^https?:\/\//i.test(enterpriseUri) ? enterpriseUri : `https://${enterpriseUri}`;
+		return new URL(withScheme).hostname.toLowerCase() === host.toLowerCase();
+	} catch {
+		return false;
+	}
 }

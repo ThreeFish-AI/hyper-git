@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-10-17 — Branches 视图 PR 状态徽标 · 取数安全加固 · 开发依赖升级
+
+### Fixed
+
+- **CI 状态与 Branches PR 徽标注入取数主机策略**：仅 github.com 与已配置 `github-enterprise.uri` 的实例主机发送取数请求；其余「GitHub 形态」远程（origin 指向任意第三方主机）视同非 GitHub（零徽标、零请求），杜绝把 GitHub/GHE token 发往任意主机的凭证外发面。
+
+### Added
+
+- **Branches 视图远程分支行右侧显示关联 GitHub Pull Request 状态徽标**（`#138 Merged` 形态 + 云图标按状态着色：Merged 紫 / Closed 红 / Open 绿 / Draft 弱化；悬停见 PR 号、标题与经反 SSRF 主机白名单校验的 Open on GitHub 链接）。分支 → PR 三级匹配（fork 全名 → 同仓 headRefName → 唯一兜底，歧义宁缺勿错）；复用 CI 状态的 GitHub 认证与 remote/provider 单一事实源（`getGitHubContext()`），GraphQL 按 UPDATED_AT 倒序取最近 100 条全态 PR，TTL 60s 缓存 + 同实例引用相等守卫（无刷新循环、首轮无徽标先行不阻塞建树）；未登录 / 非 GitHub 远程 / 配置关闭 → 零徽标零请求静默休眠。新增配置 `hyperGit.branches.pr.enabled`（默认开启）；engine 纯逻辑 `engine/pr/` 四模块 + 全量单测。详见 [功能文档](./docs/features/branches-pr-status.md)。
+
 ### Build
 
 - **开发依赖批量升级**（dependabot）：`@vscode/vsce` 3.9.2 → **4.0.0**（#131）、`vitest` 4.1.10 → **5.0.1**（#127）、`ovsx` 1.1.1 → 1.2.0（#130）、`typescript-eslint` 8.68.0 → 8.70.0（#129）、`esbuild` 0.28.1 → 0.28.2（#128）；两项 major 均把 Node 基线抬至 22（vitest 5 实际要求 ≥ 22.12），与 CI 的 `node-version: 22` 一致。五个 PR 共改 `pnpm-lock.yaml`，顺序合并必连环冲突，故合成单个 PR 只重生一次 lockfile，组合兼容性由 CI 在 `feature/1.x.x` 基线上一次验证。`pnpm-workspace.yaml` 的 `allowBuilds` 三项维持不变——`ovsx@1.2.0` 仍传递依赖 `@vscode/vsce@^3.7.1`，`keytar` 与 `@vscode/vsce-sign`（现 2.0.9 / 2.1.0 双版本）继续在依赖树中，删任一项都会重现 `ERR_PNPM_IGNORED_BUILDS`。

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractRateLimit, parseCiResponse, UNKNOWN_CI } from '../../src/engine/ci/model';
+import { extractRateLimit, parseCiResponse, parseRetryAfterMs, UNKNOWN_CI } from '../../src/engine/ci/model';
 
 const repo = (entries: Record<string, unknown>): unknown => ({ data: { repository: entries } });
 const oid = (i: number): string => i.toString(16).padStart(40, '0');
@@ -102,5 +102,25 @@ describe('extractRateLimit', () => {
 	it('缺失返回 null', () => {
 		expect(extractRateLimit({ data: {} })).toBeNull();
 		expect(extractRateLimit({})).toBeNull();
+	});
+});
+
+describe('parseRetryAfterMs', () => {
+	it('delta-seconds 形态 → 毫秒（含 0）', () => {
+		expect(parseRetryAfterMs('60')).toBe(60_000);
+		expect(parseRetryAfterMs('0')).toBe(0);
+	});
+	it('HTTP-date 形态 → 与当前时刻的差值（过去的时刻钳为 0）', () => {
+		const future = new Date(Date.now() + 120_000).toUTCString();
+		const ms = parseRetryAfterMs(future)!;
+		expect(ms).toBeGreaterThanOrEqual(119_000);
+		expect(ms).toBeLessThanOrEqual(120_500);
+		expect(parseRetryAfterMs('Fri, 31 Dec 1999 23:59:59 GMT')).toBe(0);
+	});
+	it('缺失 / 空串 / 非数字 / 负值 → null（杜绝 NaN 毒化冷却）', () => {
+		expect(parseRetryAfterMs(null)).toBeNull();
+		expect(parseRetryAfterMs('')).toBeNull();
+		expect(parseRetryAfterMs('soon')).toBeNull();
+		expect(parseRetryAfterMs('-5')).toBeNull();
 	});
 });
