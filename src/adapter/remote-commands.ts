@@ -8,13 +8,28 @@ import type { LogFilterControl } from './webview/log-webview';
 import { truncateNames } from '../engine/ref/cleanup';
 import {
 	formatRemoteDeleteConfirm,
+	formatRemoteDeleteResult,
+	isRemoteRefMissingError,
 	partitionRemoteByProtected,
 	resolveRemoteBranch,
 	type RemoteBranchTarget,
+	type RemoteDeleteFailure,
 } from '../engine/ref/remote-ref';
 import type { GitRepositoryService } from './git-repository-service';
 
-const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+// 与 history-commands.ts 同款：CLI 通道失败的真实原因在透传的 .stderr，优先暴露（vscode.git GitError 同理）。
+const errMsg = (e: unknown): string => {
+	if (e && typeof e === 'object') {
+		const ge = e as { stderr?: unknown; message?: unknown };
+		if (typeof ge.stderr === 'string' && ge.stderr.trim()) {
+			return ge.stderr.trim();
+		}
+		if (typeof ge.message === 'string' && ge.message) {
+			return ge.message;
+		}
+	}
+	return String(e);
+};
 
 /**
  * 注册远程同步对话框（Phase 3）：Push 对话框 / Update Project / Merge 对话框。
@@ -206,19 +221,26 @@ export function registerRemoteCommands(
 			if (choice !== confirmLabel) {
 				return;
 			}
-			// 逐分支推删，收集失败（不调用 handleGitConflict——删除不产生合并冲突）。
-			const failures: string[] = [];
+			// 逐分支推删，三桶收集（不调用 handleGitConflict——删除不产生合并冲突）：
+			// 成功 / 服务端已无此 ref（陈旧 tracking ref 场景，目标态已达成按成功收尾）/ 真失败（保留原因）。
+			const failures: RemoteDeleteFailure[] = [];
 			const succeeded: RemoteBranchTarget[] = [];
+			const alreadyGone: RemoteBranchTarget[] = [];
 			for (const t of deletable) {
 				try {
 					await service.execGit(['push', t.remote, '--delete', t.branch]);
 					succeeded.push(t);
-				} catch {
-					failures.push(t.shortName);
+				} catch (e) {
+					if (isRemoteRefMissingError(e)) {
+						alreadyGone.push(t);
+					} else {
+						failures.push({ name: t.shortName, reason: errMsg(e) });
+					}
 				}
 			}
-			// 仅对服务端删除成功项清理本地 remote-tracking ref（失败项保留，待重试或下次 fetch --prune）。
-			for (const t of succeeded) {
+			// 对服务端已无此分支的全部目标（含 alreadyGone 的陈旧项）清理本地 remote-tracking ref；
+			// 真失败项保留，待重试或下次 fetch --prune。
+			for (const t of [...succeeded, ...alreadyGone]) {
 				try {
 					await service.execGit(['branch', '-D', '-r', `${t.remote}/${t.branch}`]);
 				} catch {
@@ -227,14 +249,11 @@ export function registerRemoteCommands(
 			}
 			branchesTree.refresh();
 			logTree.refresh();
-			if (failures.length === 0) {
-				void vscode.window.showInformationMessage(
-					succeeded.length === 1 ? `Deleted remote branch ${succeeded[0].shortName}` : `Deleted ${succeeded.length} remote branches`,
-				);
+			const result = formatRemoteDeleteResult(succeeded, alreadyGone, failures);
+			if (result.level === 'info') {
+				void vscode.window.showInformationMessage(result.message);
 			} else {
-				void vscode.window.showWarningMessage(
-					`Deleted ${succeeded.length} remote branches, ${failures.length} failed: ${truncateNames(failures)}`,
-				);
+				void showGitError(result.message);
 			}
 		}),
 	);

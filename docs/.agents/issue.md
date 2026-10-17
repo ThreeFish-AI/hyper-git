@@ -164,3 +164,11 @@
 - **处理方式**：webview state v3 在 `byRepo` 分区新增 `draft`（message + 三勾选）；输入/勾选变更即时 `saveState()` 落盘（消除 debounce 尾丢）；回灌仅限「重建首帧/切换仓库」两时机且先于 `reconcileChecked`（避免 state 推送往返覆盖当前编辑）；提交成功清空草稿。未采用 `retainContextWhenHidden`（钉死整个 webview 内存，且不跨窗口 reload）。
 - **后续防范**：webview 内用户编辑态一律显式入 `setState`（含 debounce 之外的即时落盘点）；回灌逻辑必须有时机守卫（一次性/切换触发），并注意「先回灌 DOM、后执行任何从 DOM 取数回写 state」的顺序。
 - **同类问题影响**：所有自绘 WebviewView 承载编辑器的扩展；凡输入经防抖上报宿主的模式都存在尾丢窗口。
+
+## #19 Branches 视图 Delete Remote Branch 对陈旧远程分支删除失败且无原因提示
+
+- **表因**：右键删除 `origin/rsi/fixture-terminology` 等远程分支直接报 `Deleted 0 remote branches, 1 failed: …`，无任何失败原因，此类分支「经常」删不掉。
+- **根因**：复合缺陷——① PR 合并后 GitHub 自动删除远端分支，本地 `refs/remotes/origin/...` 在下一次 `fetch --prune` 前一直陈旧，Branches 视图（数据源 `repo.state.refs`）仍列出它；② 对陈旧 ref 执行 `git push origin --delete <branch>` 被服务端拒绝（git 2.54 实测 stderr:`error: unable to delete 'x': remote ref does not exist`）；③ `remote-commands.ts` 删除循环的 `catch {}` 把 execGit 已透传挂载的 stderr 整个吞掉，最终只回显笼统的「N failed」，不可诊断。即「目标态已达成却按失败收尾」+「真失败也无原因」两个 Bug 叠加。
+- **处理方式**：删除循环改三桶（成功 / 服务端已无此 ref / 真失败）——「服务端已无此 ref」经 engine 纯逻辑 `isRemoteRefMissingError`（stderr 优先，匹配 `remote ref does not exist` / `delete of non-existent ref` 变体）识别，按达成收尾并把本地陈旧 tracking ref 纳入既有 `branch -D -r` 清理；真失败经 stderr 优先的 errMsg 提取原因，由 `formatRemoteDeleteResult` 汇总为通知（失败走 `showGitError`，联动 Show Output 看完整 stderr）。确认弹窗/受保护主干硬阻断/上游软警示逻辑不动。
+- **后续防范**：① 批量操作的 `catch` 必须保留可行动的失败原因（execGit 拒绝值已挂 `.stderr`，消费即可），`grep -rn 'catch {' src/adapter/` 应逐个确认非吞错；② remote-tracking ref 与服务端存在时滞，任何「对远程分支的操作」都要考虑「本地有、服务端无」的陈旧态——删除/比较/PR 匹配等场景遇到 `does not exist` 类报错应先判陈旧再判失败；③ 视图列表的「幽灵分支」根治靠 `fetch --prune`（Prune Remotes 命令已有），删除路径的容错只是补救。
+- **同类问题影响**：所有列出 remote-tracking ref 并提供远程删除的 Git GUI；凡把服务端拒绝一概当失败、不区分「目标态已达成」的实现，以及任何丢弃 stderr 的批量 CLI 包装。
