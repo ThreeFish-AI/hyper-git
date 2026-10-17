@@ -178,7 +178,8 @@ export class GitHubCiService implements vscode.Disposable {
 	async signIn(): Promise<boolean> {
 		const remote = this.resolveRemote();
 		const provider = remote ? this.providerIdFor(remote) : null;
-		if (!remote || !provider) {
+		// 与 status()/getStatuses() 同门（策略面收口）：非可信实例主机不发起登录（登录后取数也被门控）。
+		if (!remote || !provider || !isGitHubInstanceHost(remote.host, this.enterpriseUri())) {
 			return false;
 		}
 		try {

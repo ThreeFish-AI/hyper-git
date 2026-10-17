@@ -1530,7 +1530,7 @@
 						"GitHub Enterprise (self-hosted)"
 					],
 					"default": "auto",
-					"markdownDescription": "CI data source. `auto` is resolved by the origin host (github.com → github.com, otherwise GitHub Enterprise).",
+					"markdownDescription": "CI data source. `auto` resolves github.com remotes to GitHub.com and remotes on the configured `github-enterprise.uri` host to GitHub Enterprise; any other host is treated as non-GitHub (feature hidden, zero requests).",
 					"scope": "resource"
 				},
 				"hyperGit.branches.pr.enabled": {

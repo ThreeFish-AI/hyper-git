@@ -54,6 +54,11 @@ describe('parseGitHubRemote — 非法形态返回 null', () => {
 	it('非 GitHub 风格（纯文件路径）', () => {
 		expect(parseGitHubRemote('/usr/local/bin')).toBeNull();
 	});
+	it('路径含非法百分号序列 → null（decode 容错，不抛 URIError）', () => {
+		expect(parseGitHubRemote('https://github.com/o/r%ZZ')).toBeNull();
+		expect(parseGitHubRemote('git@github.com:o/r%')).toBeNull();
+		expect(parseGitHubRemote('https://example.com/100%')).toBeNull();
+	});
 });
 
 describe('graphqlEndpoint', () => {

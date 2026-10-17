@@ -104,16 +104,9 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		this.disposables.push(service.onDidChange(() => this.refresh()));
 		this.disposables.push(favorites.onDidChange(() => this.refresh()));
 		this.disposables.push(
-			// PR 开关变化：清快照 + 刷新（服务端缓存由服务自身订阅同配置复位）。
-			vscode.workspace.onDidChangeConfiguration((e) => {
-				if (e.affectsConfiguration('hyperGit.branches.pr')) {
-					this.prIndex = null;
-					this.prKickEpoch++;
-					this.refresh();
-				}
-			}),
-			// 登录/登出：清快照重取（登出即隐去徽标；登录后无需等待 git 事件）。
-			this.prService.onDidChangeAuth(() => {
+			// PR 取数失效（登录/登出、PR 开关、取数源配置——依赖清单由服务单一维护）：清快照重取
+			// （登出即隐去徽标；登录后与取数仓切换后无需等待 git 事件）。
+			this.prService.onDidInvalidate(() => {
 				this.prIndex = null;
 				this.prKickEpoch++;
 				this.refresh();

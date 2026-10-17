@@ -20,7 +20,7 @@
 - **无刷新循环**：索引就绪且与快照不同才 fire 一次二次渲染；TTL 命中与数据未变（`prsEqual`）均返回
   **同一索引实例** → 引用相等守卫不再 fire。最坏每 TTL 到期多一轮渲染。
 - **多根切换**：`setRepoRoot` 清快照；取数完成后 `repoRoot` 已变则丢弃（防串仓）；服务端为携带 repoRoot 校验的单槽缓存，切库即失效重取。
-- **登录/登出**：`GitHubAuth.onDidChange` 透传 → 清快照重取（登出即隐去徽标）。
+- **登录/登出与取数源配置**：`GitHubAuth.onDidChange` 或 PR 开关 / `hyperGit.log.ci.*` / `github-enterprise.uri` 变化 → 服务推进代次（作废在途写回）+ 清缓存，经 `onDidInvalidate` 通知树清快照重取（登出即隐去徽标；切换取数仓后无需等待 git 事件）。
 
 ## 分支 → PR 匹配（三级优先，宁缺勿错）
 

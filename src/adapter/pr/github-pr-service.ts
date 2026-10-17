@@ -4,8 +4,8 @@
  * 编排：复用 CI 服务的 remote/provider 单一事实源（getGitHubContext）→ 取 token → GraphQL
  * 分页拉取最近更新的 PR（UPDATED_AT 倒序，全态）→ engine `buildPrIndex` 预计算匹配索引 →
  * 单槽缓存（条目携带 repoRoot 供读路径校验，切库即失效重取）+ TTL 60s；数据与索引输入均未变才
- * 续期并返回同一实例，供树侧引用相等判无变化。登录态变化即清缓存并作废在途取数（登出不留旧会话
- * 数据）；未授权不缓存（登录后即取），失败按 60s 退避、限流冷却降级为「无徽标 / 走缓存」，
+ * 续期并返回同一实例，供树侧引用相等判无变化。登录态或取数源配置变化即清缓存并作废在途取数
+ * （登出不留旧会话数据、切换取数仓后立即可重取）；未授权不缓存（登录后即取），失败按 60s 退避、限流冷却降级为「无徽标 / 走缓存」，
  * 绝不抛错、绝不阻塞建树。
  *
  * 安全：token 仅用于 Authorization 头；`safePrUrl` 对入 Tooltip 的链接做 https + GitHub
@@ -43,7 +43,7 @@ interface CacheEntry {
 	readonly prs: readonly PullRequestVM[];
 	readonly index: RemotePrIndex;
 	/** 构建索引时的输入快照（remote 增删/改名/改址影响三级匹配），续期须连同比较。 */
-	readonly init: { readonly repoOwner: string; readonly repoHost: string; readonly remotes: readonly PrRemoteInfo[] };
+	readonly init: { readonly repoOwner: string; readonly repoHost: string; readonly repo: string; readonly remotes: readonly PrRemoteInfo[] };
 	readonly expires: number;
 }
 
@@ -56,13 +56,15 @@ function sameRemotes(a: readonly PrRemoteInfo[], b: readonly PrRemoteInfo[]): bo
 }
 
 export class GitHubPrService implements vscode.Disposable {
-	/** 登录/登出透传（订阅 GitHubAuth 会话变更），供树侧清快照重取。构造器内赋值（参数属性时序）。 */
-	readonly onDidChangeAuth: vscode.Event<void>;
+	/** 取数失效通知（登录态或取数源配置变化，服务已清缓存并推进代次），供树侧清快照重取——
+	 * 失效依赖清单只在服务一处维护（单一事实源，树侧不另列配置键）。 */
+	private readonly _onDidInvalidate = new vscode.EventEmitter<void>();
+	readonly onDidInvalidate = this._onDidInvalidate.event;
 
 	private cache: CacheEntry | null = null;
-	private inflight: { readonly root: string; readonly promise: Promise<RemotePrIndex | null> } | undefined;
-	/** 登录态代次：登出/换号即推进并清缓存，在途取数完成时据此作废（防写回复活旧会话数据）。 */
-	private authGeneration = 0;
+	private inflight: { readonly key: string; readonly promise: Promise<RemotePrIndex | null> } | undefined;
+	/** 取数代次：登录态或取数源配置变化即推进并清缓存，在途取数完成时据此作废（防写回复活旧会话/旧取数仓数据）。 */
+	private fetchGeneration = 0;
 	private cooldownUntil = 0;
 	/** 失败退避截止：网络/解析失败后限频重试（登录/配置变化即重置，登录后立即重取）。 */
 	private failureCooldownUntil = 0;
@@ -75,21 +77,16 @@ export class GitHubPrService implements vscode.Disposable {
 		private readonly auth: GitHubAuth,
 		private readonly logger: Logger,
 	) {
-		this.onDidChangeAuth = this.auth.onDidChange;
 		this.disposables.push(
-			// 配置开关变化后清缓存与退避（树侧同订阅触发重渲染）。
+			// 配置变化 → invalidate()（推进代次 + 清缓存/退避 + 经 onDidInvalidate 通知树侧重取）：
+			// 自身开关 + 取数源依赖（log.ci.provider/remote 决定取数仓、github-enterprise.uri 决定可信实例）。
 			vscode.workspace.onDidChangeConfiguration((e) => {
-				if (e.affectsConfiguration('hyperGit.branches.pr')) {
-					this.cache = null;
-					this.failureCooldownUntil = 0;
+				if (e.affectsConfiguration('hyperGit.branches.pr') || e.affectsConfiguration('hyperGit.log.ci') || e.affectsConfiguration('github-enterprise')) {
+					this.invalidate();
 				}
 			}),
 			// 登录/登出：清缓存与退避 + 代次推进（作废在途取数写回），保证「登出即隐去徽标、登录后即取」。
-			this.auth.onDidChange(() => {
-				this.authGeneration++;
-				this.cache = null;
-				this.failureCooldownUntil = 0;
-			}),
+			this.auth.onDidChange(() => this.invalidate()),
 		);
 	}
 
@@ -102,10 +99,6 @@ export class GitHubPrService implements vscode.Disposable {
 			return null;
 		}
 		const repoRoot = this.service.repoRoot ?? '';
-		if (this.inCooldown() || Date.now() < this.failureCooldownUntil) {
-			// 限流冷却 / 失败退避期只走缓存（镜像 CI 策略）；单槽缓存须校验仓根，防切库后返回他仓索引。
-			return this.cache?.repoRoot === repoRoot ? this.cache.index : null;
-		}
 		const ctx = this.ci.getGitHubContext();
 		if (!ctx) {
 			return null; // 非 GitHub 远程 / provider 不匹配 → 静默休眠
@@ -113,18 +106,25 @@ export class GitHubPrService implements vscode.Disposable {
 		if (!this.isTrustedRemoteHost(ctx.remote)) {
 			return null; // 「形态可解析」但非 github.com 且非已配置 GHE 实例的远程 → 视同非 GitHub（防 token 外发任意主机）
 		}
-		if (this.cache && this.cache.repoRoot === repoRoot && Date.now() < this.cache.expires) {
-			return this.cache.index;
+		const cacheHit = this.cacheMatches(repoRoot, ctx.remote) ? this.cache!.index : null;
+		if (this.inCooldown() || Date.now() < this.failureCooldownUntil) {
+			return cacheHit; // 限流冷却 / 失败退避期只走（上下文一致的）缓存，镜像 CI 策略
 		}
-		if (this.inflight && this.inflight.root === repoRoot) {
-			return this.inflight.promise; // 同根在途去重；跨根不共用（各自按 repoRoot 写缓存）
+		if (cacheHit && Date.now() < this.cache!.expires) {
+			return cacheHit;
 		}
-		this.inflight = { root: repoRoot, promise: this.fetchAll(ctx.remote, ctx.provider, repoRoot) };
+		// 在途去重键 = 仓根 + 取数上下文（host/owner/repo）：git remote set-url 等改址竞态下，
+		// 旧上下文的在途结果不交给新调用方（防短暂串仓）；写缓存侧由 cacheMatches 再兜底。
+		const inflightKey = `${repoRoot}|${ctx.remote.host}/${ctx.remote.owner}/${ctx.remote.repo}`;
+		if (this.inflight && this.inflight.key === inflightKey) {
+			return this.inflight.promise;
+		}
+		this.inflight = { key: inflightKey, promise: this.fetchAll(ctx.remote, ctx.provider, repoRoot) };
 		try {
 			return await this.inflight.promise;
 		} finally {
-			// 只清自己的在途（跨根并发时后起者已占位，不得误清）。
-			if (this.inflight?.root === repoRoot) {
+			// 只清自己的在途（跨根/跨上下文并发时后起者已占位，不得误清）。
+			if (this.inflight?.key === inflightKey) {
 				this.inflight = undefined;
 			}
 		}
@@ -147,10 +147,35 @@ export class GitHubPrService implements vscode.Disposable {
 
 	dispose(): void {
 		this.abortController.abort();
+		this._onDidInvalidate.dispose();
 		this.disposables.forEach((d) => d.dispose());
 	}
 
 	// ─── 内部 ────────────────────────────────────────────────────────────────
+
+	/** 取数失效：推进代次（作废在途写回）+ 清缓存与退避 + 通知树侧清快照重取。 */
+	private invalidate(): void {
+		this.fetchGeneration++;
+		this.cache = null;
+		this.failureCooldownUntil = 0;
+		this.cooldownUntil = 0; // 限流冷却随取数代次一并复位（限流按 token/实例计，切换后新会话立即可重取）
+		this._onDidInvalidate.fire();
+	}
+
+	/**
+	 * 缓存有效性单一判定（TTL 命中 / 冷却续供 / 失败续显三条读路径共用，防守卫不对称漂移）：
+	 * 仓根一致且取数上下文（host/owner/repo）一致——远程改址/换仓/换 provider 后不续供旧仓
+	 * 索引（宁缺勿错）。
+	 */
+	private cacheMatches(repoRoot: string, remote: GitHubRemote): boolean {
+		return (
+			!!this.cache &&
+			this.cache.repoRoot === repoRoot &&
+			this.cache.init.repoHost === remote.host &&
+			this.cache.init.repoOwner === remote.owner &&
+			this.cache.init.repo === remote.repo
+		);
+	}
 
 	/**
 	 * 取数主机策略（SSOT：{@link isGitHubInstanceHost}，CI 服务同源共用）：仅 github.com 或与
@@ -171,7 +196,7 @@ export class GitHubPrService implements vscode.Disposable {
 
 	/** 全量取数（分页 ≤ MAX_PAGES）→ 建索引 + 写缓存；任一页失败 → null（不缓存，留待重试）。 */
 	private async fetchAll(remote: GitHubRemote, provider: GitHubAuthProviderId, repoRoot: string): Promise<RemotePrIndex | null> {
-		const generation = this.authGeneration; // 取数期间的登录态代次（完成后已变则作废）
+		const generation = this.fetchGeneration; // 取数期间的代次（登录态/取数源配置变化后作废）
 		// remotes 与 repoRoot 同时采样（首个 await 之前）：完成后才读会取到切库后他仓的列表，错配写入缓存。
 		// name + URL 解析 host/owner/repo：供 Tier a 身份校验（不可解析 → null；可解析但 host 与本仓
 		// 不同实例的 remote 也被 Tier a 排除——fork 与 base 同 forge 实例）。
@@ -193,18 +218,21 @@ export class GitHubPrService implements vscode.Disposable {
 		if (!token) {
 			return null; // 未授权：不缓存，登录后即取
 		}
-		// 网络已尝试后的失败统一走 fail()：写失败退避（限频重试），失败走同根旧缓存（与退避读路径
-		// 同口径——旧索引续显而非闪烁隐现），无缓存才无徽标。
+		// 网络已尝试后的失败统一走 fail()：失败走**上下文一致的**旧缓存（cacheMatches 单一判定，
+		// 旧索引续显而非闪烁隐现），无缓存才无徽标；失败退避只在代次未变时武装（invalidate 刚复位
+		// 的退避不被在途旧代次的失败重新盖住——登录后/取数源切换后立即可重取）。
 		const fail = (): RemotePrIndex | null => {
-			this.failureCooldownUntil = Date.now() + FAILURE_BACKOFF_MS;
-			return this.cache?.repoRoot === repoRoot ? this.cache.index : null;
+			if (generation === this.fetchGeneration) {
+				this.failureCooldownUntil = Date.now() + FAILURE_BACKOFF_MS;
+			}
+			return this.cacheMatches(repoRoot, remote) ? this.cache!.index : null;
 		};
 
 		const prs: PullRequestVM[] = [];
 		let after: string | null = null;
 		for (let page = 0; page < MAX_PAGES; page++) {
 			const { query } = buildPrQuery({ first: PAGE_SIZE, after });
-			const json = await this.gql(remote, provider, token, query, after);
+			const json = await this.gql(remote, provider, token, query, after, generation);
 			if (!json) {
 				return fail();
 			}
@@ -226,16 +254,17 @@ export class GitHubPrService implements vscode.Disposable {
 			prsEqual(this.cache.prs, prs) &&
 			this.cache.init.repoOwner === remote.owner &&
 			this.cache.init.repoHost === remote.host &&
+			this.cache.init.repo === remote.repo &&
 			sameRemotes(this.cache.init.remotes, remotes)
 		) {
 			this.cache = { ...this.cache, expires: Date.now() + TTL_MS };
 			return this.cache.index;
 		}
-		if (generation !== this.authGeneration) {
-			return null; // 取数期间登录态已变（登出/换号）：结果作废，不写缓存
+		if (generation !== this.fetchGeneration) {
+			return null; // 取数期间登录态或取数源配置已变：结果作废，不写缓存
 		}
 		const index = buildPrIndex(prs, { repoOwner: remote.owner, repoHost: remote.host, remotes });
-		this.cache = { repoRoot, prs, index, init: { repoOwner: remote.owner, repoHost: remote.host, remotes }, expires: Date.now() + TTL_MS };
+		this.cache = { repoRoot, prs, index, init: { repoOwner: remote.owner, repoHost: remote.host, repo: remote.repo, remotes }, expires: Date.now() + TTL_MS };
 		return index;
 	}
 
@@ -246,6 +275,7 @@ export class GitHubPrService implements vscode.Disposable {
 		token: string,
 		query: string,
 		after: string | null,
+		generation: number,
 	): Promise<unknown | null> {
 		let res: Response;
 		let done: () => void;
@@ -275,7 +305,8 @@ export class GitHubPrService implements vscode.Disposable {
 			}
 			if (res.status === 403) {
 				const ms = parseRetryAfterMs(res.headers.get('retry-after'));
-				if (ms !== null) {
+				if (ms !== null && generation === this.fetchGeneration) {
+					// 代次已变（登录态/取数源切换）则不武装冷却，保住 invalidate 的复位（立即可重取）。
 					this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + ms);
 				}
 				return null;
@@ -293,7 +324,7 @@ export class GitHubPrService implements vscode.Disposable {
 			this.logger.warn(`PR 查询返回错误：${JSON.stringify(errors[0])}`);
 		}
 		const rl = extractRateLimit(json);
-		if (rl && rl.remaining !== null && rl.remaining < RATE_FLOOR) {
+		if (rl && rl.remaining !== null && rl.remaining < RATE_FLOOR && generation === this.fetchGeneration) {
 			const until = rl.resetAt ? Date.parse(rl.resetAt) : NaN;
 			this.cooldownUntil = Math.max(this.cooldownUntil, Number.isNaN(until) ? Date.now() + 60_000 : until);
 		}
