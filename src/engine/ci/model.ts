@@ -36,6 +36,20 @@ export function extractRateLimit(json: unknown): RateLimitInfo | null {
 	};
 }
 
+/** Retry-After 头 → 毫秒（delta-seconds 或 HTTP-date 形态；缺失/非法/负值 → null）。
+ * 单一事实源供 CI / PR 两服务的 403 冷却共用，杜绝 `Number(header)` 非法值产出 NaN 毒化冷却。 */
+export function parseRetryAfterMs(header: string | null): number | null {
+	if (!header) {
+		return null;
+	}
+	const secs = Number(header);
+	if (Number.isFinite(secs)) {
+		return secs >= 0 ? secs * 1000 : null;
+	}
+	const at = Date.parse(header); // HTTP-date 形态（如 Fri, 31 Dec 1999 23:59:59 GMT）
+	return Number.isNaN(at) ? null : Math.max(0, at - Date.now());
+}
+
 type RawNode = Record<string, unknown> | null | undefined;
 
 /** 单个 context（CheckRun 或 StatusContext）归一为 {@link CiCheckVM}；不可识别返回 null。 */

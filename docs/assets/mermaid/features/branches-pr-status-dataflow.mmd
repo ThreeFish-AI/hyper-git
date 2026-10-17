@@ -1,0 +1,25 @@
+%% Mermaid 源图（单一事实源）· 溯源矩阵: docs/assets/mermaid/README.md
+%% 源文档: docs/features/branches-pr-status.md（数据流节）
+%% archify 成品: docs/assets/architecture/features/branches-pr-status-dataflow.html
+
+flowchart LR
+  subgraph Tree["Branches 树（首轮）"]
+    A["refresh / getChildren"] --> B["先渲染（无徽标不阻塞）"]
+    A --> C["ensurePrData 异步 kick"]
+  end
+  subgraph Svc["GitHubPrService（adapter）"]
+    C --> D{"可用？
+    开关 / GitHub 远程 / 已登录"}
+    D -->|否| E["返回 null（零请求）"]
+    D -->|是| F["TTL 60s 缓存命中？"]
+    F -->|命中且数据未变| G["返回同一索引实例"]
+    F -->|未命中| H["GraphQL 分页 ≤2×50\nUPDATED_AT 倒序全态 PR"]
+    H --> I["buildPrIndex 预计算\nfork全名 / 同仓 / 唯一兜底"]
+    I --> J["写缓存（repoRoot + TTL）"]
+  end
+  J --> K{"索引 ≠ 快照？"}
+  G --> K
+  K -->|是| L["fire 一次二次渲染\n行右侧 #N 状态 + 图标着色"]
+  K -->|否| B
+  L --> M["悬停 Tooltip\nPR 号 / 标题 / Open on GitHub"]
+  E --> B

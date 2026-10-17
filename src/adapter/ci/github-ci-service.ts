@@ -14,8 +14,9 @@ import type { GitRepositoryService } from '../git-repository-service';
 import type { Logger } from '../../infra/logger';
 import { GitHubAuth, type GitHubAuthProviderId } from './github-auth';
 import { buildCiQuery } from '../../engine/ci/graphql-query';
-import { extractRateLimit, parseCiResponse } from '../../engine/ci/model';
-import { authProviderId, graphqlEndpoint, parseGitHubRemote, type GitHubRemote } from '../../engine/ci/remote-parser';
+import { extractRateLimit, parseCiResponse, parseRetryAfterMs } from '../../engine/ci/model';
+import { authProviderId, graphqlEndpoint, isAllowedGitHubHost, isGitHubInstanceHost, parseGitHubRemote, type GitHubRemote } from '../../engine/ci/remote-parser';
+import { fetchWithTimeout } from './graphql-http';
 import type { CiStatusVM } from '../../engine/ci/types';
 
 /** 单次 GraphQL 拉取的 oid 上限（与可见窗口粒度对齐，文档体积与单点成本均衡）。 */
@@ -40,6 +41,8 @@ export interface CiServiceStatus {
 
 interface RemoteCacheEntry {
 	readonly repoRoot: string;
+	/** 构建缓存时的 remotes 签名（name + push/fetch URL）；remotes 增删/改址后签名不符即失效。 */
+	readonly remotesKey: string;
 	readonly remote: GitHubRemote | null;
 }
 
@@ -102,8 +105,8 @@ export class GitHubCiService implements vscode.Disposable {
 		}
 		const remote = this.resolveRemote();
 		const provider = remote ? this.providerIdFor(remote) : null;
-		if (!remote || !provider) {
-			return { available: false, needsAuth: false };
+		if (!remote || !provider || !isGitHubInstanceHost(remote.host, this.enterpriseUri())) {
+			return { available: false, needsAuth: false }; // 含「形态可解析」但非已知 GitHub 实例的远程 → 视同非 GitHub
 		}
 		if (typeof globalThis.fetch !== 'function') {
 			return { available: false, needsAuth: false, error: 'No global fetch in current runtime' };
@@ -125,8 +128,8 @@ export class GitHubCiService implements vscode.Disposable {
 		}
 		const remote = this.resolveRemote();
 		const provider = remote ? this.providerIdFor(remote) : null;
-		if (!remote || !provider) {
-			return result;
+		if (!remote || !provider || !isGitHubInstanceHost(remote.host, this.enterpriseUri())) {
+			return result; // 含「形态可解析」但非已知 GitHub 实例的远程 → 视同非 GitHub（零请求，防 token 外发）
 		}
 
 		const uniq = [...new Set(hashes)];
@@ -175,7 +178,8 @@ export class GitHubCiService implements vscode.Disposable {
 	async signIn(): Promise<boolean> {
 		const remote = this.resolveRemote();
 		const provider = remote ? this.providerIdFor(remote) : null;
-		if (!remote || !provider) {
+		// 与 status()/getStatuses() 同门（策略面收口）：非可信实例主机不发起登录（登录后取数也被门控）。
+		if (!remote || !provider || !isGitHubInstanceHost(remote.host, this.enterpriseUri())) {
 			return false;
 		}
 		try {
@@ -188,26 +192,24 @@ export class GitHubCiService implements vscode.Disposable {
 
 	/** 校验后打开外部链接（反 SSRF：仅放行 GitHub 主机）。 */
 	async openExternal(rawUrl: string): Promise<void> {
-		let uri: vscode.Uri;
+		// 用 WHATWG URL 解析（与浏览器同规范）：vscode.Uri 的 authority 提取与浏览器对 `\` 等字符
+		// 的归一存在分歧（如 `https://evil.com\@github.com/` 浏览器实际访问 evil.com），会绕过白名单。
+		let url: URL;
 		try {
-			uri = vscode.Uri.parse(rawUrl, true);
+			url = new URL(rawUrl);
 		} catch {
 			return;
 		}
-		if (uri.scheme !== 'https') {
+		if (url.protocol !== 'https:') {
 			return;
 		}
-		const host = uri.authority.toLowerCase();
+		// 主机白名单走共享谓词（单一事实源，与 Branches PR safePrUrl 同口径）；hostname 已归一（无端口/userinfo）。
 		const remote = this.resolveRemote();
-		const allowed =
-			host === 'github.com' ||
-			host.endsWith('.github.com') ||
-			(!!remote && (host === remote.host || host === `api.${remote.host}`));
-		if (!allowed) {
+		if (!isAllowedGitHubHost(url.hostname, remote?.host)) {
 			this.logger.warn(`拒绝打开非 GitHub 链接：${rawUrl}`);
 			return;
 		}
-		await vscode.env.openExternal(uri);
+		await vscode.env.openExternal(vscode.Uri.parse(url.toString(), true));
 	}
 
 	dispose(): void {
@@ -220,6 +222,11 @@ export class GitHubCiService implements vscode.Disposable {
 
 	private enabled(): boolean {
 		return vscode.workspace.getConfiguration('hyperGit').get<boolean>('log.ci.enabled', true);
+	}
+
+	/** 已配置的 GHE 实例 uri（github-enterprise provider 的事实源；空 = 未配置）。 */
+	private enterpriseUri(): string | undefined {
+		return vscode.workspace.getConfiguration('github-enterprise').get<string>('uri');
 	}
 
 	private providerConfig(): 'auto' | 'github.com' | 'github-enterprise' {
@@ -246,19 +253,35 @@ export class GitHubCiService implements vscode.Disposable {
 		return authProviderId(remote);
 	}
 
-	/** 对外暴露当前仓库的 GitHub 坐标（复用内部 repoRoot 缓存），供 Commit 详情面板生成提交页 URL。 */
+	/** 对外暴露当前仓库的 GitHub 坐标（复用内部 repoRoot + remotes 签名缓存），供 Commit 详情面板生成提交页 URL。 */
 	getGitHubRemote(): GitHubRemote | null {
 		return this.resolveRemote();
 	}
 
-	/** 解析当前仓库远程为 GitHub 坐标（按 repoRoot 缓存；优先配置名 → origin → 首个可解析）。 */
+	/**
+	 * 对外暴露远程坐标 + 认证 provider（复用内部 repoRoot 缓存与 provider 策略），供 Branches
+	 * PR 徽标等同域 GitHub 集成复用——remote 解析与 provider 判定的单一事实源，避免 PR 侧复制策略。
+	 * 与 `hyperGit.log.ci.enabled` 开关无关（该开关只门控 CI 取数），PR 功能独立启停。
+	 */
+	getGitHubContext(): { remote: GitHubRemote; provider: GitHubAuthProviderId } | null {
+		const remote = this.resolveRemote();
+		const provider = remote ? this.providerIdFor(remote) : null;
+		return remote && provider ? { remote, provider } : null;
+	}
+
+	/**
+	 * 解析当前仓库远程为 GitHub 坐标（按 repoRoot + remotes 签名缓存；优先配置名 → origin → 首个可解析）。
+	 * 签名含 name/URL：remotes 首帧未填充、后续 `git remote add` / `set-url` 均会使缓存失效重解析，
+	 * 避免「首解析时机」冻结（null 被整会话缓存 / 改址后持续查询旧仓）。
+	 */
 	private resolveRemote(): GitHubRemote | null {
 		const repoRoot = this.service.repoRoot ?? '';
-		if (this.remoteCache && this.remoteCache.repoRoot === repoRoot) {
+		const remotes = this.service.repo?.state.remotes ?? [];
+		const remotesKey = remotes.map((r) => `${r.name}=${r.pushUrl ?? ''};${r.fetchUrl ?? ''}`).join('|');
+		if (this.remoteCache && this.remoteCache.repoRoot === repoRoot && this.remoteCache.remotesKey === remotesKey) {
 			return this.remoteCache.remote;
 		}
 		let remote: GitHubRemote | null = null;
-		const remotes = this.service.repo?.state.remotes ?? [];
 		if (remotes.length > 0) {
 			const preferred = this.remoteNameConfig().trim();
 			const pick = (r: { fetchUrl?: string; pushUrl?: string }): string => r.pushUrl ?? r.fetchUrl ?? '';
@@ -281,7 +304,7 @@ export class GitHubCiService implements vscode.Disposable {
 				}
 			}
 		}
-		this.remoteCache = { repoRoot, remote };
+		this.remoteCache = { repoRoot, remotesKey, remote };
 		return remote;
 	}
 
@@ -348,27 +371,31 @@ export class GitHubCiService implements vscode.Disposable {
 
 		await this.semaphore.acquire();
 		try {
-			const res = await this.fetchWithTimeout(fetchImpl, endpoint, {
+			const { res, done } = await fetchWithTimeout(fetchImpl, endpoint, {
 				method: 'POST',
 				headers: { Authorization: `bearer ${token}`, 'Content-Type': 'application/json', 'User-Agent': 'hyper-git-vscode' },
 				body,
-			});
-			if (res.status === 401) {
-				this.auth.invalidate(provider); // token 失效，强制下次重解析会话
-				return map;
-			}
-			if (res.status === 403) {
-				const retryAfter = res.headers.get('retry-after');
-				if (retryAfter) {
-					this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + Number(retryAfter) * 1000);
-				}
-				return map;
-			}
+			}, REQUEST_TIMEOUT_MS, this.abortController.signal);
 			let json: unknown;
 			try {
-				json = await res.json();
-			} catch {
-				return map;
+				if (res.status === 401) {
+					this.auth.invalidate(provider); // token 失效，强制下次重解析会话
+					return map;
+				}
+				if (res.status === 403) {
+					const ms = parseRetryAfterMs(res.headers.get('retry-after'));
+					if (ms !== null) {
+						this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + ms);
+					}
+					return map;
+				}
+				try {
+					json = await res.json(); // 超时/dispose 保护伞覆盖到 body 读毕（done 前）
+				} catch {
+					return map;
+				}
+			} finally {
+				done(); // 解除定时器与 dispose 监听（401/403 早退与 body 失败同样覆盖）
 			}
 			const errors = (json as { errors?: unknown[] })?.errors;
 			if (Array.isArray(errors) && errors.length > 0) {
@@ -390,24 +417,6 @@ export class GitHubCiService implements vscode.Disposable {
 			this.semaphore.release();
 		}
 		return map;
-	}
-
-	/** fetch + 超时/销毁可中止（每个请求独立 AbortController，挂到全局 dispose 信号）。 */
-	private async fetchWithTimeout(
-		fetchImpl: typeof globalThis.fetch,
-		url: string,
-		init: RequestInit,
-	): Promise<Response> {
-		const reqAc = new AbortController();
-		const onDispose = (): void => reqAc.abort();
-		this.abortController.signal.addEventListener('abort', onDispose, { once: true });
-		const timer = setTimeout(() => reqAc.abort(), REQUEST_TIMEOUT_MS);
-		try {
-			return await fetchImpl(url, { ...init, signal: reqAc.signal });
-		} finally {
-			clearTimeout(timer);
-			this.abortController.signal.removeEventListener('abort', onDispose);
-		}
 	}
 
 	private async acquireToken(provider: GitHubAuthProviderId): Promise<string | null> {

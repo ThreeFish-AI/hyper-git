@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { authProviderId, graphqlEndpoint, parseGitHubRemote, commitWebUrl } from '../../src/engine/ci/remote-parser';
+import { authProviderId, graphqlEndpoint, isAllowedGitHubHost, isGitHubInstanceHost, parseGitHubRemote, commitWebUrl } from '../../src/engine/ci/remote-parser';
 
 describe('parseGitHubRemote — 合法形态', () => {
 	it('https（带 .git）', () => {
@@ -54,6 +54,11 @@ describe('parseGitHubRemote — 非法形态返回 null', () => {
 	it('非 GitHub 风格（纯文件路径）', () => {
 		expect(parseGitHubRemote('/usr/local/bin')).toBeNull();
 	});
+	it('路径含非法百分号序列 → null（decode 容错，不抛 URIError）', () => {
+		expect(parseGitHubRemote('https://github.com/o/r%ZZ')).toBeNull();
+		expect(parseGitHubRemote('git@github.com:o/r%')).toBeNull();
+		expect(parseGitHubRemote('https://example.com/100%')).toBeNull();
+	});
 });
 
 describe('graphqlEndpoint', () => {
@@ -84,5 +89,46 @@ describe('commitWebUrl', () => {
 	it('GHE 主机同构（web 域，非 api）', () => {
 		const r = parseGitHubRemote('https://ghe.acme.com/o/r.git')!;
 		expect(commitWebUrl(r, 'deadbeef')).toBe('https://ghe.acme.com/o/r/commit/deadbeef');
+	});
+});
+
+describe('isAllowedGitHubHost', () => {
+	it('github.com 及其子域恒放行（大小写归一）', () => {
+		expect(isAllowedGitHubHost('github.com')).toBe(true);
+		expect(isAllowedGitHubHost('www.github.com')).toBe(true);
+		expect(isAllowedGitHubHost('API.GitHub.com')).toBe(true);
+	});
+	it('相似恶意域拒绝', () => {
+		expect(isAllowedGitHubHost('github.com.evil.io')).toBe(false);
+		expect(isAllowedGitHubHost('notgithub.com')).toBe(false);
+		expect(isAllowedGitHubHost('github.community')).toBe(false);
+	});
+	it('GHE 按仓库主机与 api. 前缀放行（双侧大小写归一）', () => {
+		expect(isAllowedGitHubHost('ghe.acme.com', 'ghe.acme.com')).toBe(true);
+		expect(isAllowedGitHubHost('api.ghe.acme.com', 'GHE.ACME.COM')).toBe(true);
+		expect(isAllowedGitHubHost('ghe.other.io', 'ghe.acme.com')).toBe(false);
+	});
+	it('remoteHost 缺省 → 仅 github.com 域放行', () => {
+		expect(isAllowedGitHubHost('github.com', undefined)).toBe(true);
+		expect(isAllowedGitHubHost('ghe.acme.com', undefined)).toBe(false);
+	});
+});
+
+describe('isGitHubInstanceHost', () => {
+	it('github.com 恒可信（大小写归一）', () => {
+		expect(isGitHubInstanceHost('github.com')).toBe(true);
+		expect(isGitHubInstanceHost('GITHUB.COM')).toBe(true);
+	});
+	it('与已配置 GHE uri 一致的实例主机可信（host-only / 全 URL / 大小写互异形态）', () => {
+		expect(isGitHubInstanceHost('ghe.acme.com', 'ghe.acme.com')).toBe(true);
+		expect(isGitHubInstanceHost('ghe.acme.com', 'https://GHE.Acme.com/')).toBe(true);
+	});
+	it('未配置 uri 或主机不一致（含任意第三方「GitHub 形态」主机）→ 不可信', () => {
+		expect(isGitHubInstanceHost('ghe.acme.com', undefined)).toBe(false);
+		expect(isGitHubInstanceHost('ghe.acme.com', 'https://other.example.com')).toBe(false);
+		expect(isGitHubInstanceHost('evil.example', 'ghe.acme.com')).toBe(false);
+	});
+	it('非法 uri 形态 → 不可信（不抛错）', () => {
+		expect(isGitHubInstanceHost('ghe.acme.com', 'http://')).toBe(false);
 	});
 });

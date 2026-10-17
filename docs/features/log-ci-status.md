@@ -19,7 +19,8 @@
 - 范围 `repo`：覆盖私有仓库的 Checks（Actions）+ Commit Status 读取（`repo:status` 不覆盖 Checks API）。
 - **静默优先**：加载时 `getSession({createIfNone:false})` 仅复用已有会话，**绝不自动弹窗**；仅当用户点击 Graph 标题栏「登录 GitHub」
   图标按钮（`$(sign-in)`，`when: hyperGit.log.ciNeedsSignIn`，授权完成自动隐藏）时才以 `{createIfNone:true}` 触发原生授权 UI。未登录 → 仅显该按钮、不渲染图标、不发请求。
-- **反 SSRF**：Tooltip 的跳转链接（`detailsUrl` / `targetUrl`，属「观察内容」）由 host 校验 `https` 且主机 ∈ {仓库主机、`*.github.com`} 后才 `openExternal`。
+- **反 SSRF**：Tooltip 的跳转链接（`detailsUrl` / `targetUrl`，属「观察内容」）由 host 校验 `https` 且主机过共享白名单谓词（github.com、`*.github.com`、仓库主机、api.仓库主机）后才 `openExternal`。
+- **取数主机策略**：仅 github.com 与已配置 `github-enterprise.uri` 的实例主机取数；其余「GitHub 形态」远程（origin 指向任意第三方主机）视同非 GitHub——零徽标、零请求，杜绝 token 外发（与 Branches PR 徽标同策略，见 [Branches 视图 PR 徽标](./branches-pr-status.md)）。
 
 ## 限流与性能
 

@@ -17,6 +17,7 @@
 - [文档中心](../docs/README.md) — 文档与调研资产总索引。
 - [README（简体中文）](../docs/i18n/zh-CN/README.md) — 根 README 的中文版本（根路径为英文版，i18n 目录沉淀中文）。
 - [Log 视图 CI 状态](../docs/features/log-ci-status.md) — 按提交显示 GitHub CI 最终状态（绿勾/红叉 + Tooltip 明细）：认证、限流、懒加载、边界与配置。
+- [Branches 视图远程分支 PR 状态徽标](../docs/features/branches-pr-status.md) — 远程分支行右侧显示关联 GitHub PR（`#138 Merged` + 图标按态着色）：三级匹配、TTL 缓存与无循环刷新、静默边界与配置。
 - [Commit 视图整合](../docs/features/commit-view-consolidation.md) — 移除 CHANGES 视图，其文件操作/changelist 管理/Git 工具栏/未提交角标零回归平移入 Commit 视图。
 - [变更文件目录树](../docs/features/file-list-group-by-directory.md) — Commit / Log 文件列表「平铺 ⇄ 按目录分组」切换：host 侧 `buildFileTree` 构树下发、compact 折叠、目录三态。
 - [分支前缀分组树](../docs/features/branch-tree-group-by-prefix.md) — Branches 视图 Local/Remote/Tags「平铺 ⇄ 按 `/` 前缀分组」切换：`buildRefTree` 构树、分支感知排序、compact 折叠、隐藏 `origin/HEAD`、按仓库持久化。
@@ -37,8 +38,8 @@
 ## 架构分层（src/）
 > 依赖方向单向：`UI → Adapter → Engine`；`Agent` 以接口注入 `Engine`/`CommitPipeline`，不反向依赖 UI。
 
-- `engine/` — 纯领域逻辑（零 vscode 依赖，Vitest 可测，15 模块）：`model/`、`diff/`、`commit/`、`changelist/`、`log/`、`ref/`、`tree/`、`git-state/`、`scm-mapping/`、`ci/`、`merge/`、`rebase/`、`blame/`、`worktree/`、`agent/`。
-- `adapter/` — 唯一接触 vscode API：`git-api.ts`（getAPI(1)）、`GitRepositoryService`（活跃仓库唯一持有者，vscode.git API + execGit 双通道）、`ChangelistRegistry`、`BranchFavorites`、`ShelfService`、`CommitService`、命令注册组、`tree/`、`webview/`、`ci/`、`editor/`。
+- `engine/` — 纯领域逻辑（零 vscode 依赖，Vitest 可测，16 模块）：`model/`、`diff/`、`commit/`、`changelist/`、`log/`、`ref/`、`tree/`、`git-state/`、`scm-mapping/`、`ci/`、`pr/`、`merge/`、`rebase/`、`blame/`、`worktree/`、`agent/`。
+- `adapter/` — 唯一接触 vscode API：`git-api.ts`（getAPI(1)）、`GitRepositoryService`（活跃仓库唯一持有者，vscode.git API + execGit 双通道）、`ChangelistRegistry`、`BranchFavorites`、`ShelfService`、`CommitService`、命令注册组、`tree/`、`webview/`、`ci/`、`pr/`、`editor/`。
 - `agent/` — AI 接缝（当前 5 接口，均 Null 实现，完整逻辑延后至 M5）：`ILlmProvider`、`ICommitMessageProvider`、`IPreCommitInspector`、`IChangelistGrouper`、`IConflictResolver`（另有规划中的第 6 接缝 `IChatToolRegistrar`，详见[调研报告](../research/05-ai-agent-seams.md)）。
 - `shared/protocol.ts` — Webview ↔ Host 消息契约【单一事实源】。
 - `infra/` — 日志（OutputChannel）/ 错误处理 / 事件总线 / 配置。
