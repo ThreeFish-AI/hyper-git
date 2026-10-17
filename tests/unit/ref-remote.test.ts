@@ -149,11 +149,17 @@ describe('isRemoteRefMissingError', () => {
 		expect(isRemoteRefMissingError(new Error('Command failed: git push origin --delete foo'))).toBe(false);
 	});
 
-	it('非对象抛出值 / 空对象 / 空文本 → false', () => {
-		expect(isRemoteRefMissingError('remote ref does not exist')).toBe(false);
+	it('非对象抛出值 / 空对象 / 空文本 → false（裸字符串走 String(e) 兜底，命中文案为 true）', () => {
+		expect(isRemoteRefMissingError('remote ref does not exist')).toBe(true);
+		expect(isRemoteRefMissingError('boom')).toBe(false);
 		expect(isRemoteRefMissingError(null)).toBe(false);
 		expect(isRemoteRefMissingError({})).toBe(false);
 		expect(isRemoteRefMissingError(Object.assign(new Error(''), { stderr: '' }))).toBe(false);
+		expect(isRemoteRefMissingError(Object.assign(new Error(''), { stderr: '   ' }))).toBe(false);
+	});
+
+	it('stderr 空白但 message 命中 → 回退 message（与 errMsg 守卫语义一致）', () => {
+		expect(isRemoteRefMissingError(Object.assign(new Error('push: remote ref does not exist'), { stderr: '  ' }))).toBe(true);
 	});
 });
 
@@ -177,10 +183,10 @@ describe('formatRemoteDeleteResult', () => {
 		expect(r.message).toBe('Deleted remote branch origin/a; 1 already gone on remote (pruned local tracking ref)');
 	});
 
-	it('仅 alreadyGone（本次报错场景：0 删除 1 陈旧）→ info 且不称 deleted N remote branches 误导', () => {
+	it('仅 alreadyGone（本次报错场景：0 删除 1 陈旧）→ info 且不以 Deleted 0 开头', () => {
 		const r = formatRemoteDeleteResult([], [t('origin/x')], []);
 		expect(r.level).toBe('info');
-		expect(r.message).toContain('1 already gone on remote (pruned local tracking ref)');
+		expect(r.message).toBe('1 already gone on remote (pruned local tracking ref)');
 	});
 
 	it('alreadyGone 复数 → tracking refs', () => {

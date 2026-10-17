@@ -15,6 +15,7 @@
  */
 
 import { isProtectedBranch, truncateNames } from './cleanup';
+import { gitErrorText } from '../git-state/git-error';
 
 /** 解析后的远程分支定位。 */
 export interface RemoteBranchTarget {
@@ -116,18 +117,10 @@ const REMOTE_REF_MISSING_PATTERNS: readonly RegExp[] = [/remote ref does not exi
  * （`error: unable to delete 'x': remote ref does not exist`）。此分支的目标态（服务端无此分支）
  * 已天然达成，应按成功收尾并清理本地陈旧 ref，而非误报失败。
  *
- * @param e execGit 的拒绝值：stderr 已透传挂载（优先），无 stderr 时回退 message。
+ * @param e execGit 的拒绝值：文本提取统一走 {@link gitErrorText}（非空白 stderr 优先，回退 message）。
  */
 export function isRemoteRefMissingError(e: unknown): boolean {
-	let text = '';
-	if (e && typeof e === 'object') {
-		const ge = e as { stderr?: unknown; message?: unknown };
-		if (typeof ge.stderr === 'string') {
-			text = ge.stderr;
-		} else if (typeof ge.message === 'string') {
-			text = ge.message;
-		}
-	}
+	const text = gitErrorText(e);
 	return text.length > 0 && REMOTE_REF_MISSING_PATTERNS.some((re) => re.test(text));
 }
 
@@ -143,7 +136,8 @@ export type RemoteDeleteResultLevel = 'info' | 'error';
 /**
  * 把逐分支远程删除结果（成功 / 服务端已不存在 / 失败）三桶汇总为通知文案与级别（纯逻辑）。
  *
- * 诚实计数：alreadyGone 单列（服务端本就无此分支，非本次删除），失败项附真实原因。
+ * 诚实计数：alreadyGone 单列（服务端本就无此分支，非本次删除），失败项附真实原因；
+ * 零计数段省略（如仅陈旧项时文案为「N already gone on remote …」，不以「Deleted 0 …」开头）。
  * @param succeeded 服务端删除成功的目标
  * @param alreadyGone 服务端已无此分支、按达成处理的目标（本地陈旧 tracking ref 已一并清理）
  * @param failures 真失败项（含原因），展示超 4 条截断标注
@@ -153,13 +147,20 @@ export function formatRemoteDeleteResult(
 	alreadyGone: readonly RemoteBranchTarget[],
 	failures: readonly RemoteDeleteFailure[],
 ): { level: RemoteDeleteResultLevel; message: string } {
-	const deletedPart = succeeded.length === 1 ? `Deleted remote branch ${succeeded[0].shortName}` : `Deleted ${succeeded.length} remote branches`;
-	const gonePart = alreadyGone.length > 0 ? `; ${alreadyGone.length} already gone on remote (pruned local tracking ref${alreadyGone.length > 1 ? 's' : ''})` : '';
-	if (failures.length === 0) {
-		return { level: 'info', message: `${deletedPart}${gonePart}` };
+	const parts: string[] = [];
+	if (succeeded.length === 1) {
+		parts.push(`Deleted remote branch ${succeeded[0].shortName}`);
+	} else if (succeeded.length > 1) {
+		parts.push(`Deleted ${succeeded.length} remote branches`);
 	}
-	const MAX_SHOWN = 4;
-	const shown = failures.slice(0, MAX_SHOWN).map((f) => `${f.name} (${collapseReason(f.reason)})`);
-	const more = failures.length > MAX_SHOWN ? ` … and ${failures.length - MAX_SHOWN} more` : '';
-	return { level: 'error', message: `${deletedPart}${gonePart}; ${failures.length} failed: ${shown.join(', ')}${more}` };
+	if (alreadyGone.length > 0) {
+		parts.push(`${alreadyGone.length} already gone on remote (pruned local tracking ref${alreadyGone.length > 1 ? 's' : ''})`);
+	}
+	if (failures.length === 0) {
+		return { level: 'info', message: parts.join('; ') };
+	}
+	// 复用 truncateNames（本模块头注释声明的 SSOT）：名称+原因条目信息密度高，收紧到 4 条。
+	const entries = failures.map((f) => `${f.name} (${collapseReason(f.reason)})`);
+	parts.push(`${failures.length} failed: ${truncateNames(entries, 4)}`);
+	return { level: 'error', message: parts.join('; ') };
 }

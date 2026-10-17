@@ -16,20 +16,7 @@ import {
 	type RemoteDeleteFailure,
 } from '../engine/ref/remote-ref';
 import type { GitRepositoryService } from './git-repository-service';
-
-// 与 history-commands.ts 同款：CLI 通道失败的真实原因在透传的 .stderr，优先暴露（vscode.git GitError 同理）。
-const errMsg = (e: unknown): string => {
-	if (e && typeof e === 'object') {
-		const ge = e as { stderr?: unknown; message?: unknown };
-		if (typeof ge.stderr === 'string' && ge.stderr.trim()) {
-			return ge.stderr.trim();
-		}
-		if (typeof ge.message === 'string' && ge.message) {
-			return ge.message;
-		}
-	}
-	return String(e);
-};
+import { gitErrorText } from '../engine/git-state/git-error';
 
 /**
  * 注册远程同步对话框（Phase 3）：Push 对话框 / Update Project / Merge 对话框。
@@ -98,7 +85,7 @@ export function registerRemoteCommands(
 				void vscode.window.showInformationMessage(`Pushed to ${remote} ${previewCount}`.trim());
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Push'))) {
-					void showGitError(`Push failed: ${errMsg(e)}`);
+					void showGitError(`Push failed: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -129,7 +116,7 @@ export function registerRemoteCommands(
 				void vscode.window.showInformationMessage('Update Project complete');
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Update'))) {
-					void showGitError(`Update failed: ${errMsg(e)}`);
+					void showGitError(`Update failed: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -171,7 +158,7 @@ export function registerRemoteCommands(
 				void vscode.window.showInformationMessage(`Merged ${target}`);
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Merge'))) {
-					void showGitError(`Merge failed: ${errMsg(e)}`);
+					void showGitError(`Merge failed: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -234,7 +221,7 @@ export function registerRemoteCommands(
 					if (isRemoteRefMissingError(e)) {
 						alreadyGone.push(t);
 					} else {
-						failures.push({ name: t.shortName, reason: errMsg(e) });
+						failures.push({ name: t.shortName, reason: gitErrorText(e) });
 					}
 				}
 			}
