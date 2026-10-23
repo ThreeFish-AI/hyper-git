@@ -72,6 +72,8 @@ export interface LogFilterControl extends vscode.Disposable {
 	setFilter(filter: LogFilter): void;
 	clearFilter(): void;
 	getFilter(): LogFilter;
+	/** 当前视图 scope（作者候选等按视图范围取数的消费方使用；视图状态，不入 LogFilter）。 */
+	getScope(): LogScope;
 	refresh(): void;
 }
 
@@ -184,6 +186,10 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 
 	getFilter(): LogFilter {
 		return this.filter;
+	}
+
+	getScope(): LogScope {
+		return this.scope;
 	}
 
 	refresh(): void {
