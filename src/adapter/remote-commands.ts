@@ -19,6 +19,7 @@ import { FOR_EACH_REF_FORMAT, parseForEachRef, type RawRef } from '../engine/ref
 import {
 	planBranchUpdates,
 	formatBranchUpdateResult,
+	classifyFetchOutcome,
 	type BranchUpdateAction,
 	type BranchUpdateFailure,
 } from '../engine/ref/branch-update';
@@ -32,7 +33,7 @@ import { gitErrorText } from '../engine/git-state/git-error';
  * - Push：force/force-with-lease/push tags（核心走 repo.push，tags 走 CLI）。
  * - Update Project：pull --rebase / --no-rebase（策略）。
  * - Merge：--ff-only / --no-ff / --squash + 自定义 message。
- * - Update Branch：`git fetch <remote> <upstream>:refs/heads/<branch>`（原生 fast-forward-only，
+ * - Update Branch：`git fetch <remote> refs/heads/<upstream>:refs/heads/<branch>`（原生 fast-forward-only，
  *   不 checkout 就地更新本地分支；当前分支改走 repo.pull）。
  */
 export function registerRemoteCommands(
@@ -138,16 +139,17 @@ export function registerRemoteCommands(
 			if (!repo) {
 				return;
 			}
-			// 目标解析链：右键实参 →（无实参的标题栏路径）视图选区 → 无选区等价 Pull（当前分支）。
-			// 仅本地、非 tag（多选时自动过滤远程/标签节点）。
+			// 目标解析链：右键实参 →（无实参的标题栏路径）视图选区 → 无选区等价 Pull（当前分支）；
+			// 选区非空但不含本地分支时不动作（显式选区优先，不回退 Pull）。仅本地、非 tag。
 			const isLocal = (r: RawRef) => !r.isRemote && !r.isTag;
 			let targets = selectedBranchRefs(node, nodes, isLocal);
 			if (targets.length === 0 && !node) {
 				targets = selectedBranchRefs(undefined, branchesView.selection, isLocal);
 			}
 			if (targets.length === 0) {
-				if (node) {
-					// 点击项非本地分支（防御；菜单门控 viewItem == hyperGit.branch 下不可达）。
+				if (node || branchesView.selection.length > 0) {
+					// 点击项/选区不含本地分支（右键路径防御——菜单门控下不可达；标题栏路径为
+					// 仅远程/标签/分组节点的显式选区）。显式选区优先，不回退 Pull，避免静默改写工作区。
 					return;
 				}
 				const headName = repo.state.HEAD?.name;
@@ -157,6 +159,12 @@ export function registerRemoteCommands(
 				}
 				// 无选区 → 语义兜底为 Pull 当前分支，复用既有命令（含冲突通道）。
 				await vscode.commands.executeCommand('hyperGit.pull');
+				return;
+			}
+			// remotes 未配置/未就绪时不排程（姊妹命令同守卫）：避免把有上游分支误报 no upstream。
+			const remotes = repo.state.remotes.map((r) => r.name);
+			if (remotes.length === 0) {
+				void vscode.window.showWarningMessage('No remote repository configured');
 				return;
 			}
 			// 新鲜快照：树节点 ref.upstream/head 在 API 路径下为空（refToRaw 不填），禁止信任节点数据。
@@ -169,7 +177,6 @@ export function registerRemoteCommands(
 				return;
 			}
 			// 引擎纯逻辑排程 + 逐分支执行（per-item try/catch，三桶先例）。
-			const remotes = repo.state.remotes.map((r) => r.name);
 			const headName = repo.state.HEAD?.name;
 			const plan = planBranchUpdates(
 				targets.map((r) => r.shortName),
@@ -193,7 +200,8 @@ export function registerRemoteCommands(
 							await repo.pull();
 							pulled.push(action.name);
 						} else {
-							await service.execGit(['fetch', action.remote, `${action.upstreamBranch}:refs/heads/${action.name}`]);
+							// src 侧全限定：`+` 开头的合法上游名裸写会被 git 解析为 force 前缀，绕过 fast-forward-only。
+							await service.execGit(['fetch', action.remote, `refs/heads/${action.upstreamBranch}:refs/heads/${action.name}`]);
 						}
 					} catch (e) {
 						if (action.kind === 'pull-current') {
@@ -213,7 +221,7 @@ export function registerRemoteCommands(
 					if (a.kind !== 'fetch' || failedNames.has(a.name)) {
 						continue;
 					}
-					(after.get(a.name) !== a.beforeSha ? updated : upToDate).push(a.name);
+					(classifyFetchOutcome(a.beforeSha, after.get(a.name)) === 'updated' ? updated : upToDate).push(a.name);
 				}
 			} catch {
 				// 分类不可得 → 保守计 updated（fetch 已成功，仅失判定粒度）。

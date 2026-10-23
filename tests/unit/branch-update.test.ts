@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planBranchUpdates, formatBranchUpdateResult } from '../../src/engine/ref/branch-update';
+import { planBranchUpdates, formatBranchUpdateResult, classifyFetchOutcome } from '../../src/engine/ref/branch-update';
 import type { RawRef } from '../../src/engine/ref/for-each-ref';
 
 /** 构造测试用本地分支 RawRef（for-each-ref 新鲜快照口径，upstream/head 可用）。 */
@@ -115,5 +115,19 @@ describe('formatBranchUpdateResult', () => {
 			level: 'error',
 			message: '1 failed: x (fatal: refusing to fetch into branch … checked out at …)',
 		});
+	});
+});
+
+describe('classifyFetchOutcome', () => {
+	it('同 commit 且缩写变长（对象数跨阈值，7→8 位）→ upToDate（前缀语义，非严格全等）', () => {
+		expect(classifyFetchOutcome('abc1234', 'abc12345')).toBe('upToDate');
+	});
+
+	it('真更新（不同 commit）→ updated', () => {
+		expect(classifyFetchOutcome('abc1234', 'deadbee')).toBe('updated');
+	});
+
+	it('afterSha 缺失（分支被并发删除）→ 保守 updated', () => {
+		expect(classifyFetchOutcome('abc1234', undefined)).toBe('updated');
 	});
 });

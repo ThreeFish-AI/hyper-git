@@ -1,7 +1,7 @@
 /**
  * 分支就地更新（不 checkout）的纯逻辑（零 vscode 依赖）。
  *
- * 核心原语：`git fetch <remote> <upstream>:refs/heads/<branch>`——git 原生 fast-forward-only，
+ * 核心原语：`git fetch <remote> refs/heads/<upstream>:refs/heads/<branch>`——git 原生 fast-forward-only，
  * diverged / ahead-only 时拒绝回退（`! [rejected] ... (non-fast-forward)`），永不改写本地提交；
  * 目标是当前分支（含被其他 worktree checkout）时 git 拒绝
  * （`refusing to fetch into branch '…' checked out at '…'`），须改走 `repo.pull()`。
@@ -9,14 +9,15 @@
  * - {@link planBranchUpdates}：把选中本地分支短名 + for-each-ref 新鲜快照排程为逐分支动作
  *   （pull-current / fetch / skip-no-upstream）。
  * - {@link formatBranchUpdateResult}：把逐分支结果五桶汇总为通知文案与级别。
+ * - {@link classifyFetchOutcome}：事后以短 sha 前缀语义把单个 fetch 动作归类 updated / upToDate。
  *
  * 与同层模块的关系：upstream 短名（`origin/x`）拆分复用 {@link resolveRemoteBranch}
- * （remote 名可含 `/`）；汇总文案复用 {@link truncateNames}；均以轻量指针保持单一事实源。
+ * （remote 名可含 `/`）；汇总文案复用 {@link truncateNames} 与 {@link collapseReason}；均以轻量指针保持单一事实源。
  */
 
 import type { RawRef } from './for-each-ref';
 import { resolveRemoteBranch } from './remote-ref';
-import { truncateNames } from './cleanup';
+import { collapseReason, truncateNames } from './cleanup';
 
 /** 单分支更新动作（{@link planBranchUpdates} 的产物）。 */
 export type BranchUpdateAction =
@@ -97,12 +98,6 @@ export interface BranchUpdateBuckets {
 /** 通知级别：无失败走 info；存在失败走 error（联动 Show Output）。 */
 export type BranchUpdateResultLevel = 'info' | 'error';
 
-/** 失败原因折叠为单行（换行→'; '）并截断，避免通知气泡过长。 */
-function collapseReason(reason: string, max = 160): string {
-	const line = reason.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).join('; ');
-	return line.length > max ? `${line.slice(0, max - 1)}…` : line;
-}
-
 /**
  * 把逐分支更新结果五桶汇总为通知文案与级别（纯逻辑）。
  *
@@ -138,4 +133,16 @@ export function formatBranchUpdateResult(buckets: BranchUpdateBuckets): {
 	const entries = failures.map((f) => `${f.name} (${collapseReason(f.reason)})`);
 	parts.push(`${failures.length} failed: ${truncateNames(entries, 4)}`);
 	return { level: 'error', message: parts.join('; ') };
+}
+
+/**
+ * 事后把单个 fetch 动作归类为 updated / upToDate（纯逻辑）。
+ *
+ * 前缀语义而非严格全等：`%(objectname:short)` 的缩写长度随仓库对象数自动伸缩，
+ * 批量 fetch 落库新对象可能使 after 短 sha 变长（如 7→8 位），同 commit 的前后
+ * 短 sha 仍互为前缀；afterSha 缺失（分支被并发删除）保守计 updated——fetch 已
+ * 成功，宁报更新不报无变化。
+ */
+export function classifyFetchOutcome(beforeSha: string, afterSha: string | undefined): 'updated' | 'upToDate' {
+	return afterSha !== undefined && afterSha.startsWith(beforeSha) ? 'upToDate' : 'updated';
 }

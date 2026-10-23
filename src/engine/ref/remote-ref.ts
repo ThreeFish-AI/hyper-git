@@ -11,10 +11,10 @@
  * - {@link isRemoteRefMissingError}：识别「服务端已无此 ref」的 push 失败（本地 tracking ref 陈旧场景）。
  * - {@link formatRemoteDeleteResult}：把逐分支删除结果三桶汇总为通知文案与级别。
  *
- * 与 cleanup.ts 的关系：复用其 `isProtectedBranch` / `truncateNames` 作为单一事实源（轻量指针，不复制定义）。
+ * 与 cleanup.ts 的关系：复用其 `isProtectedBranch` / `truncateNames` / `collapseReason` 作为单一事实源（轻量指针，不复制定义）。
  */
 
-import { isProtectedBranch, truncateNames } from './cleanup';
+import { collapseReason, isProtectedBranch, truncateNames } from './cleanup';
 import { gitErrorText } from '../git-state/git-error';
 
 /** 解析后的远程分支定位。 */
@@ -122,12 +122,6 @@ const REMOTE_REF_MISSING_PATTERNS: readonly RegExp[] = [/remote ref does not exi
 export function isRemoteRefMissingError(e: unknown): boolean {
 	const text = gitErrorText(e);
 	return text.length > 0 && REMOTE_REF_MISSING_PATTERNS.some((re) => re.test(text));
-}
-
-/** 失败原因折叠为单行（换行→'; '），并截断总长，避免通知气泡过长。 */
-function collapseReason(reason: string, max = 160): string {
-	const line = reason.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).join('; ');
-	return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
 /** 通知级别：仅成功/已不存在走 info；存在真失败走 error（联动 Show Output）。 */
