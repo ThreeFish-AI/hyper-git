@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { CHECKPOINT_SUBJECT_RE, applyClientFilters, isCheckpointSubject, safeRegex, type FilterableCommit, type LogClientFilter } from '../../src/engine/log/log-filter';
+import {
+	CHECKPOINT_SUBJECT_RE,
+	applyClientFilters,
+	isCheckpointSubject,
+	parsePersistedAuthors,
+	safeRegex,
+	type FilterableCommit,
+	type LogClientFilter,
+} from '../../src/engine/log/log-filter';
 
 const D = (iso: string): Date => new Date(iso);
 const C = (message: string, parents: string[], authorDate?: Date): FilterableCommit => ({ message, parents, authorDate });
@@ -112,5 +120,47 @@ describe('safeRegex', () => {
 	});
 	it('非法模式返回 undefined（不抛错）', () => {
 		expect(safeRegex('(')).toBeUndefined();
+	});
+});
+
+describe('parsePersistedAuthors', () => {
+	it('合法 exact + pattern 混合 JSON 串还原结构（round-trip）', () => {
+		const terms = [
+			{ kind: 'exact', name: 'ThreeFish', email: 'fish@example.com' },
+			{ kind: 'pattern', pattern: '^bot' },
+		] as const;
+		expect(parsePersistedAuthors(JSON.stringify(terms))).toEqual(terms);
+	});
+
+	it('非字符串输入返回 undefined', () => {
+		expect(parsePersistedAuthors(undefined)).toBeUndefined();
+		expect(parsePersistedAuthors(42)).toBeUndefined();
+		expect(parsePersistedAuthors({})).toBeUndefined();
+	});
+
+	it('空串与非法 JSON 返回 undefined', () => {
+		expect(parsePersistedAuthors('')).toBeUndefined();
+		expect(parsePersistedAuthors('not-json')).toBeUndefined();
+	});
+
+	it('非数组 JSON 返回 undefined', () => {
+		expect(parsePersistedAuthors('{"kind":"exact"}')).toBeUndefined();
+	});
+
+	it('元素脏项剔除，仅留合法项', () => {
+		const raw = JSON.stringify([
+			{ kind: 'exact', name: 'A', email: 'a@x.com' },
+			{ kind: 'exact', name: '', email: 'b@x.com' }, // name 空
+			{ kind: 'exact', name: 'C' }, // 缺 email
+			{ kind: 'pattern', pattern: '' }, // pattern 空
+			{ kind: 'unknown' }, // kind 未知
+			'not-an-object',
+		]);
+		expect(parsePersistedAuthors(raw)).toEqual([{ kind: 'exact', name: 'A', email: 'a@x.com' }]);
+	});
+
+	it('全脏 / 空数组返回 undefined（与「空选 = 不过滤」规范化一致）', () => {
+		expect(parsePersistedAuthors(JSON.stringify([{ kind: 'nope' }]))).toBeUndefined();
+		expect(parsePersistedAuthors('[]')).toBeUndefined();
 	});
 });

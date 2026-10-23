@@ -33,6 +33,40 @@ export type AuthorTerm =
 	| { readonly kind: 'exact'; readonly name: string; readonly email: string }
 	| { readonly kind: 'pattern'; readonly pattern: string };
 
+/** 元素级合法性判定（持久化 salvage 用）：exact 项要求 name/email 均为非空串，pattern 项要求非空 pattern。 */
+function isAuthorTerm(x: unknown): x is AuthorTerm {
+	if (typeof x !== 'object' || x === null) {
+		return false;
+	}
+	const t = x as Record<string, unknown>;
+	if (t.kind === 'exact') {
+		return typeof t.name === 'string' && t.name.length > 0 && typeof t.email === 'string' && t.email.length > 0;
+	}
+	return t.kind === 'pattern' && typeof t.pattern === 'string' && t.pattern.length > 0;
+}
+
+/**
+ * 解析持久化的 authors 过滤（memento JSON 串 → {@link AuthorTerm} 列表）：
+ * 非字符串 / 非法 JSON / 非数组返回 undefined；元素级剔除脏项（kind 未知或缺字段），
+ * 剔除后为空亦返回 undefined（与「空选 = 不过滤」的规范化一致）。脏数据免疫，永不抛异常。
+ */
+export function parsePersistedAuthors(raw: unknown): readonly AuthorTerm[] | undefined {
+	if (typeof raw !== 'string' || raw.length === 0) {
+		return undefined;
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return undefined;
+	}
+	if (!Array.isArray(parsed)) {
+		return undefined;
+	}
+	const terms = parsed.filter(isAuthorTerm);
+	return terms.length ? terms : undefined;
+}
+
 /** BRE 特殊字符集：git `--author` 缺省 POSIX BRE（非 ERE），仅 `\ . [ * ^ $` 有特殊义；
  * `+ ? | ( ) {` 在 BRE 中是普通字符，加反斜杠反成量词/分组操作符（实测 `\+` 使含 `+` 的邮箱归零命中），勿扩大转义集。 */
 const BRE_SPECIAL = /[.*[\]^$\\]/g;

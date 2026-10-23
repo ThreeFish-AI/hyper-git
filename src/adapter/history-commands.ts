@@ -79,7 +79,8 @@ export function registerHistoryCommands(
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.showHistory', async (change?: ChangeItem) => {
 			if (change?.relativePath) {
-				logTree.setFilter({ path: change.relativePath });
+				// 增量式与其余过滤命令同构：整替 filter 会静默清掉持久化的 authors（文件历史与作者过滤相交而非重置）。
+				logTree.setFilter({ ...logTree.getFilter(), path: change.relativePath });
 			}
 			await vscode.commands.executeCommand('hyperGit.log.focus');
 		}),
