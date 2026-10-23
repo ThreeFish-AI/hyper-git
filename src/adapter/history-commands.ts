@@ -59,28 +59,30 @@ export function registerHistoryCommands(
 
 	subs.push(vscode.commands.registerCommand('hyperGit.logClearFilter', () => logTree.clearFilter()));
 
-	subs.push(
-		vscode.commands.registerCommand('hyperGit.logFilter', async () => {
-			// 过滤器聚合入口：QuickPick 分发到既有 6 个过滤命令（复用 handler，零重复实现）。
-			// 切库竞态守卫（其余对话框同范式）：await 期间切库即放弃——Clear Filter 项直接执行，
-			// 无守卫会删切换后仓库的持久化 key；过滤子命令也应在新仓库语境下重新发起。
-			const rootAtStart = service.repoRoot;
-			const items = [
-				{ label: 'Filter by Author…', description: 'commits by author', action: 'hyperGit.logFilterAuthor' },
-				{ label: 'Filter by Path…', description: 'commits touching a path', action: 'hyperGit.logFilterPath' },
-				{ label: 'Filter by Message (grep)…', description: 'substring match', action: 'hyperGit.logFilterGrep' },
-				{ label: 'Filter by Message (regex)…', description: 'regular expression', action: 'hyperGit.logFilterRegex' },
-				{ label: 'Filter Merge Commits…', description: 'show or hide merge commits', action: 'hyperGit.logFilterMergeMode' },
-				{ label: 'Filter by Date…', description: 'commits within recent days', action: 'hyperGit.logFilterDate' },
-				{ label: 'Clear Filter', description: 'remove all active filters', action: 'hyperGit.logClearFilter' },
-			];
-			const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Filter commit log' });
-			if (!pick || service.repoRoot !== rootAtStart) {
-				return;
-			}
-			await vscode.commands.executeCommand(pick.action);
-		}),
-	);
+	// 过滤器聚合入口：QuickPick 分发到既有 6 个过滤命令（复用 handler，零重复实现）。
+	// 切库竞态守卫（其余对话框同范式）：await 期间切库即放弃——Clear Filter 项直接执行，
+	// 无守卫会删切换后仓库的持久化 key；过滤子命令也应在新仓库语境下重新发起。
+	// 双命令（logFilter/logFilterOn，detailTree/detailFlat 同范式）：常态与「过滤激活」图标经
+	// hyperGit.log.filterActive context key 互斥呈现——持久化恢复的过滤不再是无声约束。
+	const openFilterPicker = async (): Promise<void> => {
+		const rootAtStart = service.repoRoot;
+		const items = [
+			{ label: 'Filter by Author…', description: 'commits by author', action: 'hyperGit.logFilterAuthor' },
+			{ label: 'Filter by Path…', description: 'commits touching a path', action: 'hyperGit.logFilterPath' },
+			{ label: 'Filter by Message (grep)…', description: 'substring match', action: 'hyperGit.logFilterGrep' },
+			{ label: 'Filter by Message (regex)…', description: 'regular expression', action: 'hyperGit.logFilterRegex' },
+			{ label: 'Filter Merge Commits…', description: 'show or hide merge commits', action: 'hyperGit.logFilterMergeMode' },
+			{ label: 'Filter by Date…', description: 'commits within recent days', action: 'hyperGit.logFilterDate' },
+			{ label: 'Clear Filter', description: 'remove all active filters', action: 'hyperGit.logClearFilter' },
+		];
+		const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Filter commit log' });
+		if (!pick || service.repoRoot !== rootAtStart) {
+			return;
+		}
+		await vscode.commands.executeCommand(pick.action);
+	};
+	subs.push(vscode.commands.registerCommand('hyperGit.logFilter', () => openFilterPicker()));
+	subs.push(vscode.commands.registerCommand('hyperGit.logFilterOn', () => openFilterPicker()));
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.copyCommitHash', (node: LogNode) => {

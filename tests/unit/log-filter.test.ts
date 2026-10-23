@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	CHECKPOINT_SUBJECT_RE,
 	applyClientFilters,
+	hasActiveFilter,
 	isCheckpointSubject,
 	parsePersistedAuthors,
 	parsePersistedFilter,
@@ -213,5 +214,22 @@ describe('serializePersistableFilter / parsePersistedFilter', () => {
 
 	it('全脏返回 undefined', () => {
 		expect(parsePersistedFilter(JSON.stringify({ grep: '', mergeMode: 'x', dateFrom: 'oops' }))).toBeUndefined();
+	});
+});
+
+describe('hasActiveFilter', () => {
+	it('未激活口径与持久化归一化一致：undefined / 空对象 / 空串 / mergeMode all / 空 authors', () => {
+		expect(hasActiveFilter(undefined)).toBe(false);
+		expect(hasActiveFilter({})).toBe(false);
+		expect(hasActiveFilter({ path: '', grep: undefined, mergeMode: 'all' })).toBe(false);
+		expect(hasActiveFilter({ authors: [] })).toBe(false);
+	});
+
+	it('任一维度生效即激活：authors（含 pattern）/ path / mergeMode / date / regex', () => {
+		expect(hasActiveFilter({ authors: [{ kind: 'pattern', pattern: 'x' }] })).toBe(true);
+		expect(hasActiveFilter({ path: 'src/a.ts' })).toBe(true);
+		expect(hasActiveFilter({ mergeMode: 'no-merge' })).toBe(true);
+		expect(hasActiveFilter({ dateFrom: D('2026-01-01T00:00:00.000Z') })).toBe(true);
+		expect(hasActiveFilter({ messageRegex: '^feat:' })).toBe(true);
 	});
 });

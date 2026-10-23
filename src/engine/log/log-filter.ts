@@ -149,6 +149,18 @@ export function parsePersistedFilter(raw: unknown): LogFilter | undefined {
 	return Object.keys(filter).length ? filter : undefined;
 }
 
+/**
+ * 判定过滤器是否存在生效维度（authors 非空，或经 {@link serializePersistableFilter} 归一化后
+ * 仍有可持久化维度）——归一化口径与持久化一致（空串 / mergeMode 'all' / 空 authors 均不算生效），
+ * 驱动标题栏过滤图标激活态（hyperGit.log.filterActive context key）。
+ */
+export function hasActiveFilter(filter: LogFilter | undefined): boolean {
+	if (!filter) {
+		return false;
+	}
+	return (filter.authors?.length ?? 0) > 0 || serializePersistableFilter(filter) !== undefined;
+}
+
 /** BRE 特殊字符集：git `--author` 缺省 POSIX BRE（非 ERE），仅 `\ . [ * ^ $` 有特殊义；
  * `+ ? | ( ) {` 在 BRE 中是普通字符，加反斜杠反成量词/分组操作符（实测 `\+` 使含 `+` 的邮箱归零命中），勿扩大转义集。 */
 const BRE_SPECIAL = /[.*[\]^$\\]/g;

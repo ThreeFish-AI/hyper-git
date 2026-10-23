@@ -3,6 +3,7 @@ import type { GitRepositoryService } from '../git-repository-service';
 import { parseNameStatus, statusLabel, parseShortStat } from '../../engine/log/commit-files';
 import {
 	applyClientFilters,
+	hasActiveFilter,
 	parsePersistedAuthors,
 	parsePersistedFilter,
 	serializePersistableFilter,
@@ -166,6 +167,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 		const persisted = root ? parsePersistedFilter(this.workspaceState.get<string>(LogWebviewProvider.filterKey(root))) : undefined;
 		const authors = root ? parsePersistedAuthors(this.workspaceState.get<string>(LogWebviewProvider.authorsKey(root))) : undefined;
 		this.filter = { ...(persisted ?? {}), ...(authors ? { authors } : {}) };
+		LogWebviewProvider.setCtx('hyperGit.log.filterActive', hasActiveFilter(this.filter));
 	}
 
 	/** 标题栏 Scope 子菜单选中项（hyperGit.log.scopeAll/Current/Checkpointer 命令入口）。 */
@@ -197,6 +199,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 		this.filter = filter;
 		this.persistFilter(filter);
 		this.persistAuthors(filter.authors);
+		LogWebviewProvider.setCtx('hyperGit.log.filterActive', hasActiveFilter(filter));
 		this.refresh();
 	}
 
@@ -204,6 +207,7 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 		this.filter = {};
 		this.persistFilter(undefined);
 		this.persistAuthors(undefined);
+		LogWebviewProvider.setCtx('hyperGit.log.filterActive', false);
 		this.refresh();
 	}
 

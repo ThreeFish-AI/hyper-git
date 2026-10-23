@@ -5,6 +5,7 @@ vi.mock('vscode', () => ({
 	commands: { executeCommand: vi.fn(() => Promise.resolve()) },
 }));
 
+import * as vscode from 'vscode';
 import type { Memento } from 'vscode';
 import type { GitRepositoryService } from '../../src/adapter/git-repository-service';
 import type { GitHubCiService } from '../../src/adapter/ci/github-ci-service';
@@ -198,6 +199,56 @@ describe('LogWebviewProvider 非 authors 过滤维度持久化', () => {
 		memento.update('hyperGit.log.authors:/repo-a', JSON.stringify(AUTHORS));
 		const { provider } = makeProvider('/repo-a', memento);
 		expect(provider.getFilter()).toEqual({ authors: AUTHORS });
+		provider.dispose();
+	});
+});
+
+describe('LogWebviewProvider 过滤激活 context key（标题栏图标双命令互斥）', () => {
+	it('setFilter / clearFilter 同步 hyperGit.log.filterActive', () => {
+		const memento = new MemMemento();
+		const { provider } = makeProvider('/repo-a', memento);
+		const exec = vi.mocked(vscode.commands.executeCommand);
+		exec.mockClear();
+
+		provider.setFilter({ grep: 'fix' });
+		expect(exec).toHaveBeenCalledWith('setContext', 'hyperGit.log.filterActive', true);
+		exec.mockClear();
+		provider.clearFilter();
+		expect(exec).toHaveBeenCalledWith('setContext', 'hyperGit.log.filterActive', false);
+		provider.dispose();
+	});
+
+	it('构造期恢复持久过滤即激活（重启后图标点亮）', () => {
+		const memento = new MemMemento();
+		memento.update('hyperGit.log.filter:/repo-a', JSON.stringify({ grep: 'fix' }));
+		const { provider } = makeProvider('/repo-a', memento);
+		expect(vi.mocked(vscode.commands.executeCommand)).toHaveBeenCalledWith('setContext', 'hyperGit.log.filterActive', true);
+		provider.dispose();
+	});
+
+	it('切库重载按新仓库过滤态同步（B 无持久过滤 → false，往返切回 → true）', () => {
+		const memento = new MemMemento();
+		memento.update('hyperGit.log.filter:/repo-a', JSON.stringify({ grep: 'fix' }));
+		const { provider, service } = makeProvider('/repo-a', memento);
+		const exec = vi.mocked(vscode.commands.executeCommand);
+		exec.mockClear();
+
+		service.fireRepoChange('/repo-b');
+		expect(exec).toHaveBeenCalledWith('setContext', 'hyperGit.log.filterActive', false);
+		exec.mockClear();
+		service.fireRepoChange('/repo-a');
+		expect(exec).toHaveBeenCalledWith('setContext', 'hyperGit.log.filterActive', true);
+		provider.dispose();
+	});
+
+	it('归一化未激活态不点亮：空串 / mergeMode all / 空 authors 恢复后仍为 false', () => {
+		const memento = new MemMemento();
+		const { provider } = makeProvider('/repo-a', memento);
+		const exec = vi.mocked(vscode.commands.executeCommand);
+		exec.mockClear();
+
+		provider.setFilter({ path: '', mergeMode: 'all', authors: [] });
+		expect(exec).toHaveBeenCalledWith('setContext', 'hyperGit.log.filterActive', false);
 		provider.dispose();
 	});
 });
