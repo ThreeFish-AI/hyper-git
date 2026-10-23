@@ -172,3 +172,11 @@
 - **处理方式**：删除循环改三桶（成功 / 服务端已无此 ref / 真失败）——「服务端已无此 ref」经 engine 纯逻辑 `isRemoteRefMissingError`（stderr 优先，匹配 `remote ref does not exist` / `delete of non-existent ref` 变体）识别，按达成收尾并把本地陈旧 tracking ref 纳入既有 `branch -D -r` 清理；真失败经 stderr 优先的 `gitErrorText`（`engine/git-state/git-error.ts` 单一事实源）提取原因，由 `formatRemoteDeleteResult` 汇总为通知（失败走 `showGitError`，联动 Show Output 看完整 stderr）。确认弹窗/受保护主干硬阻断/上游软警示逻辑不动。
 - **后续防范**：① 批量操作的 `catch` 必须保留可行动的失败原因（execGit 拒绝值已挂 `.stderr`，消费即可），`grep -rn 'catch {' src/adapter/` 应逐个确认非吞错；② remote-tracking ref 与服务端存在时滞，任何「对远程分支的操作」都要考虑「本地有、服务端无」的陈旧态——删除/比较/PR 匹配等场景遇到 `does not exist` 类报错应先判陈旧再判失败；③ 视图列表的「幽灵分支」根治靠 `fetch --prune`（Prune Remotes 命令已有），删除路径的容错只是补救。
 - **同类问题影响**：所有列出 remote-tracking ref 并提供远程删除的 Git GUI；凡把服务端拒绝一概当失败、不区分「目标态已达成」的实现，以及任何丢弃 stderr 的批量 CLI 包装。
+
+## #20 Graph 视图 Filter by Author 过滤选择随重启丢失（未持久化）
+
+- **表因**：Graph 视图「Filter Graph… → Filter by Author…」多选作者后，重启 VS Code（或切换仓库再切回）过滤被清空，需从头重选。
+- **根因**：过滤状态仅存于 `LogWebviewProvider` 内存字段 `private filter: LogFilter = {}`，`setFilter/clearFilter` 只改内存不落盘；切库 handler 还会显式 `this.filter = {}`。同文件的 scope/dmode 早有按仓库 workspaceState 持久化范式（`loadRepoScopedPrefs`），filter 维度从未接入。另有一处硬冲突：`hyperGit.showHistory` 用 `setFilter({ path })` 整替 filter 对象（M3 期遗留，早于其余 5 个过滤命令统一的 `{ ...f, <维度> }` 增量范式），若接入持久化会静默清空已保存的 authors。
+- **处理方式**：① `engine/log/log-filter.ts` 新增纯函数 `parsePersistedAuthors`（JSON 串 → `AuthorTerm[]`，元素级剔除脏项，永不抛异常）；② `LogWebviewProvider` 新增 `authorsKey(root)`（`hyperGit.log.authors:<root>`，同 scope/dmode 命名范式）与唯一写入点 `persistAuthors`（`setFilter/clearFilter` 汇聚，`update(key, undefined)` 即删 key，空选清除同样持久化）；恢复并入 `loadRepoScopedPrefs`（构造期 + 切库共用），切库语义由「全清」改为「清非持久维度 + 恢复新仓库持久值」；③ `showHistory` 改增量式 `setFilter({ ...getFilter(), path })`，与其余过滤命令同构。
+- **后续防范**：① 视图 UI 状态凡期望跨会话存活，一律挂到既有的按仓库 memento 范式（key 带 repoRoot、读时校验、写时 undefined 删 key），勿新造存储；② 新增过滤维度命令必须沿用 `{ ...getFilter(), <维度> }` 增量式，整替 filter 会静默摧毁其他维度（可 grep `setFilter({` 检查是否带 spread）；③ 持久化读写要过脏数据校验纯函数（engine 层），adapter 只做编排。
+- **同类问题影响**：其余 6 个过滤维度（path/grep/mergeMode/dateFrom/dateTo/messageRegex）仍未持久化（本次范围裁定不动，如需按同范式扩展）；所有「内存态 + 仓库语境」的视图组件在接入持久化前都存在同样的重启丢失。
