@@ -782,6 +782,9 @@ async function pickAuthors(service: GitRepositoryService, logTree: LogFilterCont
 	});
 
 	// settle 幂等守卫：accept 后 onDidHide 仍会触发；undefined = 取消不改，[] = 清除 author 维度。
+	// 取数窗口外仍可切库（环境驱动切换不夺焦点、QuickPick 不隐藏）：确认时仓库已变则放弃写回，
+	// 防旧仓库勾选经 setFilter→persistAuthors 误写新仓库的持久化 key。
+	const rootAtStart = service.repoRoot;
 	let settled = false;
 	const settle = (terms: readonly AuthorTerm[] | undefined): void => {
 		if (settled) {
@@ -789,16 +792,15 @@ async function pickAuthors(service: GitRepositoryService, logTree: LogFilterCont
 		}
 		settled = true;
 		qp.dispose();
-		if (terms) {
+		if (terms && service.repoRoot === rootAtStart) {
 			logTree.setFilter({ ...logTree.getFilter(), authors: terms.length ? terms : undefined });
 		}
 	};
 	qp.onDidAccept(() => settle(qp.selectedItems.map((i) => i.term)));
 	qp.onDidHide(() => settle(undefined));
 
-	// 候选按当前视图 scope 一次取数（非逐键）；切库竞态守卫沿用 rootAtStart 范式；
+	// 候选按当前视图 scope 一次取数（非逐键）；切库竞态守卫见上方 rootAtStart；
 	// 空仓库 / unborn HEAD / 查询失败 → 空列表降级（仅 pattern 逃生口可用）。
-	const rootAtStart = service.repoRoot;
 	authors = parseShortlog(await service.execGit(['shortlog', ...buildAuthorListArgs(logTree.getScope())]).catch(() => ''));
 	if (service.repoRoot !== rootAtStart) {
 		qp.dispose();
