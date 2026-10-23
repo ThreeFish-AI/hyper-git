@@ -15,6 +15,8 @@ import { diffPrunedRefs, formatBranchDeleteConfirm, partitionByMerged, truncateN
 import { diffShapeFromCode } from '../engine/diff/change-side';
 import { resolveDiffSides } from './diff-sides';
 import { gitErrorText } from '../engine/git-state/git-error';
+import type { AuthorTerm } from '../engine/log/log-filter';
+import { buildAuthorListArgs, parseShortlog, type AuthorStat } from '../engine/log/author-suggest';
 
 /** 注册 Log/Branches/Blame/History/Tags 相关命令。 */
 export function registerHistoryCommands(
@@ -29,11 +31,7 @@ export function registerHistoryCommands(
 	subs.push(vscode.commands.registerCommand('hyperGit.refreshBranches', () => branchesTree.refresh()));
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.logFilterAuthor', async () => {
-			const author = await vscode.window.showInputBox({ prompt: 'Filter by Author', placeHolder: 'e.g. John' });
-			const f = logTree.getFilter();
-			logTree.setFilter({ ...f, author: author && author.trim() ? author.trim() : undefined });
-		}),
+		vscode.commands.registerCommand('hyperGit.logFilterAuthor', () => pickAuthors(service, logTree)),
 	);
 
 	subs.push(
@@ -734,6 +732,95 @@ export function registerHistoryCommands(
 	);
 
 	return subs;
+}
+
+/**
+ * 作者过滤选择器（仓库首个 createQuickPick 动态用法）：候选来自 `git shortlog`（按当前视图 scope 取数、
+ * 按提交数降序），QuickPick 内建模糊过滤实现「输入前缀 → 建议下拉」；canSelectMany 多选（git 对多条
+ * `--author` 取 OR）。输入不等于任何作者姓名时头部动态插入「Use pattern」逃生口（原样正则透传，
+ * 保留旧 InputBox 的任意 pattern 能力）；确认时空选 = 清除 author 维度，Esc = 不变。
+ */
+async function pickAuthors(service: GitRepositoryService, logTree: LogFilterControl): Promise<void> {
+	/** exact 项勾选键（同名异邮箱不串）。 */
+	const key = (t: { name: string; email: string }) => `${t.name} <${t.email}>`;
+	const qp = vscode.window.createQuickPick<AuthorPickItem>();
+	qp.canSelectMany = true;
+	qp.matchOnDescription = true;
+	qp.matchOnDetail = true;
+	qp.title = 'Filter by Author';
+	qp.placeholder = 'Type to search authors; check to filter (empty selection clears)';
+	// 先展示再取数：busy 遮盖等待；事件先于 await 注册，取数期间的键入即触发 rebuild。
+	qp.busy = true;
+	qp.items = [];
+	qp.show();
+
+	// 勾选自维护：重建 items 会重置 selectedItems，须记录并在重建后回写。
+	// 预勾选仅 exact 项（pattern 项随输入动态生成，无法预置）；重建触发的程序化 selection
+	// 事件与用户点击不可区分，以时间窗抑制（程序化事件在赋值后即刻送达）。
+	let checked = new Set(logTree.getFilter().authors?.filter((t) => t.kind === 'exact').map(key) ?? []);
+	let patternOn = false;
+	let suppressUntil = 0;
+	let authors: readonly AuthorStat[] = [];
+	const rebuild = (value: string): void => {
+		const v = value.trim();
+		const patternItem: AuthorPickItem[] =
+			v && !authors.some((a) => a.name === v)
+				? [{ label: `Use pattern "${v}"`, alwaysShow: true, description: 'regular expression (OR-ed)', term: { kind: 'pattern', pattern: v } }]
+				: [];
+		suppressUntil = Date.now() + 100;
+		qp.items = [...patternItem, ...baseItems(authors)];
+		qp.selectedItems = qp.items.filter((i) => (i.term.kind === 'exact' ? checked.has(key(i.term)) : patternOn));
+	};
+	qp.onDidChangeValue(rebuild);
+	qp.onDidChangeSelection((sel) => {
+		if (Date.now() < suppressUntil) {
+			return;
+		}
+		patternOn = sel.some((i) => i.term.kind === 'pattern');
+		checked = new Set(sel.flatMap((i) => (i.term.kind === 'exact' ? [key(i.term)] : [])));
+	});
+
+	// settle 幂等守卫：accept 后 onDidHide 仍会触发；undefined = 取消不改，[] = 清除 author 维度。
+	let settled = false;
+	const settle = (terms: readonly AuthorTerm[] | undefined): void => {
+		if (settled) {
+			return;
+		}
+		settled = true;
+		qp.dispose();
+		if (terms) {
+			logTree.setFilter({ ...logTree.getFilter(), authors: terms.length ? terms : undefined });
+		}
+	};
+	qp.onDidAccept(() => settle(qp.selectedItems.map((i) => i.term)));
+	qp.onDidHide(() => settle(undefined));
+
+	// 候选按当前视图 scope 一次取数（非逐键）；切库竞态守卫沿用 rootAtStart 范式；
+	// 空仓库 / unborn HEAD / 查询失败 → 空列表降级（仅 pattern 逃生口可用）。
+	const rootAtStart = service.repoRoot;
+	authors = parseShortlog(await service.execGit(['shortlog', ...buildAuthorListArgs(logTree.getScope())]).catch(() => ''));
+	if (service.repoRoot !== rootAtStart) {
+		qp.dispose();
+		return;
+	}
+	// 取数完成以 qp.value（而非 ''）重建：纳入等待期间的键入。
+	rebuild(qp.value);
+	qp.busy = false;
+}
+
+/** shortlog 统计 → QuickPick 项（label=姓名、description=提交数、detail=email 供模糊匹配）。 */
+function baseItems(authors: readonly AuthorStat[]): AuthorPickItem[] {
+	return authors.map((a) => ({
+		label: a.name,
+		description: a.count === 1 ? '1 commit' : `${a.count} commits`,
+		detail: a.email,
+		term: { kind: 'exact', name: a.name, email: a.email },
+	}));
+}
+
+/** 作者候选 QuickPick 项（label=姓名、description=提交数、detail=email，term 为过滤写回项）。 */
+interface AuthorPickItem extends vscode.QuickPickItem {
+	readonly term: AuthorTerm;
 }
 
 /**

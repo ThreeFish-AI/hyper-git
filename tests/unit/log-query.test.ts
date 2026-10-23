@@ -36,17 +36,60 @@ describe('buildLogArgs — 顺序与必选项', () => {
 });
 
 describe('buildLogArgs — 服务端过滤翻译', () => {
-	it('author / grep 翻译为 flag（去空白）', () => {
-		const args = buildLogArgs({ author: '  Jane  ', grep: 'fix' }, 'all', { maxCount: 300 });
-		expect(args).toContain('--author=Jane');
-		expect(args).toContain('--grep=fix');
+	it('exact 作者翻译为锚定字面 pattern（首尾 ^$ + 全字面转义，同名异邮箱不混淆）', () => {
+		const args = buildLogArgs({ authors: [{ kind: 'exact', name: 'Jane', email: 'jane@x.com' }] }, 'all', { maxCount: 300 });
+		expect(args).toContain('--author=^Jane <jane@x\\.com>$');
 	});
 
-	it('空 author/grep 不产生 flag', () => {
-		const args = buildLogArgs({ author: '   ', grep: '' }, 'all', { maxCount: 300 });
+	it('多个 exact 作者产生多条 --author（git 取 OR）', () => {
+		const args = buildLogArgs(
+			{
+				authors: [
+					{ kind: 'exact', name: 'Jane', email: 'jane@x.com' },
+					{ kind: 'exact', name: 'Bob', email: 'bob@x.com' },
+				],
+			},
+			'all',
+			{ maxCount: 300 },
+		);
+		const authorFlags = args.filter((a) => a.startsWith('--author='));
+		expect(authorFlags).toHaveLength(2);
+	});
+
+	it('pattern 项原样透传（保留旧 InputBox 任意正则能力），与 exact 可混存且去重', () => {
+		const exact = { kind: 'exact', name: 'Jane', email: 'jane@x.com' } as const;
+		const args = buildLogArgs(
+			{ authors: [{ kind: 'pattern', pattern: '  bot@example ' }, exact, exact] },
+			'all',
+			{ maxCount: 300 },
+		);
+		const authorFlags = args.filter((a) => a.startsWith('--author='));
+		expect(authorFlags).toContain('--author=bot@example');
+		expect(authorFlags).toHaveLength(2);
+	});
+
+	it('BRE 转义护栏：+ ? | 裸写（BRE 普通字符，\\+ 反成量词致归零命中），. [ ] \\ 转义', () => {
+		const args = buildLogArgs(
+			{ authors: [{ kind: 'exact', name: 'dependabot[bot]', email: '49699333+nx@users.noreply.github.com' }] },
+			'all',
+			{ maxCount: 300 },
+		);
+		const flag = args.find((a) => a.startsWith('--author='));
+		expect(flag).toBe('--author=^dependabot\\[bot\\] <49699333+nx@users\\.noreply\\.github\\.com>$');
+	});
+
+	it('空 pattern / 空数组 / 全空白不产生 flag', () => {
 		// 用 `--author=` / `--grep=` 精确前缀，避免与既有的 `--author-date-order` 排序 flag 误判
-		expect(args.some((a) => a.startsWith('--author='))).toBe(false);
-		expect(args.some((a) => a.startsWith('--grep='))).toBe(false);
+		expect(buildLogArgs({ authors: [] }, 'all', { maxCount: 300 }).some((a) => a.startsWith('--author='))).toBe(false);
+		expect(
+			buildLogArgs({ authors: [{ kind: 'pattern', pattern: '   ' }] }, 'all', { maxCount: 300 }).some((a) => a.startsWith('--author=')),
+		).toBe(false);
+		expect(buildLogArgs({ grep: '' }, 'all', { maxCount: 300 }).some((a) => a.startsWith('--grep='))).toBe(false);
+	});
+
+	it('grep 翻译为 flag（去空白）', () => {
+		const args = buildLogArgs({ grep: '  fix  ' }, 'all', { maxCount: 300 });
+		expect(args).toContain('--grep=fix');
 	});
 
 	it('path 以 pathspec 形式置于参数末尾（--format 之后）', () => {

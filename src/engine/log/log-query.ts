@@ -9,7 +9,7 @@
  * （`row.authorDate`）对齐，肉眼所见与排列顺序永远一致。pathspec `-- <path>` 必须置于末尾。
  */
 
-import type { LogFilter } from './log-filter';
+import { exactAuthorPattern, type LogFilter } from './log-filter';
 import { LOG_GRAPH_FORMAT } from './log-line';
 
 /**
@@ -33,6 +33,21 @@ export interface LogQueryOptions {
 	readonly skip?: number;
 }
 
+/** scope → git 引用范围参数（单一事实源，{@link buildLogArgs} 与作者候选查询共享）：
+ * `current` 为空数组 = git log 缺省 HEAD；shortlog 等调用方需自行补显式 HEAD。 */
+export function scopeRefs(scope: LogScope): string[] {
+	if (scope === 'checkpointer') {
+		// 原始完整视图：遍历 refs/ 全部引用，含 conductor 等工具的 checkpoint 快照与归档头。
+		return ['--all'];
+	}
+	if (scope === 'all') {
+		// 干净视图：仅 heads/tags/remotes，排除 refs/conductor-* 等工具注入的内部引用，
+		// 以免其携带的游离/陈旧提交以游离泳道污染人类历史（`--all` 无法排除，prune 亦触不及）。
+		return ['--branches', '--tags', '--remotes'];
+	}
+	return [];
+}
+
 /**
  * 构造 `git log` 参数向量（不含 `log` 字面量，host 拼接）。
  * 顺序：`--author-date-order` → 范围 → 分页 → 服务端过滤 → `--format` → pathspec（末尾）。
@@ -40,21 +55,19 @@ export interface LogQueryOptions {
 export function buildLogArgs(filter: LogFilter | undefined, scope: LogScope, opts: LogQueryOptions): string[] {
 	// 排序键须与视图日期列（row.authorDate）对齐；lane 算法仅依赖「子在父之上」不变量，
 	// --author-date-order 与 --topo-order 均满足，且额外按作者日期倒序、跨支正确交错（详见文件头）。
-	const args: string[] = ['--author-date-order'];
-	if (scope === 'checkpointer') {
-		// 原始完整视图：遍历 refs/ 全部引用，含 conductor 等工具的 checkpoint 快照与归档头。
-		args.push('--all');
-	} else if (scope === 'all') {
-		// 干净视图：仅 heads/tags/remotes，排除 refs/conductor-* 等工具注入的内部引用，
-		// 以免其携带的游离/陈旧提交以游离泳道污染人类历史（`--all` 无法排除，prune 亦触不及）。
-		args.push('--branches', '--tags', '--remotes');
-	}
+	const args: string[] = ['--author-date-order', ...scopeRefs(scope)];
 	args.push(`--max-count=${opts.maxCount}`);
 	if (opts.skip && opts.skip > 0) {
 		args.push(`--skip=${opts.skip}`);
 	}
-	if (filter?.author && filter.author.trim()) {
-		args.push(`--author=${filter.author.trim()}`);
+	// authors → 多条 `--author=`（git 取 OR）；去重防重复 flag，空 pattern 跳过（对齐「空串不产 flag」）。
+	const seen = new Set<string>();
+	for (const term of filter?.authors ?? []) {
+		const v = term.kind === 'exact' ? exactAuthorPattern(term.name, term.email) : term.pattern.trim();
+		if (v && !seen.has(v)) {
+			seen.add(v);
+			args.push(`--author=${v}`);
+		}
 	}
 	if (filter?.grep && filter.grep.trim()) {
 		args.push(`--grep=${filter.grep.trim()}`);

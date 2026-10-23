@@ -1,7 +1,7 @@
 /**
  * Log 客户端过滤器（纯逻辑，零 vscode 依赖）。
  *
- * author / path / grep 交给 `git log`（repo.log）服务端过滤；以下维度 git log 稳定 API 不支持或
+ * authors / path / grep 交给 `git log`（repo.log）服务端过滤；以下维度 git log 稳定 API 不支持或
  * 表达不便，改在客户端对已取回的提交做过滤：合并模式（parents）/ 日期范围（authorDate）/ message 正则。
  * engine 不依赖 vscode，故以 {@link FilterableCommit} 抽象 commit 所需字段，由 adapter 映射。
  */
@@ -25,11 +25,35 @@ export interface LogClientFilter {
 }
 
 /**
- * Log 完整过滤器（单一事实源，engine 层）：author/path/grep 交 git log 服务端；
+ * 作者过滤项（OR 语义，git 对多条 `--author` 取并集，可与 pattern 混选）：
+ * - `exact`：从仓库作者列表选中的身份，经 {@link exactAuthorPattern} 锚定字面匹配（同名异邮箱不混淆）；
+ * - `pattern`：手输正则原样透传（保留旧 InputBox 的任意 pattern 能力）。
+ */
+export type AuthorTerm =
+	| { readonly kind: 'exact'; readonly name: string; readonly email: string }
+	| { readonly kind: 'pattern'; readonly pattern: string };
+
+/** BRE 特殊字符集：git `--author` 缺省 POSIX BRE（非 ERE），仅 `\ . [ * ^ $` 有特殊义；
+ * `+ ? | ( ) {` 在 BRE 中是普通字符，加反斜杠反成量词/分组操作符（实测 `\+` 使含 `+` 的邮箱归零命中），勿扩大转义集。 */
+const BRE_SPECIAL = /[.*[\]^$\\]/g;
+
+/** 按 BRE 语义转义字面串（`+ ? |` 等保持裸写，见 {@link BRE_SPECIAL}）。 */
+export function escapeBreLiteral(s: string): string {
+	return s.replace(BRE_SPECIAL, '\\$&');
+}
+
+/** exact 身份 → 锚定字面 pattern：`--author` 对 `Name <email>` 整行匹配，首尾锚定 + 全字面转义。 */
+export function exactAuthorPattern(name: string, email: string): string {
+	return `^${escapeBreLiteral(`${name} <${email}>`)}$`;
+}
+
+/**
+ * Log 完整过滤器（单一事实源，engine 层）：authors/path/grep 交 git log 服务端；
  * mergeMode/dateFrom/dateTo/messageRegex 客户端（见 {@link toClientFilter}）。
  */
 export interface LogFilter {
-	readonly author?: string;
+	/** 作者过滤项集合（多选 OR），见 {@link AuthorTerm}；空/缺省即不过滤。 */
+	readonly authors?: readonly AuthorTerm[];
 	readonly path?: string;
 	readonly grep?: string;
 	readonly mergeMode?: MergeMode;
