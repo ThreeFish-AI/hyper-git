@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Branches 视图分支就地更新（不 checkout）**：右键单个分支 **Update Branch**、多选批量更新、标题栏 Pull 按钮升级为选区感知（无选区保持原 Pull 语义，Commit 视图 Pull 不受影响）。底层原语 `git fetch <remote> refs/heads/<upstream>:refs/heads/<branch>`——git 原生 fast-forward-only，diverged / ahead-only 分支被安全拒绝（附真实 stderr 原因），**永不改写本地提交**（src 侧全限定防 `+` 前缀上游名被解析为 force）；当前分支自动改走 `repo.pull()`（含冲突处理通道）；无上游分支透明跳过；无 remote 配置提示 `No remote repository configured` 提前返回（不误报 no upstream）。五桶对账汇总（updated / already up to date / pulled / skipped / failed，选中数 = 各桶之和），up-to-date 经前后 `objectname` 短 sha 前缀比对判定（fetch 静默 no-op 无输出；缩写长度随对象数伸缩，全等比对会误报）。upstream 解析不信任树节点数据（API 路径 `refToRaw` 不填 upstream/head），统一以一次 `for-each-ref` 取新鲜快照；`origin/x` 拆分复用 `resolveRemoteBranch` 最长前缀匹配（remote 名可含 `/`）。engine 纯逻辑 `planBranchUpdates` / `formatBranchUpdateResult` / `classifyFetchOutcome` 落于 `engine/ref/branch-update.ts`，全量单测覆盖。
+
 ## [0.0.21] - 2026-10-23 — Filter by Author 候选建议 · 多选过滤 · 元字符作者修复
 
 ### Added
