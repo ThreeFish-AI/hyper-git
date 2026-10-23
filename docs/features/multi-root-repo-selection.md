@@ -1,6 +1,6 @@
 # 多根工作区仓库切换（Multi-root Repository Selection）
 
-> 多根工作区（multi-root）含多个 Git 仓库时，**Graph 标题栏出现「切换仓库」图标按钮**（`$(repo)`，对标 Git Graph 的 repo selector；仓库路径常驻 `WebviewView.description` 副标题），Command Palette 亦可直达。切换的是**全局活跃仓库**：Graph / Branches / Commit（changelist）/ Stash / Shelf / Worktrees / 未提交角标**全部视图跟随**，changelist 分配、分支收藏、分支分组偏好、Shelf 存储、最近提交消息**按仓库隔离记忆**，重开窗口回到上次操作的仓库。
+> 多根工作区（multi-root）含多个 Git 仓库时，**Graph 标题栏出现「切换仓库」图标按钮**（`$(repo)`，对标 Git Graph 的 repo selector；仓库路径常驻 `WebviewView.description` 副标题），Command Palette 亦可直达。切换的是**全局活跃仓库**：Graph / Branches / Commit（changelist）/ Stash / Shelf / Worktrees / 未提交角标**全部视图跟随**，changelist 分配、分支收藏、分支分组偏好、Shelf 存储、最近提交消息、Graph 过滤条件**按仓库隔离记忆**，重开窗口回到上次操作的仓库。
 
 ## 交互形态
 
@@ -51,6 +51,7 @@
 | 分支分组偏好 | `hyperGit.branchesGrouping:${repoRoot}` | 同上 + context key 同步 |
 | Shelf 存储 | `shelves/<basename>.<sha1[:8]>/` | 目录随 `service.repoRoot` **动态求值**（零快照零双源） |
 | 最近提交消息 | `hyperGit.recentCommitMessages:${repoRoot}` | 动态 key + 旧全局 key 回落一次（平滑迁移） |
+| Graph 过滤条件（authors + path/grep/mergeMode/date/regex） | `hyperGit.log.authors:${repoRoot}`、`hyperGit.log.filter:${repoRoot}` | `loadRepoScopedPrefs` 换 key 重载（构造期 + 切库，engine 纯函数校验脏数据） |
 | Graph 视图状态（scope/选中/详情模式） | webview `vscode.getState()` v2 `byRepo` 分区 | `graphData` 到达时按 `repoRoot` 换装载 |
 | Commit 勾选集/视图模式 | 同上 | 同上（勾选是相对路径集合，跨仓库本就错位） |
 

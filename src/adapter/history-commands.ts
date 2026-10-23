@@ -43,6 +43,14 @@ export function registerHistoryCommands(
 			const repo = service.repo;
 			if (uri?.[0] && repo && service.repoRoot === rootAtStart) {
 				const rel = path.relative(repo.rootUri.fsPath, uri[0].fsPath).split(path.sep).join('/');
+				// 越仓选择（多根他仓文件 / 单仓外导航）同样产出 '../…' 垃圾 path，且随持久化跨重启
+				// 粘性污染（git log fatal）→ 拒绝。按路径段判定：rel 已归一为 '/' 分隔，'..' 或
+				// '../' 前缀才是越仓；'..' 仅作文件名前缀（如 '..drafts/note.md'）是仓内合法文件，勿误杀
+				// （showBlame 的 startsWith('..') 会对后者误杀，属预存差异，不在此处对齐）。
+				if (rel === '..' || rel.startsWith('../') || path.isAbsolute(rel)) {
+					void vscode.window.showWarningMessage('This file is outside the current repository; cannot filter by path');
+					return;
+				}
 				const f = logTree.getFilter();
 				logTree.setFilter({ ...f, path: rel });
 			}
@@ -54,6 +62,9 @@ export function registerHistoryCommands(
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilter', async () => {
 			// 过滤器聚合入口：QuickPick 分发到既有 6 个过滤命令（复用 handler，零重复实现）。
+			// 切库竞态守卫（其余对话框同范式）：await 期间切库即放弃——Clear Filter 项直接执行，
+			// 无守卫会删切换后仓库的持久化 key；过滤子命令也应在新仓库语境下重新发起。
+			const rootAtStart = service.repoRoot;
 			const items = [
 				{ label: 'Filter by Author…', description: 'commits by author', action: 'hyperGit.logFilterAuthor' },
 				{ label: 'Filter by Path…', description: 'commits touching a path', action: 'hyperGit.logFilterPath' },
@@ -64,9 +75,10 @@ export function registerHistoryCommands(
 				{ label: 'Clear Filter', description: 'remove all active filters', action: 'hyperGit.logClearFilter' },
 			];
 			const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Filter commit log' });
-			if (pick) {
-				await vscode.commands.executeCommand(pick.action);
+			if (!pick || service.repoRoot !== rootAtStart) {
+				return;
 			}
+			await vscode.commands.executeCommand(pick.action);
 		}),
 	);
 
@@ -773,10 +785,19 @@ async function pickAuthors(service: GitRepositoryService, logTree: LogFilterCont
 	// 勾选自维护：重建 items 会重置 selectedItems，须记录并在重建后回写。
 	// 预勾选仅 exact 项（pattern 项随输入动态生成，无法预置）；重建触发的程序化 selection
 	// 事件与用户点击不可区分，以时间窗抑制（程序化事件在赋值后即刻送达）。
-	let checked = new Set(logTree.getFilter().authors?.filter((t) => t.kind === 'exact').map(key) ?? []);
+	const persistedExact = logTree.getFilter().authors?.filter((t) => t.kind === 'exact') ?? [];
+	let checked = new Set(persistedExact.map(key));
 	let patternOn = false;
 	let suppressUntil = 0;
 	let authors: readonly AuthorStat[] = [];
+	// 候选集外的持久化 exact 作者（scope 已切换 / shortlog 失败降级）以 ghost 项呈现：
+	// selectedItems 只能来自 items，缺项者确认时会被静默丢出持久化 key——ghost 预勾选保留、可取消移除。
+	const ghostItems = (): AuthorPickItem[] => {
+		const present = new Set(authors.map((a) => key(a)));
+		return persistedExact
+			.filter((t) => !present.has(key(t)))
+			.map((t) => ({ label: t.name, description: 'not in current scope', detail: t.email, term: t }));
+	};
 	const rebuild = (value: string): void => {
 		const v = value.trim();
 		const patternItem: AuthorPickItem[] =
@@ -784,7 +805,7 @@ async function pickAuthors(service: GitRepositoryService, logTree: LogFilterCont
 				? [{ label: `Use pattern "${v}"`, alwaysShow: true, description: 'regular expression (OR-ed)', term: { kind: 'pattern', pattern: v } }]
 				: [];
 		suppressUntil = Date.now() + 100;
-		qp.items = [...patternItem, ...baseItems(authors)];
+		qp.items = [...patternItem, ...baseItems(authors), ...ghostItems()];
 		qp.selectedItems = qp.items.filter((i) => (i.term.kind === 'exact' ? checked.has(key(i.term)) : patternOn));
 	};
 	qp.onDidChangeValue(rebuild);

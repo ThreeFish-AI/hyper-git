@@ -19,6 +19,7 @@ vi.mock('vscode', () => ({
 		showOpenDialog: vi.fn(),
 		showInputBox: vi.fn(),
 		showQuickPick: vi.fn(),
+		showWarningMessage: vi.fn(),
 		createQuickPick: () => {
 			const qp = {
 				canSelectMany: false,
@@ -226,6 +227,26 @@ describe('history-commands 过滤 wiring（真实 Provider 持久化链路）', 
 		provider.dispose();
 	});
 
+	it('pickAuthors 候选集外的持久化 exact 作者：ghost 项预勾选，no-op 确认不丢持久化数据', async () => {
+		const memento = new MemMemento();
+		memento.update('hyperGit.log.authors:/repo-a', JSON.stringify([FISH]));
+		const { provider, openPicker, accept } = makeWiring('/repo-a', memento);
+
+		// shortlog 恒返回空（service.execGit → ''）→ FISH 不在候选集，须以 ghost 项呈现且预勾选。
+		await openPicker();
+		const items = h.qp!.items as ReadonlyArray<{ term: AuthorTerm; description?: string }>;
+		const ghost = items.find((i) => i.term.kind === 'exact' && i.term.email === FISH.email);
+		expect(ghost).toBeDefined();
+		expect(ghost!.description).toBe('not in current scope');
+		expect((h.qp!.selectedItems as ReadonlyArray<{ term: AuthorTerm }>).some((i) => i.term === ghost!.term)).toBe(true);
+
+		// no-op 确认（按当前预勾选原样 settle）不丢持久化 authors。
+		accept(h.qp!.selectedItems as ReadonlyArray<{ term: AuthorTerm }>);
+		expect(provider.getFilter()).toEqual({ authors: [FISH] });
+		expect(memento.get('hyperGit.log.authors:/repo-a')).toBe(JSON.stringify([FISH]));
+		provider.dispose();
+	});
+
 	it('logFilterPath 正常路径：所选文件按当前仓库求相对路径，增量叠加不覆盖 authors', async () => {
 		const memento = new MemMemento();
 		memento.update('hyperGit.log.authors:/repo-a', JSON.stringify([FISH]));
@@ -257,6 +278,34 @@ describe('history-commands 过滤 wiring（真实 Provider 持久化链路）', 
 		await filterPathWithDialog('/repo-a/src/a.ts', () => service.fireRepoChange('/repo-b'));
 		// 无守卫时：path.relative('/repo-b', '/repo-a/src/a.ts') = '../repo-a/src/a.ts'（垃圾过滤）。
 		expect(provider.getFilter()).toEqual({ authors: [BOB] });
+		provider.dispose();
+	});
+
+	it('logFilterPath 越仓守卫：所选文件在当前仓库外，告警放弃，不写内存与持久化 key', async () => {
+		const memento = new MemMemento();
+		const { provider, filterPathWithDialog } = makeWiring('/repo-a', memento);
+		const warn = vi.mocked(vscode.window.showWarningMessage);
+		warn.mockClear();
+
+		// path.relative('/repo-a', '/outside/src/a.ts') = '../outside/src/a.ts'（越仓垃圾 path）。
+		await filterPathWithDialog('/outside/src/a.ts');
+		expect(provider.getFilter()).toEqual({});
+		expect(memento.get('hyperGit.log.filter:/repo-a')).toBeUndefined();
+		expect(warn).toHaveBeenCalledWith('This file is outside the current repository; cannot filter by path');
+		provider.dispose();
+	});
+
+	it('logFilterPath 仓内 .. 前缀文件不误杀：按路径段判定越仓，仅 ../ 前缀拒绝', async () => {
+		const memento = new MemMemento();
+		const { provider, filterPathWithDialog } = makeWiring('/repo-a', memento);
+		const warn = vi.mocked(vscode.window.showWarningMessage);
+		warn.mockClear();
+
+		// '..drafts/note.md' 是仓内合法文件名（'..' 仅作前缀，非路径段），应正常写入 path 过滤。
+		await filterPathWithDialog('/repo-a/..drafts/note.md');
+		expect(provider.getFilter()).toEqual({ path: '..drafts/note.md' });
+		expect(memento.get('hyperGit.log.filter:/repo-a')).toBe(JSON.stringify({ path: '..drafts/note.md' }));
+		expect(warn).not.toHaveBeenCalled();
 		provider.dispose();
 	});
 
@@ -297,6 +346,123 @@ describe('history-commands 过滤 wiring（真实 Provider 持久化链路）', 
 		expect(provider.getFilter()).toEqual({});
 		expect(memento.get('hyperGit.log.filter:/repo-a')).toBeUndefined();
 		expect(memento.get('hyperGit.log.filter:/repo-b')).toBeUndefined();
+		provider.dispose();
+	});
+
+	it('mergeMode 正常路径：选择 merge-only 写入 filter 与组合 key', async () => {
+		const memento = new MemMemento();
+		const { provider } = makeWiring('/repo-a', memento);
+		const mergeMode = h.handlers.get('hyperGit.logFilterMergeMode') as () => Promise<void>;
+
+		await withPendingDialog(
+			vi.mocked(vscode.window.showQuickPick),
+			{ label: 'Merge Commits Only', mode: 'merge-only' },
+			mergeMode,
+		);
+		expect(provider.getFilter()).toEqual({ mergeMode: 'merge-only' });
+		expect(parsePersistedFilter(memento.get('hyperGit.log.filter:/repo-a'))).toEqual({ mergeMode: 'merge-only' });
+		provider.dispose();
+	});
+
+	it('date 正常路径：Last 7 Days 写入 dateFrom ≈ now-7d 并经组合 key ISO 往返', async () => {
+		const memento = new MemMemento();
+		const { provider } = makeWiring('/repo-a', memento);
+		const date = h.handlers.get('hyperGit.logFilterDate') as () => Promise<void>;
+
+		const t0 = Date.now();
+		await withPendingDialog(vi.mocked(vscode.window.showQuickPick), { label: 'Last 7 Days', days: 7 }, date);
+		const t1 = Date.now();
+		const f = provider.getFilter();
+		expect(f.dateFrom).toBeInstanceOf(Date);
+		// handler 内部捕获的 now ∈ [t0, t1]（同 tick 执行时取等号），dateFrom = now - 7d。
+		expect(f.dateFrom!.getTime()).toBeGreaterThanOrEqual(t0 - 7 * 86_400_000);
+		expect(f.dateFrom!.getTime()).toBeLessThanOrEqual(t1 - 7 * 86_400_000);
+		expect(parsePersistedFilter(memento.get('hyperGit.log.filter:/repo-a'))).toEqual({ dateFrom: f.dateFrom });
+		provider.dispose();
+	});
+
+	it('date 清除分支：Clear Date Filter 移除 dateFrom 并删组合 key', async () => {
+		const memento = new MemMemento();
+		const { provider } = makeWiring('/repo-a', memento);
+		const date = h.handlers.get('hyperGit.logFilterDate') as () => Promise<void>;
+		provider.setFilter({ ...provider.getFilter(), dateFrom: new Date('2026-01-01T00:00:00.000Z') });
+		expect(memento.get('hyperGit.log.filter:/repo-a')).toBeDefined();
+
+		await withPendingDialog(vi.mocked(vscode.window.showQuickPick), { label: 'Clear Date Filter', days: 0 }, date);
+		expect(provider.getFilter()).toEqual({});
+		expect(memento.get('hyperGit.log.filter:/repo-a')).toBeUndefined();
+		provider.dispose();
+	});
+
+	it('date 切库守卫：选择器期间切库，确认不写入任何仓库的持久化 key', async () => {
+		const memento = new MemMemento();
+		const { provider, service } = makeWiring('/repo-a', memento);
+		const date = h.handlers.get('hyperGit.logFilterDate') as () => Promise<void>;
+
+		await withPendingDialog(
+			vi.mocked(vscode.window.showQuickPick),
+			{ label: 'Last 7 Days', days: 7 },
+			date,
+			() => service.fireRepoChange('/repo-b'),
+		);
+		expect(provider.getFilter()).toEqual({});
+		expect(memento.get('hyperGit.log.filter:/repo-a')).toBeUndefined();
+		expect(memento.get('hyperGit.log.filter:/repo-b')).toBeUndefined();
+		provider.dispose();
+	});
+
+	it('regex 正常路径：确认输入（含 trim）写入 filter 与组合 key', async () => {
+		const memento = new MemMemento();
+		const { provider } = makeWiring('/repo-a', memento);
+		const regex = h.handlers.get('hyperGit.logFilterRegex') as () => Promise<void>;
+
+		await withPendingDialog(vi.mocked(vscode.window.showInputBox), ' ^feat: ', regex);
+		expect(provider.getFilter()).toEqual({ messageRegex: '^feat:' });
+		expect(parsePersistedFilter(memento.get('hyperGit.log.filter:/repo-a'))).toEqual({ messageRegex: '^feat:' });
+		provider.dispose();
+	});
+
+	it('regex 清除分支：空输入确认移除 messageRegex 并删组合 key', async () => {
+		const memento = new MemMemento();
+		const { provider } = makeWiring('/repo-a', memento);
+		const regex = h.handlers.get('hyperGit.logFilterRegex') as () => Promise<void>;
+		provider.setFilter({ ...provider.getFilter(), messageRegex: '^feat:' });
+		expect(memento.get('hyperGit.log.filter:/repo-a')).toBeDefined();
+
+		// 空白输入经 re && re.trim() 规约为 undefined（清除维度），组合 key 归一化后全空即删。
+		await withPendingDialog(vi.mocked(vscode.window.showInputBox), '  ', regex);
+		expect(provider.getFilter()).toEqual({});
+		expect(memento.get('hyperGit.log.filter:/repo-a')).toBeUndefined();
+		provider.dispose();
+	});
+
+	it('regex 切库守卫：输入框期间切库，确认不把旧仓库输入写入新仓库持久化 key', async () => {
+		const memento = new MemMemento();
+		const { provider, service } = makeWiring('/repo-a', memento);
+		const regex = h.handlers.get('hyperGit.logFilterRegex') as () => Promise<void>;
+
+		await withPendingDialog(vi.mocked(vscode.window.showInputBox), '^feat:', regex, () => service.fireRepoChange('/repo-b'));
+		expect(provider.getFilter()).toEqual({});
+		expect(memento.get('hyperGit.log.filter:/repo-a')).toBeUndefined();
+		expect(memento.get('hyperGit.log.filter:/repo-b')).toBeUndefined();
+		provider.dispose();
+	});
+
+	it('logFilter 聚合入口切库守卫：选择器期间切库，Clear Filter 不删新仓库的持久化 key', async () => {
+		const memento = new MemMemento();
+		memento.update('hyperGit.log.authors:/repo-b', JSON.stringify([BOB]));
+		const { provider, service } = makeWiring('/repo-a', memento);
+		const filter = h.handlers.get('hyperGit.logFilter') as () => Promise<void>;
+
+		await withPendingDialog(
+			vi.mocked(vscode.window.showQuickPick),
+			{ label: 'Clear Filter', description: 'remove all active filters', action: 'hyperGit.logClearFilter' },
+			filter,
+			() => service.fireRepoChange('/repo-b'),
+		);
+		// 守卫生效：B 的持久化 authors 未被清（无守卫时 clearFilter 会删 hyperGit.log.authors:/repo-b）。
+		expect(memento.get('hyperGit.log.authors:/repo-b')).toBe(JSON.stringify([BOB]));
+		expect(provider.getFilter()).toEqual({ authors: [BOB] });
 		provider.dispose();
 	});
 
