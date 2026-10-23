@@ -13,6 +13,7 @@
 - [Log 提交详情面板](./features/log-commit-detail-panel.md) — 点击提交行于图右侧打开常驻详情面板（上半 Changed Files、下半提交信息）；面板可见性 ⟺ 选中态，替代原悬停浮层。
 - [Claude Code 配置](./features/claude-code-config.md) — Agentic Git 预置：Claude Code 可执行路径设置 + `~/.claude/settings.json` 快捷入口（原生设置 + 命令；M5 前置铺垫）。
 - [Agentic Git 偏好配置](./features/agentic-git-preferences.md) — Agentic Git 预置：Base Branch + Commit / Create PR / Review 三项 agent 指令偏好（多行文本域 + 内置默认模板；M5 前置铺垫）。
+- [分支就地更新](./features/branches-update-in-place.md) — Branches 视图不 checkout 更新本地分支（fetch refspec 原生 fast-forward-only）：右键 / 多选批量 / 标题栏选区感知三入口。
 
 ## 发布说明
 - [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.21 Filter by Author 候选建议 · 多选过滤 · 元字符作者修复](./releases/v0.0.21.md)。

@@ -25,6 +25,7 @@
 - [Claude Code 配置](../docs/features/claude-code-config.md) — Agentic Git 预置：`hyperGit.claudeCode.executablePath` 设置 + `~/.claude/settings.json` 快捷入口（原生设置 + 命令；纯路径逻辑沉淀 `engine/agent/`）。
 - [Agentic Git 偏好配置](../docs/features/agentic-git-preferences.md) — Agentic Git 预置：`hyperGit.agent.*` 四项（baseBranch + commit/createPr/review Preferences；多行文本域 + 内置默认模板，Commit 模板中文规约已英译）。
 - [多根工作区仓库切换](../docs/features/multi-root-repo-selection.md) — Graph 标题栏切换仓库图标按钮 + `hyperGit.selectRepository` 切换全局活跃仓库：七视图级联跟随、changelist/收藏/Shelf/最近消息按仓库隔离、三重顺序不变量与安全迁移。
+- [分支就地更新](../docs/features/branches-update-in-place.md) — Branches 视图不 checkout 更新本地分支：`git fetch <remote> <upstream>:refs/heads/<branch>` 原生 fast-forward-only，右键/多选/标题栏选区感知三入口，五桶对账汇总，引擎排程 + 适配层执行。
 - [实施状态总览](../docs/milestones/implementation-status.md) — M0-M5 交付记录 + API 限制 + M5 AI 设计 + 验证/发布（**实施看板**）。
 - [工程实施方案](../docs/architecture/engineering-plan.md) — 路径 B 架构 + M0-M5 里程碑（**开发蓝图**）。
 - [Git 功能矩阵](../docs/requirements/idea-feature-matrix.md) — 56 功能点 / 8 组（**验收基线**，参考 IDEA 等成熟实现）。
