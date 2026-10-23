@@ -220,7 +220,7 @@ export async function activate(
 		...registerGitCliCommands(service, branchesTree, logTree),
 		...registerPartialCommands(service, registry),
 		...registerAdvancedCommands(service, branchesTree),
-		...registerRemoteCommands(service, branchesTree, logTree),
+		...registerRemoteCommands(service, branchesTree, logTree, branchesView),
 		...registerMergeCommands(service),
 		// 窗口 reload 后 rebase/merge 面板恢复（retainContextWhenHidden 仅保活不跨 reload，serializer 补齐）。
 		RebaseWebview.registerSerializer(service),

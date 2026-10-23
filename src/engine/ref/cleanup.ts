@@ -83,6 +83,12 @@ export function truncateNames(names: readonly string[], max = 8): string {
 	return `${names.slice(0, max).join(', ')} … and ${names.length - max} more`;
 }
 
+/** 失败原因折叠为单行（换行→'; '）并截断，避免通知气泡过长（单一事实源，勿在各结果格式化器内复制）。 */
+export function collapseReason(reason: string, max = 160): string {
+	const line = reason.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).join('; ');
+	return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}
+
 /**
  * 生成批量删除本地分支的确认文案与确认按钮文本（纯逻辑）。
  * 诚实呈现强制删除风险：混合时分栏列出，确保 force 删除不被隐藏。

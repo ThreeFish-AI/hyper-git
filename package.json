@@ -662,6 +662,12 @@
 				"icon": "$(arrow-up)"
 			},
 			{
+				"command": "hyperGit.branchUpdate",
+				"title": "Update Branch",
+				"category": "Hyper Git",
+				"icon": "$(arrow-down)"
+			},
+			{
 				"command": "hyperGit.resolveConflicts",
 				"title": "Resolve Conflicts (3-way Merge Editor)…",
 				"category": "Hyper Git",
@@ -972,7 +978,7 @@
 					"group": "navigation@2"
 				},
 				{
-					"command": "hyperGit.pull",
+					"command": "hyperGit.branchUpdate",
 					"when": "view == hyperGit.branches",
 					"group": "navigation@3"
 				},
@@ -1107,6 +1113,11 @@
 					"command": "hyperGit.checkoutAsNew",
 					"when": "view == hyperGit.branches && viewItem =~ /^(hyperGit.branch|hyperGit.remoteBranch)$/ && !listMultiSelection",
 					"group": "1_branch@1.5"
+				},
+				{
+					"command": "hyperGit.branchUpdate",
+					"when": "view == hyperGit.branches && viewItem == hyperGit.branch",
+					"group": "1_branch@1.7"
 				},
 				{
 					"command": "hyperGit.compareWithCurrent",
@@ -1447,6 +1458,10 @@
 				},
 				{
 					"command": "hyperGit.pushBranch",
+					"when": "false"
+				},
+				{
+					"command": "hyperGit.branchUpdate",
 					"when": "false"
 				}
 			]

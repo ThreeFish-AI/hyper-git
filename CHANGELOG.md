@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Branches 视图分支就地更新（不 checkout）**：右键单个分支 **Update Branch**、多选批量更新、标题栏 Pull 按钮升级为选区感知（无选区保持原 Pull 语义，Commit 视图 Pull 不受影响）。底层原语 `git fetch <remote> refs/heads/<upstream>:refs/heads/<branch>`——git 原生 fast-forward-only，diverged / ahead-only 分支被安全拒绝（附真实 stderr 原因），**永不改写本地提交**（src 侧全限定防 `+` 前缀上游名被解析为 force）；当前分支自动改走 `repo.pull()`（含冲突处理通道）；无上游分支透明跳过；无 remote 配置提示 `No remote repository configured` 提前返回（不误报 no upstream）。五桶对账汇总（updated / already up to date / pulled / skipped / failed，选中数 = 各桶之和），up-to-date 经前后 `objectname` 短 sha 前缀比对判定（fetch 静默 no-op 无输出；缩写长度随对象数伸缩，全等比对会误报）。upstream 解析不信任树节点数据（API 路径 `refToRaw` 不填 upstream/head），统一以一次 `for-each-ref` 取新鲜快照；`origin/x` 拆分复用 `resolveRemoteBranch` 最长前缀匹配（remote 名可含 `/`）。engine 纯逻辑 `planBranchUpdates` / `formatBranchUpdateResult` / `classifyFetchOutcome` 落于 `engine/ref/branch-update.ts`，全量单测覆盖。
+
 ### Fixed
 
 - **Graph 视图过滤条件不再随重启 / 切库丢失（全部 7 个维度按仓库持久化）**：authors、File Path、Grep、Merge Mode、Date Filter、Message Regex 此前仅存于内存，重启 VS Code 或切换仓库后即被清空。现在沿用 scope/dmode 的按仓库 workspaceState 范式持久化——authors 独立 key（`hyperGit.log.authors:<repoRoot>`），其余 6 维组合 key（`hyperGit.log.filter:<repoRoot>`，单 key 原子读写防半恢复态，dateFrom/dateTo 经 ISO 串往返），重启与切库往返后自动恢复为上次设置；重开「Filter by Author…」即预勾选已选 exact 作者并继续增删（pattern 项不参与预勾选、重开后不可见，确认新选择会将其移除）；空选确认与 Clear Filter 的「清除」同样持久化，重启不复活；脏持久化数据经 engine 纯函数逐字段校验免疫。**附带行为变更**：① SCM 变更列表右键「Show History」由整替过滤器改为与其余过滤命令一致的增量式——文件历史现与活跃过滤相交，而非静默清空后者（M3 期遗留不一致）；② 任何过滤对话框（Filter Graph 聚合入口 / Author / Path / Grep / Merge Mode / Date / Message Regex）或 Commit 文件右键菜单打开期间发生切库后确认，不再把旧仓库语境的选择误写新仓库（rootAtStart 切库守卫全覆盖）；③ issue #107 的「切库清空 host 级过滤」限制消除——每个仓库记忆自己的完整过滤条件；④ Filter by Path 选中当前仓库外的文件（多根工作区选他仓文件 / 单仓导航到仓外）时以告警拒绝，不再落入 `../…` 垃圾 path 过滤——该垃圾 path 会随持久化成为跨重启的图加载 fatal 错误态。
