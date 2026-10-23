@@ -16,6 +16,7 @@ vi.mock('vscode', () => ({
 		executeCommand: vi.fn(() => Promise.resolve()),
 	},
 	window: {
+		showOpenDialog: vi.fn(),
 		createQuickPick: () => {
 			const qp = {
 				canSelectMany: false,
@@ -52,6 +53,7 @@ vi.mock('vscode', () => ({
 	},
 }));
 
+import * as vscode from 'vscode';
 import type { Memento } from 'vscode';
 import type { ChangeItem, GitRepositoryService } from '../../src/adapter/git-repository-service';
 import type { GitHubCiService } from '../../src/adapter/ci/github-ci-service';
@@ -96,6 +98,10 @@ function makeService(root: string | null) {
 	const service = {
 		repoRoot: root,
 		execGit: async () => '',
+		/** repo 跟随 repoRoot（logFilterPath 以 repo.rootUri 求相对路径）。 */
+		get repo(): { rootUri: { fsPath: string } } | undefined {
+			return this.repoRoot ? { rootUri: { fsPath: this.repoRoot } } : undefined;
+		},
 		onDidChange: changed.event,
 		onDidChangeRepository: repoChanged.event,
 		fireRepoChange(next: string | null): void {
@@ -135,7 +141,18 @@ function makeWiring(root: string, memento: MemMemento) {
 		h.qp!.selectedItems = [...items];
 		h.qpListeners.get('accept')!();
 	};
-	return { provider, service, openPicker, showHistory, accept };
+	/** 触发 logFilterPath：对话框挂起期间可注入事件（切库），再以所选文件路径放行。 */
+	const filterPathWithDialog = (fsPath: string, during?: () => void) => {
+		let resolveDialog!: (v: unknown) => void;
+		vi.mocked(vscode.window.showOpenDialog).mockImplementationOnce(
+			() => new Promise((r) => { resolveDialog = r; }),
+		);
+		const p = (h.handlers.get('hyperGit.logFilterPath') as () => Promise<void>)();
+		during?.();
+		resolveDialog([{ fsPath }]);
+		return p;
+	};
+	return { provider, service, openPicker, showHistory, accept, filterPathWithDialog };
 }
 
 describe('history-commands 过滤 wiring（真实 Provider 持久化链路）', () => {
@@ -172,6 +189,27 @@ describe('history-commands 过滤 wiring（真实 Provider 持久化链路）', 
 		accept([{ term: FISH }]);
 		expect(provider.getFilter()).toEqual({ authors: [BOB] });
 		expect(memento.get('hyperGit.log.authors:/repo-b')).toBe(JSON.stringify([BOB]));
+		provider.dispose();
+	});
+
+	it('logFilterPath 正常路径：所选文件按当前仓库求相对路径，增量叠加不覆盖 authors', async () => {
+		const memento = new MemMemento();
+		memento.update('hyperGit.log.authors:/repo-a', JSON.stringify([FISH]));
+		const { provider, filterPathWithDialog } = makeWiring('/repo-a', memento);
+
+		await filterPathWithDialog('/repo-a/src/a.ts');
+		expect(provider.getFilter()).toEqual({ authors: [FISH], path: 'src/a.ts' });
+		provider.dispose();
+	});
+
+	it('logFilterPath 切库守卫：对话框期间切库，不再按新仓库 root 求出跨仓库垃圾 path', async () => {
+		const memento = new MemMemento();
+		memento.update('hyperGit.log.authors:/repo-b', JSON.stringify([BOB]));
+		const { provider, service, filterPathWithDialog } = makeWiring('/repo-a', memento);
+
+		await filterPathWithDialog('/repo-a/src/a.ts', () => service.fireRepoChange('/repo-b'));
+		// 无守卫时：path.relative('/repo-b', '/repo-a/src/a.ts') = '../repo-a/src/a.ts'（垃圾过滤）。
+		expect(provider.getFilter()).toEqual({ authors: [BOB] });
 		provider.dispose();
 	});
 });

@@ -36,9 +36,12 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterPath', async () => {
+			// 切库竞态守卫（pickAuthors rootAtStart 同范式）：对话框 await 期间切库时，所选文件
+			// 会按切换后的仓库 root 求相对路径，得到跨仓库垃圾 path 过滤 → 仓库已变即放弃。
+			const rootAtStart = service.repoRoot;
 			const uri = await vscode.window.showOpenDialog({ canSelectMany: false });
 			const repo = service.repo;
-			if (uri?.[0] && repo) {
+			if (uri?.[0] && repo && service.repoRoot === rootAtStart) {
 				const rel = path.relative(repo.rootUri.fsPath, uri[0].fsPath).split(path.sep).join('/');
 				const f = logTree.getFilter();
 				logTree.setFilter({ ...f, path: rel });

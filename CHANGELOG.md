@@ -8,7 +8,7 @@
 
 ### Fixed
 
-- **Graph 视图「Filter by Author…」选择不再随重启丢失（按仓库持久化）**：authors 过滤此前仅存于内存，重启 VS Code 或切换仓库后即被清空。现在沿用 scope/dmode 的按仓库 workspaceState 范式持久化（`hyperGit.log.authors:<repoRoot>`），重启与切库往返后自动恢复为上次设置；重开选择器即可见已勾选清单并继续增删；空选确认与 Clear Filter 的「清除」同样持久化，重启不复活。脏持久化数据经 `parsePersistedAuthors` 元素级校验免疫（engine 纯函数，全量单测）。**附带行为变更**：SCM 变更列表右键「Show History」由整替过滤器改为与其余过滤命令一致的增量式——文件历史现与活跃的作者过滤相交，而非静默清空后者（M3 期遗留不一致，亦是持久化被破坏的唯一硬冲突点）。
+- **Graph 视图「Filter by Author…」选择不再随重启丢失（按仓库持久化）**：authors 过滤此前仅存于内存，重启 VS Code 或切换仓库后即被清空。现在沿用 scope/dmode 的按仓库 workspaceState 范式持久化（`hyperGit.log.authors:<repoRoot>`），重启与切库往返后自动恢复为上次设置；重开选择器即可见已勾选清单并继续增删；空选确认与 Clear Filter 的「清除」同样持久化，重启不复活。脏持久化数据经 `parsePersistedAuthors` 元素级校验免疫（engine 纯函数，全量单测）。**附带行为变更**：SCM 变更列表右键「Show History」由整替过滤器改为与其余过滤命令一致的增量式——文件历史现与活跃的作者过滤相交，而非静默清空后者（M3 期遗留不一致，亦是持久化被破坏的唯一硬冲突点）。另：选择器或「Filter by Path…」对话框打开期间发生切库后确认，不再把旧仓库语境的选择误写新仓库（同构 rootAtStart 切库守卫）。
 
 ## [0.0.21] - 2026-10-23 — Filter by Author 候选建议 · 多选过滤 · 元字符作者修复
 
