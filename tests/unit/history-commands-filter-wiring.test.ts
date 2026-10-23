@@ -17,6 +17,8 @@ vi.mock('vscode', () => ({
 	},
 	window: {
 		showOpenDialog: vi.fn(),
+		showInputBox: vi.fn(),
+		showQuickPick: vi.fn(),
 		createQuickPick: () => {
 			const qp = {
 				canSelectMany: false,
@@ -60,6 +62,8 @@ import type { GitHubCiService } from '../../src/adapter/ci/github-ci-service';
 import type { AuthorTerm } from '../../src/engine/log/log-filter';
 import { LogWebviewProvider } from '../../src/adapter/webview/log-webview';
 import { registerHistoryCommands } from '../../src/adapter/history-commands';
+import { CommitWebviewProvider } from '../../src/adapter/webview/commit-webview';
+import { parsePersistedFilter } from '../../src/engine/log/log-filter';
 
 /** 内存 Memento（对齐 workspaceState 语义：update(key, undefined) 即删除条目）。 */
 class MemMemento {
@@ -155,6 +159,36 @@ function makeWiring(root: string, memento: MemMemento) {
 	return { provider, service, openPicker, showHistory, accept, filterPathWithDialog };
 }
 
+/** 触发任一「对话框型」命令/流程：对话框挂起期间可注入事件（切库），再以所选值放行。 */
+function withPendingDialog(
+	mockFn: { mockImplementationOnce: (impl: () => Promise<unknown>) => void },
+	resolveValue: unknown,
+	run: () => Promise<void>,
+	during?: () => void,
+): Promise<void> {
+	let resolveDialog!: (v: unknown) => void;
+	mockFn.mockImplementationOnce(() => new Promise((r) => { resolveDialog = r; }));
+	const p = run();
+	during?.();
+	resolveDialog(resolveValue);
+	return p;
+}
+
+/** commit 文件右键菜单（handleFileMenu 直调，绕过 webview 消息层）：getChanges 返回单个文件。 */
+function makeCommitMenu(root: string) {
+	const service = makeService(root);
+	(service as unknown as { getChanges: () => unknown[] }).getChanges = () => [{ relativePath: 'src/a.ts' }];
+	const provider = new CommitWebviewProvider(
+		service as unknown as GitRepositoryService,
+		{} as never,
+		{} as never,
+		new MemMemento() as unknown as Memento,
+	);
+	const menu = (path: string) =>
+		(provider as unknown as { handleFileMenu: (p: string) => Promise<void> }).handleFileMenu(path);
+	return { provider, service, menu };
+}
+
 describe('history-commands 过滤 wiring（真实 Provider 持久化链路）', () => {
 	it('showHistory 增量式：保留持久化 authors 并叠加 path，不删 memento key', async () => {
 		const memento = new MemMemento();
@@ -202,6 +236,19 @@ describe('history-commands 过滤 wiring（真实 Provider 持久化链路）', 
 		provider.dispose();
 	});
 
+	it('重启往返后 showHistory 增量叠加：恢复的完整持久过滤（authors + grep）再叠 path', async () => {
+		const memento = new MemMemento();
+		memento.update('hyperGit.log.authors:/repo-a', JSON.stringify([FISH]));
+		memento.update('hyperGit.log.filter:/repo-a', JSON.stringify({ grep: 'fix' }));
+		const { provider, showHistory } = makeWiring('/repo-a', memento);
+
+		await showHistory('src/a.ts');
+		expect(provider.getFilter()).toEqual({ authors: [FISH], grep: 'fix', path: 'src/a.ts' });
+		// path 随组合 key 一并持久化，重启后完整过滤存活
+		expect(parsePersistedFilter(memento.get('hyperGit.log.filter:/repo-a'))).toEqual({ grep: 'fix', path: 'src/a.ts' });
+		provider.dispose();
+	});
+
 	it('logFilterPath 切库守卫：对话框期间切库，不再按新仓库 root 求出跨仓库垃圾 path', async () => {
 		const memento = new MemMemento();
 		memento.update('hyperGit.log.authors:/repo-b', JSON.stringify([BOB]));
@@ -210,6 +257,75 @@ describe('history-commands 过滤 wiring（真实 Provider 持久化链路）', 
 		await filterPathWithDialog('/repo-a/src/a.ts', () => service.fireRepoChange('/repo-b'));
 		// 无守卫时：path.relative('/repo-b', '/repo-a/src/a.ts') = '../repo-a/src/a.ts'（垃圾过滤）。
 		expect(provider.getFilter()).toEqual({ authors: [BOB] });
+		provider.dispose();
+	});
+
+	it('grep 正常路径：确认输入（含 trim）写入 filter 与组合 key', async () => {
+		const memento = new MemMemento();
+		const { provider } = makeWiring('/repo-a', memento);
+		const grep = h.handlers.get('hyperGit.logFilterGrep') as () => Promise<void>;
+
+		await withPendingDialog(vi.mocked(vscode.window.showInputBox), ' fix ', grep);
+		expect(provider.getFilter()).toEqual({ grep: 'fix' });
+		expect(parsePersistedFilter(memento.get('hyperGit.log.filter:/repo-a'))).toEqual({ grep: 'fix' });
+		provider.dispose();
+	});
+
+	it('grep 切库守卫：输入框期间切库，确认不再把旧仓库输入写入新仓库持久化 key', async () => {
+		const memento = new MemMemento();
+		memento.update('hyperGit.log.authors:/repo-b', JSON.stringify([BOB]));
+		const { provider, service } = makeWiring('/repo-a', memento);
+		const grep = h.handlers.get('hyperGit.logFilterGrep') as () => Promise<void>;
+
+		await withPendingDialog(vi.mocked(vscode.window.showInputBox), 'fix', grep, () => service.fireRepoChange('/repo-b'));
+		expect(provider.getFilter()).toEqual({ authors: [BOB] });
+		expect(memento.get('hyperGit.log.filter:/repo-b')).toBeUndefined();
+		provider.dispose();
+	});
+
+	it('mergeMode 切库守卫：选择器期间切库，确认不写入任何仓库的持久化 key', async () => {
+		const memento = new MemMemento();
+		const { provider, service } = makeWiring('/repo-a', memento);
+		const mergeMode = h.handlers.get('hyperGit.logFilterMergeMode') as () => Promise<void>;
+
+		await withPendingDialog(
+			vi.mocked(vscode.window.showQuickPick),
+			{ label: 'Merge Commits Only', mode: 'merge-only' },
+			mergeMode,
+			() => service.fireRepoChange('/repo-b'),
+		);
+		expect(provider.getFilter()).toEqual({});
+		expect(memento.get('hyperGit.log.filter:/repo-a')).toBeUndefined();
+		expect(memento.get('hyperGit.log.filter:/repo-b')).toBeUndefined();
+		provider.dispose();
+	});
+
+	it('commit 文件菜单切库守卫：菜单期间切库，不派发携带旧仓库 relativePath 的动作', async () => {
+		const exec = vi.mocked(vscode.commands.executeCommand);
+		exec.mockClear();
+		const { provider, service, menu } = makeCommitMenu('/repo-a');
+
+		await withPendingDialog(
+			vi.mocked(vscode.window.showQuickPick),
+			{ label: '$(history) Show History', command: 'hyperGit.showHistory' },
+			() => menu('src/a.ts'),
+			() => service.fireRepoChange('/repo-b'),
+		);
+		expect(exec).not.toHaveBeenCalledWith('hyperGit.showHistory', expect.anything());
+		provider.dispose();
+	});
+
+	it('commit 文件菜单正常路径：确认后以原 change 派发所选命令', async () => {
+		const exec = vi.mocked(vscode.commands.executeCommand);
+		exec.mockClear();
+		const { provider, menu } = makeCommitMenu('/repo-a');
+
+		await withPendingDialog(
+			vi.mocked(vscode.window.showQuickPick),
+			{ label: '$(history) Show History', command: 'hyperGit.showHistory' },
+			() => menu('src/a.ts'),
+		);
+		expect(exec).toHaveBeenCalledWith('hyperGit.showHistory', { relativePath: 'src/a.ts' });
 		provider.dispose();
 	});
 });

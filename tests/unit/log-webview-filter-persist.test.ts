@@ -10,6 +10,7 @@ import type { GitRepositoryService } from '../../src/adapter/git-repository-serv
 import type { GitHubCiService } from '../../src/adapter/ci/github-ci-service';
 import type { AuthorTerm } from '../../src/engine/log/log-filter';
 import { LogWebviewProvider } from '../../src/adapter/webview/log-webview';
+import { parsePersistedFilter, type LogFilter } from '../../src/engine/log/log-filter';
 
 /** 内存 Memento（模拟 workspaceState 持久化往返；update(key, undefined) 即删除条目，对齐 Memento 语义）。 */
 class MemMemento {
@@ -90,7 +91,7 @@ describe('LogWebviewProvider authors 持久化', () => {
 		provider.dispose();
 
 		const { provider: revived } = makeProvider('/repo-a', memento);
-		expect(revived.getFilter()).toEqual({ authors: AUTHORS });
+		expect(revived.getFilter()).toEqual({ authors: AUTHORS, grep: 'x' });
 		revived.dispose();
 	});
 
@@ -116,7 +117,7 @@ describe('LogWebviewProvider authors 持久化', () => {
 		provider.dispose();
 	});
 
-	it('切库重绑：非持久维度清空，authors 恢复新仓库持久值', () => {
+	it('切库重绑：恢复新仓库完整持久过滤（authors + 非 authors 维度各自记忆）', () => {
 		const memento = new MemMemento();
 		memento.update('hyperGit.log.authors:/repo-b', JSON.stringify([{ kind: 'exact', name: 'B', email: 'b@x.com' }]));
 		const { provider, service } = makeProvider('/repo-a', memento);
@@ -125,9 +126,9 @@ describe('LogWebviewProvider authors 持久化', () => {
 		service.fireRepoChange('/repo-b');
 		expect(provider.getFilter()).toEqual({ authors: [{ kind: 'exact', name: 'B', email: 'b@x.com' }] });
 
-		// 往返切回 A：恢复 A 的 authors
+		// 往返切回 A：恢复 A 的 authors 与 grep（各自 key 均按仓库存活）
 		service.fireRepoChange('/repo-a');
-		expect(provider.getFilter()).toEqual({ authors: AUTHORS });
+		expect(provider.getFilter()).toEqual({ authors: AUTHORS, grep: 'stale' });
 		provider.dispose();
 	});
 
@@ -136,6 +137,66 @@ describe('LogWebviewProvider authors 持久化', () => {
 		const { provider } = makeProvider(null, memento);
 		provider.setFilter({ authors: AUTHORS });
 		expect(memento.get('hyperGit.log.authors:null')).toBeUndefined();
+		expect(provider.getFilter()).toEqual({ authors: AUTHORS });
+		provider.dispose();
+	});
+});
+
+describe('LogWebviewProvider 非 authors 过滤维度持久化', () => {
+	const DIMS: LogFilter = {
+		path: 'src/a.ts',
+		grep: 'fix',
+		mergeMode: 'no-merge',
+		dateFrom: new Date('2026-01-02T03:04:05.000Z'),
+		messageRegex: '^feat:',
+	};
+
+	it('setFilter 全维度持久化往返：同 memento 重建 provider 恢复（Date 经 ISO 往返）', () => {
+		const memento = new MemMemento();
+		const { provider } = makeProvider('/repo-a', memento);
+		provider.setFilter(DIMS);
+		expect(memento.get('hyperGit.log.filter:/repo-a')).toBeDefined();
+		provider.dispose();
+
+		const { provider: revived } = makeProvider('/repo-a', memento);
+		expect(revived.getFilter()).toEqual(DIMS);
+		revived.dispose();
+	});
+
+	it('清除维度只删组合 key 中对应内容，authors key 独立存活', () => {
+		const memento = new MemMemento();
+		const { provider } = makeProvider('/repo-a', memento);
+		provider.setFilter({ ...DIMS, authors: AUTHORS });
+		// 空选确认（清 grep）：组合 key 仅剩其余维度，authors key 不动
+		provider.setFilter({ ...provider.getFilter(), grep: undefined });
+		expect(memento.get('hyperGit.log.authors:/repo-a')).toBe(JSON.stringify(AUTHORS));
+		const revived0 = parsePersistedFilter(memento.get<string>('hyperGit.log.filter:/repo-a'));
+		expect(revived0).toEqual({ path: DIMS.path, mergeMode: DIMS.mergeMode, dateFrom: DIMS.dateFrom, messageRegex: DIMS.messageRegex });
+
+		// clearFilter：两 key 全删
+		provider.clearFilter();
+		expect(memento.get('hyperGit.log.filter:/repo-a')).toBeUndefined();
+		expect(memento.get('hyperGit.log.authors:/repo-a')).toBeUndefined();
+		provider.dispose();
+	});
+
+	it('切库恢复新仓库组合 key，与 authors 合并', () => {
+		const memento = new MemMemento();
+		memento.update('hyperGit.log.filter:/repo-b', JSON.stringify({ grep: 'bot', mergeMode: 'merge-only' }));
+		memento.update('hyperGit.log.authors:/repo-b', JSON.stringify(AUTHORS));
+		const { provider, service } = makeProvider('/repo-a', memento);
+		provider.setFilter({ path: 'old.ts' });
+
+		service.fireRepoChange('/repo-b');
+		expect(provider.getFilter()).toEqual({ grep: 'bot', mergeMode: 'merge-only', authors: AUTHORS });
+		provider.dispose();
+	});
+
+	it('脏组合数据免疫：视为未设置，不崩溃', () => {
+		const memento = new MemMemento();
+		memento.update('hyperGit.log.filter:/repo-a', 'not-json');
+		memento.update('hyperGit.log.authors:/repo-a', JSON.stringify(AUTHORS));
+		const { provider } = makeProvider('/repo-a', memento);
 		expect(provider.getFilter()).toEqual({ authors: AUTHORS });
 		provider.dispose();
 	});

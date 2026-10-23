@@ -4,9 +4,12 @@ import {
 	applyClientFilters,
 	isCheckpointSubject,
 	parsePersistedAuthors,
+	parsePersistedFilter,
 	safeRegex,
+	serializePersistableFilter,
 	type FilterableCommit,
 	type LogClientFilter,
+	type LogFilter,
 } from '../../src/engine/log/log-filter';
 
 const D = (iso: string): Date => new Date(iso);
@@ -162,5 +165,53 @@ describe('parsePersistedAuthors', () => {
 	it('全脏 / 空数组返回 undefined（与「空选 = 不过滤」规范化一致）', () => {
 		expect(parsePersistedAuthors(JSON.stringify([{ kind: 'nope' }]))).toBeUndefined();
 		expect(parsePersistedAuthors('[]')).toBeUndefined();
+	});
+});
+
+describe('serializePersistableFilter / parsePersistedFilter', () => {
+	const FULL: LogFilter = {
+		path: 'src/a.ts',
+		grep: 'fix',
+		mergeMode: 'no-merge',
+		dateFrom: new Date('2026-01-02T03:04:05.000Z'),
+		dateTo: new Date('2026-02-03T00:00:00.000Z'),
+		messageRegex: '^feat:',
+	};
+
+	it('全维度 round-trip（Date 经 ISO 串往返）', () => {
+		expect(parsePersistedFilter(serializePersistableFilter(FULL))).toEqual(FULL);
+	});
+
+	it('归一化：空对象、空串、mergeMode all、undefined 入参均不落盘', () => {
+		expect(serializePersistableFilter({})).toBeUndefined();
+		expect(serializePersistableFilter(undefined)).toBeUndefined();
+		expect(serializePersistableFilter({ path: '', grep: undefined, mergeMode: 'all' })).toBeUndefined();
+	});
+
+	it('authors 不属本层：序列化忽略', () => {
+		expect(serializePersistableFilter({ authors: [{ kind: 'pattern', pattern: 'x' }] })).toBeUndefined();
+	});
+
+	it('非字符串 / 非法 JSON / 非对象返回 undefined', () => {
+		expect(parsePersistedFilter(undefined)).toBeUndefined();
+		expect(parsePersistedFilter(42)).toBeUndefined();
+		expect(parsePersistedFilter('not-json')).toBeUndefined();
+		expect(parsePersistedFilter('[]')).toBeUndefined();
+	});
+
+	it('逐字段剔除脏项，仅留合法维度', () => {
+		const raw = JSON.stringify({
+			path: 'ok.ts',
+			grep: '',
+			mergeMode: 'bogus',
+			dateFrom: 'not-a-date',
+			dateTo: '2026-02-03T00:00:00.000Z',
+			messageRegex: 7,
+		});
+		expect(parsePersistedFilter(raw)).toEqual({ path: 'ok.ts', dateTo: new Date('2026-02-03T00:00:00.000Z') });
+	});
+
+	it('全脏返回 undefined', () => {
+		expect(parsePersistedFilter(JSON.stringify({ grep: '', mergeMode: 'x', dateFrom: 'oops' }))).toBeUndefined();
 	});
 });

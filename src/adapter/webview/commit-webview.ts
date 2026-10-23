@@ -170,8 +170,11 @@ export class CommitWebviewProvider implements vscode.WebviewViewProvider, vscode
 			{ label: '$(diff-ignored) Add to .gitignore', command: 'hyperGit.ignorePath' },
 			{ label: '$(discard) Discard Changes', command: 'hyperGit.discardChanges' },
 		];
+		// 切库守卫（rootAtStart 范式）：菜单 await 期间切库时 change 属旧仓库语境（showHistory 的
+		// path 随持久化落盘会污染新仓库），任何动作都放弃派发。
+		const rootAtStart = this.service.repoRoot;
 		const pick = await vscode.window.showQuickPick(actions.slice(), { placeHolder: relativePath });
-		if (!pick) {
+		if (!pick || this.service.repoRoot !== rootAtStart) {
 			return;
 		}
 		await vscode.commands.executeCommand(pick.command, change);

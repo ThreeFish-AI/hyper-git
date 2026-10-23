@@ -683,7 +683,13 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterGrep', async () => {
+			// 切库竞态守卫（logFilterPath/settle 同范式，grep/mergeMode/date/regex 四命令同）：
+			// 对话框 await 期间切库即放弃，防旧仓库输入经 persistFilter 误写新仓库持久化 key。
+			const rootAtStart = service.repoRoot;
 			const grep = await vscode.window.showInputBox({ prompt: 'Filter by message text/regex (--grep)', placeHolder: 'e.g. fix|bug' });
+			if (service.repoRoot !== rootAtStart) {
+				return;
+			}
 			const f = logTree.getFilter();
 			logTree.setFilter({ ...f, grep: grep && grep.trim() ? grep.trim() : undefined });
 		}),
@@ -691,6 +697,7 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterMergeMode', async () => {
+			const rootAtStart = service.repoRoot;
 			const pick = await vscode.window.showQuickPick(
 				[
 					{ label: 'All Commits', mode: 'all' as MergeMode },
@@ -699,7 +706,7 @@ export function registerHistoryCommands(
 				],
 				{ placeHolder: 'Merge commit filter mode' },
 			);
-			if (!pick) {
+			if (!pick || service.repoRoot !== rootAtStart) {
 				return;
 			}
 			const f = logTree.getFilter();
@@ -709,6 +716,7 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterDate', async () => {
+			const rootAtStart = service.repoRoot;
 			const now = Date.now();
 			const pick = await vscode.window.showQuickPick(
 				[
@@ -719,7 +727,7 @@ export function registerHistoryCommands(
 				],
 				{ placeHolder: 'Commit date range' },
 			);
-			if (!pick) {
+			if (!pick || service.repoRoot !== rootAtStart) {
 				return;
 			}
 			const f = logTree.getFilter();
@@ -729,7 +737,11 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterRegex', async () => {
+			const rootAtStart = service.repoRoot;
 			const re = await vscode.window.showInputBox({ prompt: 'Filter by message regex (client-side)', placeHolder: 'e.g. ^feat:' });
+			if (service.repoRoot !== rootAtStart) {
+				return;
+			}
 			const f = logTree.getFilter();
 			logTree.setFilter({ ...f, messageRegex: re && re.trim() ? re.trim() : undefined });
 		}),
