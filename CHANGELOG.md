@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-10-23 — Filter by Author 候选建议 · 多选过滤 · 元字符作者修复
+
+### Added
+
+- **「Filter by Author…」升级为作者候选建议 + 多选过滤**：候选经 `git shortlog -sne` 按当前 Graph 视图 scope 取数（按提交数降序、姓名/邮箱均可模糊匹配），输入前缀（如 `Thr`）即在下拉中建议对应提交者，勾选即选、无需完整手输；依次勾选多个提交者翻译为多条 `--author`（git 取 OR）直接过滤 Graph 视图，空选确认 = 清除该维度、Esc = 取消不变。输入不等于任何作者姓名时动态插入「Use pattern」逃生口（原样正则透传），完整保留旧 InputBox 的任意 pattern 能力。engine 侧 `LogFilter.author` 单值改为 `authors: AuthorTerm[]`（exact 身份 / pattern 正则 tagged union，单一字段单一事实源）；`scopeRefs` 提取为 scope → 引用范围参数的单一事实源（Graph 取数与作者候选共享）；adapter 侧为仓库首个 `createQuickPick` 动态用法（busy 取数、勾选自维护回写、settle 幂等守卫、切库竞态守卫、空仓库降级）。新增 `engine/log/author-suggest.ts`（shortlog 取数参数 + 容错解析，current scope 显式 `HEAD` 防 stdin 挂起）。
+
+### Fixed
+
+- **作者名含正则元字符时过滤 0 命中**：`git log --author` 缺省 POSIX BRE（非 ERE），旧实现把手输作者名原样作为正则传递——`dependabot[bot]` 中的 `[bot]` 被解释为字符类，匹配 0 条（本仓库实测：不转义 0 命中）。现在从候选列表选中的作者身份按 BRE 语义转义（仅 `\ . [ * ^ $`；`+ ? | ( ) {` 在 BRE 中是普通字符，加反斜杠反成操作符）并锚定全行 `^Name <email>$`（同名异邮箱不混淆）。
+
+
 ## [0.0.20] - 2026-10-17 — Delete Remote Branch 陈旧远程分支修复 · 删除失败可诊断
 
 ### Fixed
