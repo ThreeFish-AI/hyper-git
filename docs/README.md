@@ -16,7 +16,7 @@
 - [分支就地更新](./features/branches-update-in-place.md) — Branches 视图不 checkout 更新本地分支（fetch refspec 原生 fast-forward-only）：右键 / 多选批量 / 标题栏选区感知三入口。
 
 ## 发布说明
-- [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.21 Filter by Author 候选建议 · 多选过滤 · 元字符作者修复](./releases/v0.0.21.md)。
+- [Release Notes 目录](./releases/README.md) — 各正式版发布说明（GitHub Release 正文单一事实源）；最新：[v0.0.22 Graph 过滤持久化与激活指示 · Branches 就地更新 · 开发依赖升级](./releases/v0.0.22.md)。
 
 ## 调研报告（循证依据）
 - [02 · VS Code SCM API 与 vscode.git 集成路径](./research/02-vscode-scm-integration.md) — 路径 B 决策依据、SCM 稳定/proposed API 边界、changelist 模型映射。
