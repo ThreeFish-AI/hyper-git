@@ -33,6 +33,134 @@ export type AuthorTerm =
 	| { readonly kind: 'exact'; readonly name: string; readonly email: string }
 	| { readonly kind: 'pattern'; readonly pattern: string };
 
+/** 元素级合法性判定（持久化 salvage 用）：exact 项要求 name/email 均为非空串，pattern 项要求非空 pattern。 */
+function isAuthorTerm(x: unknown): x is AuthorTerm {
+	if (typeof x !== 'object' || x === null) {
+		return false;
+	}
+	const t = x as Record<string, unknown>;
+	if (t.kind === 'exact') {
+		return typeof t.name === 'string' && t.name.length > 0 && typeof t.email === 'string' && t.email.length > 0;
+	}
+	return t.kind === 'pattern' && typeof t.pattern === 'string' && t.pattern.length > 0;
+}
+
+/**
+ * 解析持久化的 authors 过滤（memento JSON 串 → {@link AuthorTerm} 列表）：
+ * 非字符串 / 非法 JSON / 非数组返回 undefined；元素级剔除脏项（kind 未知或缺字段），
+ * 剔除后为空亦返回 undefined（与「空选 = 不过滤」的规范化一致）。脏数据免疫，永不抛异常。
+ */
+export function parsePersistedAuthors(raw: unknown): readonly AuthorTerm[] | undefined {
+	if (typeof raw !== 'string' || raw.length === 0) {
+		return undefined;
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return undefined;
+	}
+	if (!Array.isArray(parsed)) {
+		return undefined;
+	}
+	const terms = parsed.filter(isAuthorTerm);
+	return terms.length ? terms : undefined;
+}
+
+/** 非空字符串维度（空串规约为未设置）。 */
+function nonEmptyString(x: unknown): string | undefined {
+	return typeof x === 'string' && x.length > 0 ? x : undefined;
+}
+
+/** ISO 串 → 合法 Date（非串 / 空 / 不可解析返回 undefined）。 */
+function validDate(x: unknown): Date | undefined {
+	if (typeof x !== 'string' || x.length === 0) {
+		return undefined;
+	}
+	const d = new Date(x);
+	return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+/**
+ * 非 authors 过滤维度（path/grep/mergeMode/dateFrom/dateTo/messageRegex）的持久化序列化：
+ * 归一化后全空（undefined 维度、空串、mergeMode 'all'）返回 undefined 即删 key；Date 经 ISO 串
+ * 落盘。authors 独立成 key，不属本层（见 {@link parsePersistedAuthors}）。
+ */
+export function serializePersistableFilter(filter: LogFilter | undefined): string | undefined {
+	if (!filter) {
+		return undefined;
+	}
+	const out: { path?: string; grep?: string; mergeMode?: MergeMode; dateFrom?: string; dateTo?: string; messageRegex?: string } = {};
+	if (filter.path) {
+		out.path = filter.path;
+	}
+	if (filter.grep) {
+		out.grep = filter.grep;
+	}
+	if (filter.mergeMode && filter.mergeMode !== 'all') {
+		out.mergeMode = filter.mergeMode;
+	}
+	if (filter.dateFrom) {
+		out.dateFrom = filter.dateFrom.toISOString();
+	}
+	if (filter.dateTo) {
+		out.dateTo = filter.dateTo.toISOString();
+	}
+	if (filter.messageRegex) {
+		out.messageRegex = filter.messageRegex;
+	}
+	const s = JSON.stringify(out);
+	return s === '{}' ? undefined : s;
+}
+
+/**
+ * 解析持久化的非 authors 过滤维度（{@link serializePersistableFilter} 的逆）：非字符串 / 非法
+ * JSON / 非对象返回 undefined；逐字段校验剔除脏项（字符串非空、mergeMode 合法、日期可解析），
+ * 全空 / 全脏返回 undefined（与「无过滤」规约一致）。脏数据免疫，永不抛异常。
+ */
+export function parsePersistedFilter(raw: unknown): LogFilter | undefined {
+	if (typeof raw !== 'string' || raw.length === 0) {
+		return undefined;
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return undefined;
+	}
+	if (typeof parsed !== 'object' || parsed === null) {
+		return undefined;
+	}
+	const t = parsed as Record<string, unknown>;
+	const path = nonEmptyString(t.path);
+	const grep = nonEmptyString(t.grep);
+	const messageRegex = nonEmptyString(t.messageRegex);
+	const dateFrom = validDate(t.dateFrom);
+	const dateTo = validDate(t.dateTo);
+	const mergeMode = t.mergeMode === 'merge-only' || t.mergeMode === 'no-merge' ? t.mergeMode : undefined;
+	const filter: LogFilter = {
+		...(path ? { path } : {}),
+		...(grep ? { grep } : {}),
+		...(mergeMode ? { mergeMode } : {}),
+		...(dateFrom ? { dateFrom } : {}),
+		...(dateTo ? { dateTo } : {}),
+		...(messageRegex ? { messageRegex } : {}),
+	};
+	return Object.keys(filter).length ? filter : undefined;
+}
+
+/**
+ * 判定过滤器是否存在生效维度（authors 非空，或经 {@link serializePersistableFilter} 归一化后
+ * 仍有可持久化维度）——归一化口径与持久化一致（空串 / mergeMode 'all' / 空 authors 均不算生效），
+ * 驱动标题栏过滤图标激活态（hyperGit.log.filterActive context key）。
+ */
+export function hasActiveFilter(filter: LogFilter | undefined): boolean {
+	if (!filter) {
+		return false;
+	}
+	return (filter.authors?.length ?? 0) > 0 || serializePersistableFilter(filter) !== undefined;
+}
+
 /** BRE 特殊字符集：git `--author` 缺省 POSIX BRE（非 ERE），仅 `\ . [ * ^ $` 有特殊义；
  * `+ ? | ( ) {` 在 BRE 中是普通字符，加反斜杠反成量词/分组操作符（实测 `\+` 使含 `+` 的邮箱归零命中），勿扩大转义集。 */
 const BRE_SPECIAL = /[.*[\]^$\\]/g;

@@ -36,10 +36,21 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterPath', async () => {
+			// 切库竞态守卫（pickAuthors rootAtStart 同范式）：对话框 await 期间切库时，所选文件
+			// 会按切换后的仓库 root 求相对路径，得到跨仓库垃圾 path 过滤 → 仓库已变即放弃。
+			const rootAtStart = service.repoRoot;
 			const uri = await vscode.window.showOpenDialog({ canSelectMany: false });
 			const repo = service.repo;
-			if (uri?.[0] && repo) {
+			if (uri?.[0] && repo && service.repoRoot === rootAtStart) {
 				const rel = path.relative(repo.rootUri.fsPath, uri[0].fsPath).split(path.sep).join('/');
+				// 越仓选择（多根他仓文件 / 单仓外导航）同样产出 '../…' 垃圾 path，且随持久化跨重启
+				// 粘性污染（git log fatal）→ 拒绝。按路径段判定：rel 已归一为 '/' 分隔，'..' 或
+				// '../' 前缀才是越仓；'..' 仅作文件名前缀（如 '..drafts/note.md'）是仓内合法文件，勿误杀
+				// （showBlame 的 startsWith('..') 会对后者误杀，属预存差异，不在此处对齐）。
+				if (rel === '..' || rel.startsWith('../') || path.isAbsolute(rel)) {
+					void vscode.window.showWarningMessage('This file is outside the current repository; cannot filter by path');
+					return;
+				}
 				const f = logTree.getFilter();
 				logTree.setFilter({ ...f, path: rel });
 			}
@@ -48,24 +59,30 @@ export function registerHistoryCommands(
 
 	subs.push(vscode.commands.registerCommand('hyperGit.logClearFilter', () => logTree.clearFilter()));
 
-	subs.push(
-		vscode.commands.registerCommand('hyperGit.logFilter', async () => {
-			// 过滤器聚合入口：QuickPick 分发到既有 6 个过滤命令（复用 handler，零重复实现）。
-			const items = [
-				{ label: 'Filter by Author…', description: 'commits by author', action: 'hyperGit.logFilterAuthor' },
-				{ label: 'Filter by Path…', description: 'commits touching a path', action: 'hyperGit.logFilterPath' },
-				{ label: 'Filter by Message (grep)…', description: 'substring match', action: 'hyperGit.logFilterGrep' },
-				{ label: 'Filter by Message (regex)…', description: 'regular expression', action: 'hyperGit.logFilterRegex' },
-				{ label: 'Filter Merge Commits…', description: 'show or hide merge commits', action: 'hyperGit.logFilterMergeMode' },
-				{ label: 'Filter by Date…', description: 'commits within recent days', action: 'hyperGit.logFilterDate' },
-				{ label: 'Clear Filter', description: 'remove all active filters', action: 'hyperGit.logClearFilter' },
-			];
-			const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Filter commit log' });
-			if (pick) {
-				await vscode.commands.executeCommand(pick.action);
-			}
-		}),
-	);
+	// 过滤器聚合入口：QuickPick 分发到既有 6 个过滤命令（复用 handler，零重复实现）。
+	// 切库竞态守卫（其余对话框同范式）：await 期间切库即放弃——Clear Filter 项直接执行，
+	// 无守卫会删切换后仓库的持久化 key；过滤子命令也应在新仓库语境下重新发起。
+	// 双命令（logFilter/logFilterOn，detailTree/detailFlat 同范式）：常态与「过滤激活」图标经
+	// hyperGit.log.filterActive context key 互斥呈现——持久化恢复的过滤不再是无声约束。
+	const openFilterPicker = async (): Promise<void> => {
+		const rootAtStart = service.repoRoot;
+		const items = [
+			{ label: 'Filter by Author…', description: 'commits by author', action: 'hyperGit.logFilterAuthor' },
+			{ label: 'Filter by Path…', description: 'commits touching a path', action: 'hyperGit.logFilterPath' },
+			{ label: 'Filter by Message (grep)…', description: 'substring match', action: 'hyperGit.logFilterGrep' },
+			{ label: 'Filter by Message (regex)…', description: 'regular expression', action: 'hyperGit.logFilterRegex' },
+			{ label: 'Filter Merge Commits…', description: 'show or hide merge commits', action: 'hyperGit.logFilterMergeMode' },
+			{ label: 'Filter by Date…', description: 'commits within recent days', action: 'hyperGit.logFilterDate' },
+			{ label: 'Clear Filter', description: 'remove all active filters', action: 'hyperGit.logClearFilter' },
+		];
+		const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Filter commit log' });
+		if (!pick || service.repoRoot !== rootAtStart) {
+			return;
+		}
+		await vscode.commands.executeCommand(pick.action);
+	};
+	subs.push(vscode.commands.registerCommand('hyperGit.logFilter', () => openFilterPicker()));
+	subs.push(vscode.commands.registerCommand('hyperGit.logFilterOn', () => openFilterPicker()));
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.copyCommitHash', (node: LogNode) => {
@@ -79,7 +96,8 @@ export function registerHistoryCommands(
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.showHistory', async (change?: ChangeItem) => {
 			if (change?.relativePath) {
-				logTree.setFilter({ path: change.relativePath });
+				// 增量式与其余过滤命令同构：整替 filter 会静默清掉持久化的 authors（文件历史与作者过滤相交而非重置）。
+				logTree.setFilter({ ...logTree.getFilter(), path: change.relativePath });
 			}
 			await vscode.commands.executeCommand('hyperGit.log.focus');
 		}),
@@ -679,7 +697,13 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterGrep', async () => {
+			// 切库竞态守卫（logFilterPath/settle 同范式，grep/mergeMode/date/regex 四命令同）：
+			// 对话框 await 期间切库即放弃，防旧仓库输入经 persistFilter 误写新仓库持久化 key。
+			const rootAtStart = service.repoRoot;
 			const grep = await vscode.window.showInputBox({ prompt: 'Filter by message text/regex (--grep)', placeHolder: 'e.g. fix|bug' });
+			if (service.repoRoot !== rootAtStart) {
+				return;
+			}
 			const f = logTree.getFilter();
 			logTree.setFilter({ ...f, grep: grep && grep.trim() ? grep.trim() : undefined });
 		}),
@@ -687,6 +711,7 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterMergeMode', async () => {
+			const rootAtStart = service.repoRoot;
 			const pick = await vscode.window.showQuickPick(
 				[
 					{ label: 'All Commits', mode: 'all' as MergeMode },
@@ -695,7 +720,7 @@ export function registerHistoryCommands(
 				],
 				{ placeHolder: 'Merge commit filter mode' },
 			);
-			if (!pick) {
+			if (!pick || service.repoRoot !== rootAtStart) {
 				return;
 			}
 			const f = logTree.getFilter();
@@ -705,6 +730,7 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterDate', async () => {
+			const rootAtStart = service.repoRoot;
 			const now = Date.now();
 			const pick = await vscode.window.showQuickPick(
 				[
@@ -715,7 +741,7 @@ export function registerHistoryCommands(
 				],
 				{ placeHolder: 'Commit date range' },
 			);
-			if (!pick) {
+			if (!pick || service.repoRoot !== rootAtStart) {
 				return;
 			}
 			const f = logTree.getFilter();
@@ -725,7 +751,11 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterRegex', async () => {
+			const rootAtStart = service.repoRoot;
 			const re = await vscode.window.showInputBox({ prompt: 'Filter by message regex (client-side)', placeHolder: 'e.g. ^feat:' });
+			if (service.repoRoot !== rootAtStart) {
+				return;
+			}
 			const f = logTree.getFilter();
 			logTree.setFilter({ ...f, messageRegex: re && re.trim() ? re.trim() : undefined });
 		}),
@@ -757,10 +787,19 @@ async function pickAuthors(service: GitRepositoryService, logTree: LogFilterCont
 	// 勾选自维护：重建 items 会重置 selectedItems，须记录并在重建后回写。
 	// 预勾选仅 exact 项（pattern 项随输入动态生成，无法预置）；重建触发的程序化 selection
 	// 事件与用户点击不可区分，以时间窗抑制（程序化事件在赋值后即刻送达）。
-	let checked = new Set(logTree.getFilter().authors?.filter((t) => t.kind === 'exact').map(key) ?? []);
+	const persistedExact = logTree.getFilter().authors?.filter((t) => t.kind === 'exact') ?? [];
+	let checked = new Set(persistedExact.map(key));
 	let patternOn = false;
 	let suppressUntil = 0;
 	let authors: readonly AuthorStat[] = [];
+	// 候选集外的持久化 exact 作者（scope 已切换 / shortlog 失败降级）以 ghost 项呈现：
+	// selectedItems 只能来自 items，缺项者确认时会被静默丢出持久化 key——ghost 预勾选保留、可取消移除。
+	const ghostItems = (): AuthorPickItem[] => {
+		const present = new Set(authors.map((a) => key(a)));
+		return persistedExact
+			.filter((t) => !present.has(key(t)))
+			.map((t) => ({ label: t.name, description: 'not in current scope', detail: t.email, term: t }));
+	};
 	const rebuild = (value: string): void => {
 		const v = value.trim();
 		const patternItem: AuthorPickItem[] =
@@ -768,7 +807,7 @@ async function pickAuthors(service: GitRepositoryService, logTree: LogFilterCont
 				? [{ label: `Use pattern "${v}"`, alwaysShow: true, description: 'regular expression (OR-ed)', term: { kind: 'pattern', pattern: v } }]
 				: [];
 		suppressUntil = Date.now() + 100;
-		qp.items = [...patternItem, ...baseItems(authors)];
+		qp.items = [...patternItem, ...baseItems(authors), ...ghostItems()];
 		qp.selectedItems = qp.items.filter((i) => (i.term.kind === 'exact' ? checked.has(key(i.term)) : patternOn));
 	};
 	qp.onDidChangeValue(rebuild);
@@ -781,6 +820,9 @@ async function pickAuthors(service: GitRepositoryService, logTree: LogFilterCont
 	});
 
 	// settle 幂等守卫：accept 后 onDidHide 仍会触发；undefined = 取消不改，[] = 清除 author 维度。
+	// 取数窗口外仍可切库（环境驱动切换不夺焦点、QuickPick 不隐藏）：确认时仓库已变则放弃写回，
+	// 防旧仓库勾选经 setFilter→persistAuthors 误写新仓库的持久化 key。
+	const rootAtStart = service.repoRoot;
 	let settled = false;
 	const settle = (terms: readonly AuthorTerm[] | undefined): void => {
 		if (settled) {
@@ -788,16 +830,15 @@ async function pickAuthors(service: GitRepositoryService, logTree: LogFilterCont
 		}
 		settled = true;
 		qp.dispose();
-		if (terms) {
+		if (terms && service.repoRoot === rootAtStart) {
 			logTree.setFilter({ ...logTree.getFilter(), authors: terms.length ? terms : undefined });
 		}
 	};
 	qp.onDidAccept(() => settle(qp.selectedItems.map((i) => i.term)));
 	qp.onDidHide(() => settle(undefined));
 
-	// 候选按当前视图 scope 一次取数（非逐键）；切库竞态守卫沿用 rootAtStart 范式；
+	// 候选按当前视图 scope 一次取数（非逐键）；切库竞态守卫见上方 rootAtStart；
 	// 空仓库 / unborn HEAD / 查询失败 → 空列表降级（仅 pattern 逃生口可用）。
-	const rootAtStart = service.repoRoot;
 	authors = parseShortlog(await service.execGit(['shortlog', ...buildAuthorListArgs(logTree.getScope())]).catch(() => ''));
 	if (service.repoRoot !== rootAtStart) {
 		qp.dispose();

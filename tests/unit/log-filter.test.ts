@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { CHECKPOINT_SUBJECT_RE, applyClientFilters, isCheckpointSubject, safeRegex, type FilterableCommit, type LogClientFilter } from '../../src/engine/log/log-filter';
+import {
+	CHECKPOINT_SUBJECT_RE,
+	applyClientFilters,
+	hasActiveFilter,
+	isCheckpointSubject,
+	parsePersistedAuthors,
+	parsePersistedFilter,
+	safeRegex,
+	serializePersistableFilter,
+	type FilterableCommit,
+	type LogClientFilter,
+	type LogFilter,
+} from '../../src/engine/log/log-filter';
 
 const D = (iso: string): Date => new Date(iso);
 const C = (message: string, parents: string[], authorDate?: Date): FilterableCommit => ({ message, parents, authorDate });
@@ -112,5 +124,112 @@ describe('safeRegex', () => {
 	});
 	it('非法模式返回 undefined（不抛错）', () => {
 		expect(safeRegex('(')).toBeUndefined();
+	});
+});
+
+describe('parsePersistedAuthors', () => {
+	it('合法 exact + pattern 混合 JSON 串还原结构（round-trip）', () => {
+		const terms = [
+			{ kind: 'exact', name: 'ThreeFish', email: 'fish@example.com' },
+			{ kind: 'pattern', pattern: '^bot' },
+		] as const;
+		expect(parsePersistedAuthors(JSON.stringify(terms))).toEqual(terms);
+	});
+
+	it('非字符串输入返回 undefined', () => {
+		expect(parsePersistedAuthors(undefined)).toBeUndefined();
+		expect(parsePersistedAuthors(42)).toBeUndefined();
+		expect(parsePersistedAuthors({})).toBeUndefined();
+	});
+
+	it('空串与非法 JSON 返回 undefined', () => {
+		expect(parsePersistedAuthors('')).toBeUndefined();
+		expect(parsePersistedAuthors('not-json')).toBeUndefined();
+	});
+
+	it('非数组 JSON 返回 undefined', () => {
+		expect(parsePersistedAuthors('{"kind":"exact"}')).toBeUndefined();
+	});
+
+	it('元素脏项剔除，仅留合法项', () => {
+		const raw = JSON.stringify([
+			{ kind: 'exact', name: 'A', email: 'a@x.com' },
+			{ kind: 'exact', name: '', email: 'b@x.com' }, // name 空
+			{ kind: 'exact', name: 'C' }, // 缺 email
+			{ kind: 'pattern', pattern: '' }, // pattern 空
+			{ kind: 'unknown' }, // kind 未知
+			'not-an-object',
+		]);
+		expect(parsePersistedAuthors(raw)).toEqual([{ kind: 'exact', name: 'A', email: 'a@x.com' }]);
+	});
+
+	it('全脏 / 空数组返回 undefined（与「空选 = 不过滤」规范化一致）', () => {
+		expect(parsePersistedAuthors(JSON.stringify([{ kind: 'nope' }]))).toBeUndefined();
+		expect(parsePersistedAuthors('[]')).toBeUndefined();
+	});
+});
+
+describe('serializePersistableFilter / parsePersistedFilter', () => {
+	const FULL: LogFilter = {
+		path: 'src/a.ts',
+		grep: 'fix',
+		mergeMode: 'no-merge',
+		dateFrom: new Date('2026-01-02T03:04:05.000Z'),
+		dateTo: new Date('2026-02-03T00:00:00.000Z'),
+		messageRegex: '^feat:',
+	};
+
+	it('全维度 round-trip（Date 经 ISO 串往返）', () => {
+		expect(parsePersistedFilter(serializePersistableFilter(FULL))).toEqual(FULL);
+	});
+
+	it('归一化：空对象、空串、mergeMode all、undefined 入参均不落盘', () => {
+		expect(serializePersistableFilter({})).toBeUndefined();
+		expect(serializePersistableFilter(undefined)).toBeUndefined();
+		expect(serializePersistableFilter({ path: '', grep: undefined, mergeMode: 'all' })).toBeUndefined();
+	});
+
+	it('authors 不属本层：序列化忽略', () => {
+		expect(serializePersistableFilter({ authors: [{ kind: 'pattern', pattern: 'x' }] })).toBeUndefined();
+	});
+
+	it('非字符串 / 非法 JSON / 非对象返回 undefined', () => {
+		expect(parsePersistedFilter(undefined)).toBeUndefined();
+		expect(parsePersistedFilter(42)).toBeUndefined();
+		expect(parsePersistedFilter('not-json')).toBeUndefined();
+		expect(parsePersistedFilter('[]')).toBeUndefined();
+	});
+
+	it('逐字段剔除脏项，仅留合法维度', () => {
+		const raw = JSON.stringify({
+			path: 'ok.ts',
+			grep: '',
+			mergeMode: 'bogus',
+			dateFrom: 'not-a-date',
+			dateTo: '2026-02-03T00:00:00.000Z',
+			messageRegex: 7,
+		});
+		expect(parsePersistedFilter(raw)).toEqual({ path: 'ok.ts', dateTo: new Date('2026-02-03T00:00:00.000Z') });
+	});
+
+	it('全脏返回 undefined', () => {
+		expect(parsePersistedFilter(JSON.stringify({ grep: '', mergeMode: 'x', dateFrom: 'oops' }))).toBeUndefined();
+	});
+});
+
+describe('hasActiveFilter', () => {
+	it('未激活口径与持久化归一化一致：undefined / 空对象 / 空串 / mergeMode all / 空 authors', () => {
+		expect(hasActiveFilter(undefined)).toBe(false);
+		expect(hasActiveFilter({})).toBe(false);
+		expect(hasActiveFilter({ path: '', grep: undefined, mergeMode: 'all' })).toBe(false);
+		expect(hasActiveFilter({ authors: [] })).toBe(false);
+	});
+
+	it('任一维度生效即激活：authors（含 pattern）/ path / mergeMode / date / regex', () => {
+		expect(hasActiveFilter({ authors: [{ kind: 'pattern', pattern: 'x' }] })).toBe(true);
+		expect(hasActiveFilter({ path: 'src/a.ts' })).toBe(true);
+		expect(hasActiveFilter({ mergeMode: 'no-merge' })).toBe(true);
+		expect(hasActiveFilter({ dateFrom: D('2026-01-01T00:00:00.000Z') })).toBe(true);
+		expect(hasActiveFilter({ messageRegex: '^feat:' })).toBe(true);
 	});
 });

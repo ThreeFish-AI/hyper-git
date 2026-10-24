@@ -1,7 +1,16 @@
 import * as vscode from 'vscode';
 import type { GitRepositoryService } from '../git-repository-service';
 import { parseNameStatus, statusLabel, parseShortStat } from '../../engine/log/commit-files';
-import { applyClientFilters, toClientFilter, type LogFilter } from '../../engine/log/log-filter';
+import {
+	applyClientFilters,
+	hasActiveFilter,
+	parsePersistedAuthors,
+	parsePersistedFilter,
+	serializePersistableFilter,
+	toClientFilter,
+	type AuthorTerm,
+	type LogFilter,
+} from '../../engine/log/log-filter';
 import { DEFAULT_LANE_PALETTE } from '../../engine/log/graph-color';
 import { computeGraphLayout, maxLanes } from '../../engine/log/graph-layout';
 import { getBaseStyles, GRAPH_ROW_H, GRAPH_LANE_W, ICON_CHEVRON_DOWN, ICON_CLOSE } from './shared-styles';
@@ -110,6 +119,14 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 	private static dmodeKey(root: string): string {
 		return `hyperGit.log.dmode:${root}`;
 	}
+	/** authors 过滤按仓库持久化 key（同 scope/dmode 范式；值为 AuthorTerm[] JSON 串，脏数据经 parsePersistedAuthors 免疫）。 */
+	private static authorsKey(root: string): string {
+		return `hyperGit.log.authors:${root}`;
+	}
+	/** 非 authors 过滤维度（path/grep/mergeMode/dateFrom/dateTo/messageRegex）组合持久化 key（整体 JSON 串，单 key 原子读写防半恢复态）。 */
+	private static filterKey(root: string): string {
+		return `hyperGit.log.filter:${root}`;
+	}
 	/** context key 同步（标题栏按钮显隐 / 勾选态由 when 子句驱动）。 */
 	private static setCtx(key: string, value: string | boolean): void {
 		void vscode.commands.executeCommand('setContext', key, value);
@@ -128,25 +145,29 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 				t = setTimeout(() => this.refresh(), 400);
 			}),
 		);
-		// 激活即恢复当前仓库的 scope/dmode 记忆并同步 context key（标题栏控件先于视图解析渲染）。
+		// 激活即恢复当前仓库的 scope/dmode/过滤记忆并同步 context key（标题栏控件先于视图解析渲染）。
 		this.loadRepoScopedPrefs();
-		// 活跃仓库切换（issue #107）：host 级过滤条件是旧仓库语境的产物，跨仓库无意义 → 清空；
-		// scope/dmode 恢复该仓库的记忆值（无记忆回退 'all'/'flat'）；图数据重拉由上方 onDidChange 订阅驱动。
+		// 活跃仓库切换（issue #107）：过滤条件是旧仓库语境的产物，跨仓库无意义 → 整体重载为
+		// 新仓库的持久过滤（无记忆回退不过滤）；图数据重拉由上方 onDidChange 订阅驱动
+		// （service 契约保证本事件先于 onDidChange fire）。
 		this.disposables.push(
 			service.onDidChangeRepository(() => {
-				this.filter = {};
 				this.loadRepoScopedPrefs();
 			}),
 		);
 	}
 
-	/** 装载当前仓库的 scope / dmode 偏好（memento → 内存 + context key）。 */
+	/** 装载当前仓库的 scope / dmode / 过滤器偏好（memento → 内存 + context key；filter 整体重赋）。 */
 	private loadRepoScopedPrefs(): void {
 		const root = this.service.repoRoot;
 		this.scope = (root ? this.workspaceState.get<LogScope>(LogWebviewProvider.scopeKey(root)) : undefined) ?? 'all';
 		this.detailMode = (root ? this.workspaceState.get<'flat' | 'tree'>(LogWebviewProvider.dmodeKey(root)) : undefined) ?? 'flat';
 		LogWebviewProvider.setCtx('hyperGit.log.scope', this.scope);
 		LogWebviewProvider.setCtx('hyperGit.log.tree', this.detailMode === 'tree');
+		const persisted = root ? parsePersistedFilter(this.workspaceState.get<string>(LogWebviewProvider.filterKey(root))) : undefined;
+		const authors = root ? parsePersistedAuthors(this.workspaceState.get<string>(LogWebviewProvider.authorsKey(root))) : undefined;
+		this.filter = { ...(persisted ?? {}), ...(authors ? { authors } : {}) };
+		LogWebviewProvider.setCtx('hyperGit.log.filterActive', hasActiveFilter(this.filter));
 	}
 
 	/** 标题栏 Scope 子菜单选中项（hyperGit.log.scopeAll/Current/Checkpointer 命令入口）。 */
@@ -176,12 +197,40 @@ export class LogWebviewProvider implements vscode.WebviewViewProvider, LogFilter
 
 	setFilter(filter: LogFilter): void {
 		this.filter = filter;
+		this.persistFilter(filter);
+		this.persistAuthors(filter.authors);
+		LogWebviewProvider.setCtx('hyperGit.log.filterActive', hasActiveFilter(filter));
 		this.refresh();
 	}
 
 	clearFilter(): void {
 		this.filter = {};
+		this.persistFilter(undefined);
+		this.persistAuthors(undefined);
+		LogWebviewProvider.setCtx('hyperGit.log.filterActive', false);
 		this.refresh();
+	}
+
+	/**
+	 * authors 维度按仓库持久化（写入点汇聚于 setFilter/clearFilter）：重启与切库后经
+	 * {@link loadRepoScopedPrefs} 恢复；repoRoot 未知时仅内存（激活后切库事件自然覆盖）。
+	 * `update(key, undefined)` 即删除条目 —— 清除同样持久化，重启不复活。
+	 */
+	private persistAuthors(authors: readonly AuthorTerm[] | undefined): void {
+		const root = this.service.repoRoot;
+		if (!root) {
+			return;
+		}
+		void this.workspaceState.update(LogWebviewProvider.authorsKey(root), authors?.length ? JSON.stringify(authors) : undefined);
+	}
+
+	/** 非 authors 过滤维度组合持久化（同 {@link persistAuthors} 范式；归一化后全空即删 key）。 */
+	private persistFilter(filter: LogFilter | undefined): void {
+		const root = this.service.repoRoot;
+		if (!root) {
+			return;
+		}
+		void this.workspaceState.update(LogWebviewProvider.filterKey(root), serializePersistableFilter(filter));
 	}
 
 	getFilter(): LogFilter {

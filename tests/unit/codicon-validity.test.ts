@@ -28,6 +28,7 @@ const VALID_CODICONS: ReadonlySet<string> = new Set([
 	'edit',
 	'eye',
 	'filter',
+	'filter-filled',
 	'folder-opened',
 	'gear',
 	'git-branch',

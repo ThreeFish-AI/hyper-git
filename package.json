@@ -333,6 +333,12 @@
 				"icon": "$(filter)"
 			},
 			{
+				"command": "hyperGit.logFilterOn",
+				"title": "Graph Filter Active — Filter Graph…",
+				"category": "Hyper Git",
+				"icon": "$(filter-filled)"
+			},
+			{
 				"command": "hyperGit.logFilterAuthor",
 				"title": "Filter by Author…",
 				"category": "Hyper Git"
@@ -949,7 +955,12 @@
 				},
 				{
 					"command": "hyperGit.logFilter",
-					"when": "view == hyperGit.log",
+					"when": "view == hyperGit.log && !hyperGit.log.filterActive",
+					"group": "navigation@2"
+				},
+				{
+					"command": "hyperGit.logFilterOn",
+					"when": "view == hyperGit.log && hyperGit.log.filterActive",
 					"group": "navigation@2"
 				},
 				{
@@ -1434,6 +1445,10 @@
 				},
 				{
 					"command": "hyperGit.log.detailFlat",
+					"when": "view == hyperGit.log"
+				},
+				{
+					"command": "hyperGit.logFilterOn",
 					"when": "view == hyperGit.log"
 				},
 				{
