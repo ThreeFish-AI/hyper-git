@@ -30,7 +30,7 @@
 - [工程实施方案](../docs/architecture/engineering-plan.md) — 路径 B 架构 + M0-M5 里程碑（**开发蓝图**）。
 - [Git 功能矩阵](../docs/requirements/idea-feature-matrix.md) — 56 功能点 / 8 组（**验收基线**，参考 IDEA 等成熟实现）。
 - [调研报告](../docs/research/README.md) — SCM 集成 / 工程蓝图 / 发布 CI / AI 接缝四路循证报告。
-- [发布说明](../releases/README.md) — 各正式版 Release Notes（GitHub Release 正文单一事实源；最新 [v0.0.21](../releases/v0.0.21.md)）。
+- [发布说明](../releases/README.md) — 各正式版 Release Notes（GitHub Release 正文单一事实源；最新 [v0.0.22](../releases/v0.0.22.md)）。
 
 ## 图资产（docs/assets/）
 - [Mermaid 源图索引](../assets/mermaid/README.md) — 全项目 Mermaid 源图统一管理 + **溯源矩阵**（mermaid ↔ archify ↔ 嵌入文档的唯一权威映射）。
