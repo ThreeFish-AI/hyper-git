@@ -6,6 +6,41 @@
 
 ## [Unreleased]
 
+## [0.0.22] - 2026-10-24 — Graph 过滤持久化与激活指示 · Branches 就地更新 · 开发依赖升级
+
+### Added
+
+- **Branches 视图分支就地更新（不 checkout）**：右键单个分支 **Update Branch**、多选批量更新、标题栏 Pull 按钮升级为选区感知（无选区保持原 Pull 语义，Commit 视图 Pull 不受影响）。底层原语 `git fetch <remote> refs/heads/<upstream>:refs/heads/<branch>`——git 原生 fast-forward-only，diverged / ahead-only 分支被安全拒绝（附真实 stderr 原因），**永不改写本地提交**（src 侧全限定防 `+` 前缀上游名被解析为 force）；当前分支自动改走 `repo.pull()`（含冲突处理通道）；无上游分支透明跳过；无 remote 配置提示 `No remote repository configured` 提前返回（不误报 no upstream）。五桶对账汇总（updated / already up to date / pulled / skipped / failed，选中数 = 各桶之和），up-to-date 经前后 `objectname` 短 sha 前缀比对判定（fetch 静默 no-op 无输出；缩写长度随对象数伸缩，全等比对会误报）。upstream 解析不信任树节点数据（API 路径 `refToRaw` 不填 upstream/head），统一以一次 `for-each-ref` 取新鲜快照；`origin/x` 拆分复用 `resolveRemoteBranch` 最长前缀匹配（remote 名可含 `/`）。engine 纯逻辑 `planBranchUpdates` / `formatBranchUpdateResult` / `classifyFetchOutcome` 落于 `engine/ref/branch-update.ts`，全量单测覆盖。
+
+### Fixed
+
+- **Graph 视图过滤条件不再随重启 / 切库丢失（全部 7 个维度按仓库持久化）**：authors、File Path、Grep、Merge Mode、Date Filter、Message Regex 此前仅存于内存，重启 VS Code 或切换仓库后即被清空。现在沿用 scope/dmode 的按仓库 workspaceState 范式持久化——authors 独立 key（`hyperGit.log.authors:<repoRoot>`），其余 6 维组合 key（`hyperGit.log.filter:<repoRoot>`，单 key 原子读写防半恢复态，dateFrom/dateTo 经 ISO 串往返），重启与切库往返后自动恢复为上次设置；过滤生效期间标题栏过滤图标点亮为填充态（Graph Filter Active，`$(filter-filled)`，经 `hyperGit.log.filterActive` context key 与常态图标互斥呈现）——恢复的过滤不再是无声约束；重开「Filter by Author…」即预勾选已选 exact 作者并继续增删（pattern 项不参与预勾选、重开后不可见，确认新选择会将其移除）；空选确认与 Clear Filter 的「清除」同样持久化，重启不复活；脏持久化数据经 engine 纯函数逐字段校验免疫。**附带行为变更**：① SCM 变更列表右键「Show History」由整替过滤器改为与其余过滤命令一致的增量式——文件历史现与活跃过滤相交，而非静默清空后者（M3 期遗留不一致）；② 任何过滤对话框（Filter Graph 聚合入口 / Author / Path / Grep / Merge Mode / Date / Message Regex）或 Commit 文件右键菜单打开期间发生切库后确认，不再把旧仓库语境的选择误写新仓库（rootAtStart 切库守卫全覆盖）；③ issue #107 的「切库清空 host 级过滤」限制消除——每个仓库记忆自己的完整过滤条件；④ Filter by Path 选中当前仓库外的文件（多根工作区选他仓文件 / 单仓导航到仓外）时以告警拒绝，不再落入 `../…` 垃圾 path 过滤——该垃圾 path 会随持久化成为跨重启的图加载 fatal 错误态。
+
+### Changed
+
+- 开发依赖升级（#153）：eslint 10.12 → 10.13、typescript-eslint 8.71 → 8.72、vitest 5.0.4 → 5.0.5、ovsx 1.2 → 1.3——全部 devDependencies，对扩展运行时零影响。
+
+## [0.0.21] - 2026-10-23 — Filter by Author 候选建议 · 多选过滤 · 元字符作者修复
+
+### Added
+
+- **「Filter by Author…」升级为作者候选建议 + 多选过滤**：候选经 `git shortlog -sne` 按当前 Graph 视图 scope 取数（按提交数降序、姓名/邮箱均可模糊匹配），输入前缀（如 `Thr`）即在下拉中建议对应提交者，勾选即选、无需完整手输；依次勾选多个提交者翻译为多条 `--author`（git 取 OR）直接过滤 Graph 视图，空选确认 = 清除该维度、Esc = 取消不变。输入不等于任何作者姓名时动态插入「Use pattern」逃生口（原样正则透传），完整保留旧 InputBox 的任意 pattern 能力。engine 侧 `LogFilter.author` 单值改为 `authors: AuthorTerm[]`（exact 身份 / pattern 正则 tagged union，单一字段单一事实源）；`scopeRefs` 提取为 scope → 引用范围参数的单一事实源（Graph 取数与作者候选共享）；adapter 侧为仓库首个 `createQuickPick` 动态用法（busy 取数、勾选自维护回写、settle 幂等守卫、切库竞态守卫、空仓库降级）。新增 `engine/log/author-suggest.ts`（shortlog 取数参数 + 容错解析，current scope 显式 `HEAD` 防 stdin 挂起）。
+
+### Fixed
+
+- **作者名含正则元字符时过滤 0 命中**：`git log --author` 缺省 POSIX BRE（非 ERE），旧实现把手输作者名原样作为正则传递——`dependabot[bot]` 中的 `[bot]` 被解释为字符类，匹配 0 条（本仓库实测：不转义 0 命中）。现在从候选列表选中的作者身份按 BRE 语义转义（仅 `\ . [ * ^ $`；`+ ? | ( ) {` 在 BRE 中是普通字符，加反斜杠反成操作符）并锚定全行 `^Name <email>$`（同名异邮箱不混淆）。
+
+
+## [0.0.20] - 2026-10-17 — Delete Remote Branch 陈旧远程分支修复 · 删除失败可诊断
+
+### Fixed
+
+- **Branches 视图「Delete Remote Branch」对陈旧远程分支误报失败且无原因**：PR 合并后远端自动删除的分支，本地 remote-tracking ref 在下次 `fetch --prune` 前一直保留，视图仍列出；右键删除时 `git push --delete` 被服务端拒绝（`remote ref does not exist`），且 `catch {}` 吞掉真实报错，只回显笼统的「N failed」。现在「服务端已无此 ref」被识别为目标态已达成——按成功收尾并清理本地陈旧 tracking ref（通知如实标注 *already gone on remote*）；真失败（保护分支拒绝 / 认证 / 网络）则经 stderr 优先提取，在通知中逐分支附上真实原因，并联动 Show Output 查看完整输出。engine 纯逻辑 `isRemoteRefMissingError` / `formatRemoteDeleteResult` 落于 `engine/ref/remote-ref.ts`，全量单测覆盖。
+
+### Changed
+
+- **错误文本提取单一事实源（`gitErrorText`）**：新增 `engine/git-state/git-error.ts` 统一「非空白 stderr 优先 → message → String 兜底」提取语义，`remote-commands` / `history-commands` 两处内联拷贝改为引用；Push 对话框 / Update Project / Merge 对话框的失败通知随之升级为 stderr 优先（真实原因直达，不再只显通用串）。
+
 ## [0.0.19] - 2026-10-17 — Branches 视图 PR 状态徽标 · 取数安全加固 · 开发依赖升级
 
 ### Fixed

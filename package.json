@@ -7,7 +7,7 @@
 		"theme": "dark"
 	},
 	"description": "Hyper Git brings IntelliJ IDEA's powerful Git & Commit modules to VS Code, enhanced with AI-powered autonomous agents for intelligent repository management. Experience Git in a higher dimension.",
-	"version": "0.0.19",
+	"version": "0.0.22",
 	"publisher": "ThreeFish-AI",
 	"license": "MIT",
 	"preview": true,
@@ -331,6 +331,12 @@
 				"title": "Filter Graph…",
 				"category": "Hyper Git",
 				"icon": "$(filter)"
+			},
+			{
+				"command": "hyperGit.logFilterOn",
+				"title": "Graph Filter Active — Filter Graph…",
+				"category": "Hyper Git",
+				"icon": "$(filter-filled)"
 			},
 			{
 				"command": "hyperGit.logFilterAuthor",
@@ -662,6 +668,12 @@
 				"icon": "$(arrow-up)"
 			},
 			{
+				"command": "hyperGit.branchUpdate",
+				"title": "Update Branch",
+				"category": "Hyper Git",
+				"icon": "$(arrow-down)"
+			},
+			{
 				"command": "hyperGit.resolveConflicts",
 				"title": "Resolve Conflicts (3-way Merge Editor)…",
 				"category": "Hyper Git",
@@ -943,7 +955,12 @@
 				},
 				{
 					"command": "hyperGit.logFilter",
-					"when": "view == hyperGit.log",
+					"when": "view == hyperGit.log && !hyperGit.log.filterActive",
+					"group": "navigation@2"
+				},
+				{
+					"command": "hyperGit.logFilterOn",
+					"when": "view == hyperGit.log && hyperGit.log.filterActive",
 					"group": "navigation@2"
 				},
 				{
@@ -972,7 +989,7 @@
 					"group": "navigation@2"
 				},
 				{
-					"command": "hyperGit.pull",
+					"command": "hyperGit.branchUpdate",
 					"when": "view == hyperGit.branches",
 					"group": "navigation@3"
 				},
@@ -1107,6 +1124,11 @@
 					"command": "hyperGit.checkoutAsNew",
 					"when": "view == hyperGit.branches && viewItem =~ /^(hyperGit.branch|hyperGit.remoteBranch)$/ && !listMultiSelection",
 					"group": "1_branch@1.5"
+				},
+				{
+					"command": "hyperGit.branchUpdate",
+					"when": "view == hyperGit.branches && viewItem == hyperGit.branch",
+					"group": "1_branch@1.7"
 				},
 				{
 					"command": "hyperGit.compareWithCurrent",
@@ -1426,6 +1448,10 @@
 					"when": "view == hyperGit.log"
 				},
 				{
+					"command": "hyperGit.logFilterOn",
+					"when": "view == hyperGit.log"
+				},
+				{
 					"command": "hyperGit.commit.detailTree",
 					"when": "view == hyperGit.commit"
 				},
@@ -1447,6 +1473,10 @@
 				},
 				{
 					"command": "hyperGit.pushBranch",
+					"when": "false"
+				},
+				{
+					"command": "hyperGit.branchUpdate",
 					"when": "false"
 				}
 			]
@@ -1574,14 +1604,14 @@
 		"@vscode/test-electron": "^3.1.0",
 		"@vscode/vsce": "^4.0.0",
 		"esbuild": "^0.28.2",
-		"eslint": "^10.12.0",
+		"eslint": "^10.13.0",
 		"mocha": "^12.0.3",
-		"ovsx": "^1.2.0",
+		"ovsx": "^1.3.0",
 		"prettier": "^3.9.10",
 		"rimraf": "^6.0.1",
 		"typescript": "^6.0.3",
-		"typescript-eslint": "^8.71.2",
+		"typescript-eslint": "^8.72.0",
 		"vite": "^8.3.4",
-		"vitest": "^5.0.4"
+		"vitest": "^5.0.5"
 	}
 }

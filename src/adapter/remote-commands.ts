@@ -8,26 +8,39 @@ import type { LogFilterControl } from './webview/log-webview';
 import { truncateNames } from '../engine/ref/cleanup';
 import {
 	formatRemoteDeleteConfirm,
+	formatRemoteDeleteResult,
+	isRemoteRefMissingError,
 	partitionRemoteByProtected,
 	resolveRemoteBranch,
 	type RemoteBranchTarget,
+	type RemoteDeleteFailure,
 } from '../engine/ref/remote-ref';
+import { FOR_EACH_REF_FORMAT, parseForEachRef, type RawRef } from '../engine/ref/for-each-ref';
+import {
+	planBranchUpdates,
+	formatBranchUpdateResult,
+	classifyFetchOutcome,
+	type BranchUpdateAction,
+	type BranchUpdateFailure,
+} from '../engine/ref/branch-update';
 import type { GitRepositoryService } from './git-repository-service';
-
-const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+import { gitErrorText } from '../engine/git-state/git-error';
 
 /**
- * 注册远程同步对话框（Phase 3）：Push 对话框 / Update Project / Merge 对话框。
+ * 注册远程同步命令（Phase 3 起）：Push 对话框 / Update Project / Merge 对话框 / 分支就地更新 / 删远程分支。
  *
  * vscode.git 稳定 API 的 pull/push 缺策略/force/tags 选项，故经 execGit 实现：
  * - Push：force/force-with-lease/push tags（核心走 repo.push，tags 走 CLI）。
  * - Update Project：pull --rebase / --no-rebase（策略）。
  * - Merge：--ff-only / --no-ff / --squash + 自定义 message。
+ * - Update Branch：`git fetch <remote> refs/heads/<upstream>:refs/heads/<branch>`（原生 fast-forward-only，
+ *   不 checkout 就地更新本地分支；当前分支改走 repo.pull）。
  */
 export function registerRemoteCommands(
 	service: GitRepositoryService,
 	branchesTree: BranchesTreeProvider,
 	logTree: LogFilterControl,
+	branchesView: vscode.TreeView<BranchNode>,
 ): vscode.Disposable[] {
 	const subs: vscode.Disposable[] = [];
 
@@ -83,7 +96,7 @@ export function registerRemoteCommands(
 				void vscode.window.showInformationMessage(`Pushed to ${remote} ${previewCount}`.trim());
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Push'))) {
-					void showGitError(`Push failed: ${errMsg(e)}`);
+					void showGitError(`Push failed: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -114,8 +127,117 @@ export function registerRemoteCommands(
 				void vscode.window.showInformationMessage('Update Project complete');
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Update'))) {
-					void showGitError(`Update failed: ${errMsg(e)}`);
+					void showGitError(`Update failed: ${gitErrorText(e)}`);
 				}
+			}
+		}),
+	);
+
+	subs.push(
+		vscode.commands.registerCommand('hyperGit.branchUpdate', async (node?: BranchNode, nodes?: BranchNode[]) => {
+			const repo = service.repo;
+			if (!repo) {
+				return;
+			}
+			// 目标解析链：右键实参 →（无实参的标题栏路径）视图选区 → 无选区等价 Pull（当前分支）；
+			// 选区非空但不含本地分支时不动作（显式选区优先，不回退 Pull）。仅本地、非 tag。
+			const isLocal = (r: RawRef) => !r.isRemote && !r.isTag;
+			let targets = selectedBranchRefs(node, nodes, isLocal);
+			if (targets.length === 0 && !node) {
+				targets = selectedBranchRefs(undefined, branchesView.selection, isLocal);
+			}
+			if (targets.length === 0) {
+				if (node || branchesView.selection.length > 0) {
+					// 点击项/选区不含本地分支（右键路径防御——菜单门控下不可达；标题栏路径为
+					// 仅远程/标签/分组节点的显式选区）。显式选区优先，不回退 Pull，避免静默改写工作区。
+					return;
+				}
+				const headName = repo.state.HEAD?.name;
+				if (!headName) {
+					void vscode.window.showWarningMessage('Currently in detached HEAD; no branch to update');
+					return;
+				}
+				// 无选区 → 语义兜底为 Pull 当前分支，复用既有命令（含冲突通道）。
+				await vscode.commands.executeCommand('hyperGit.pull');
+				return;
+			}
+			// remotes 未配置/未就绪时不排程（姊妹命令同守卫）：避免把有上游分支误报 no upstream。
+			const remotes = repo.state.remotes.map((r) => r.name);
+			if (remotes.length === 0) {
+				void vscode.window.showWarningMessage('No remote repository configured');
+				return;
+			}
+			// 新鲜快照：树节点 ref.upstream/head 在 API 路径下为空（refToRaw 不填），禁止信任节点数据。
+			let snapshot: ReadonlyMap<string, RawRef>;
+			try {
+				const out = await service.execGit(['for-each-ref', `--format=${FOR_EACH_REF_FORMAT}`, 'refs/heads']);
+				snapshot = new Map(parseForEachRef(out).map((r) => [r.shortName, r] as const));
+			} catch (e) {
+				void showGitError(`Failed to read branch info: ${gitErrorText(e)}`);
+				return;
+			}
+			// 引擎纯逻辑排程 + 逐分支执行（per-item try/catch，三桶先例）。
+			const headName = repo.state.HEAD?.name;
+			const plan = planBranchUpdates(
+				targets.map((r) => r.shortName),
+				snapshot,
+				headName,
+				remotes,
+			);
+			const skipped = plan.filter((a): a is Extract<BranchUpdateAction, { kind: 'skip-no-upstream' }> => a.kind === 'skip-no-upstream').map((a) => a.name);
+			const updated: string[] = [];
+			const upToDate: string[] = [];
+			const pulled: string[] = [];
+			const failures: BranchUpdateFailure[] = [];
+			const failedNames = new Set<string>();
+			await runWithProgress('Updating branch(es)…', async () => {
+				for (const action of plan) {
+					if (action.kind === 'skip-no-upstream') {
+						continue;
+					}
+					try {
+						if (action.kind === 'pull-current') {
+							await repo.pull();
+							pulled.push(action.name);
+						} else {
+							// src 侧全限定：`+` 开头的合法上游名裸写会被 git 解析为 force 前缀，绕过 fast-forward-only。
+							await service.execGit(['fetch', action.remote, `refs/heads/${action.upstreamBranch}:refs/heads/${action.name}`]);
+						}
+					} catch (e) {
+						if (action.kind === 'pull-current') {
+							// 冲突 UI 先行展示；仍按失败计数，维持「选中数 = 各桶之和」的对账诚实。
+							await handleGitConflict(service, 'Pull');
+						}
+						failedNames.add(action.name);
+						failures.push({ name: action.name, reason: gitErrorText(e) });
+					}
+				}
+			});
+			// 事后一次 for-each-ref：sha 对比分类 updated/upToDate（fetch 静默 no-op 无输出可解析）。
+			try {
+				const out = await service.execGit(['for-each-ref', `--format=${FOR_EACH_REF_FORMAT}`, 'refs/heads']);
+				const after = new Map(parseForEachRef(out).map((r) => [r.shortName, r.objectname] as const));
+				for (const a of plan) {
+					if (a.kind !== 'fetch' || failedNames.has(a.name)) {
+						continue;
+					}
+					(classifyFetchOutcome(a.beforeSha, after.get(a.name)) === 'updated' ? updated : upToDate).push(a.name);
+				}
+			} catch {
+				// 分类不可得 → 保守计 updated（fetch 已成功，仅失判定粒度）。
+				for (const a of plan) {
+					if (a.kind === 'fetch' && !failedNames.has(a.name)) {
+						updated.push(a.name);
+					}
+				}
+			}
+			branchesTree.refresh();
+			logTree.refresh();
+			const result = formatBranchUpdateResult({ updated, upToDate, pulled, skipped, failures });
+			if (result.level === 'info') {
+				void vscode.window.showInformationMessage(result.message);
+			} else {
+				void showGitError(result.message);
 			}
 		}),
 	);
@@ -156,7 +278,7 @@ export function registerRemoteCommands(
 				void vscode.window.showInformationMessage(`Merged ${target}`);
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Merge'))) {
-					void showGitError(`Merge failed: ${errMsg(e)}`);
+					void showGitError(`Merge failed: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -206,19 +328,26 @@ export function registerRemoteCommands(
 			if (choice !== confirmLabel) {
 				return;
 			}
-			// 逐分支推删，收集失败（不调用 handleGitConflict——删除不产生合并冲突）。
-			const failures: string[] = [];
+			// 逐分支推删，三桶收集（不调用 handleGitConflict——删除不产生合并冲突）：
+			// 成功 / 服务端已无此 ref（陈旧 tracking ref 场景，目标态已达成按成功收尾）/ 真失败（保留原因）。
+			const failures: RemoteDeleteFailure[] = [];
 			const succeeded: RemoteBranchTarget[] = [];
+			const alreadyGone: RemoteBranchTarget[] = [];
 			for (const t of deletable) {
 				try {
 					await service.execGit(['push', t.remote, '--delete', t.branch]);
 					succeeded.push(t);
-				} catch {
-					failures.push(t.shortName);
+				} catch (e) {
+					if (isRemoteRefMissingError(e)) {
+						alreadyGone.push(t);
+					} else {
+						failures.push({ name: t.shortName, reason: gitErrorText(e) });
+					}
 				}
 			}
-			// 仅对服务端删除成功项清理本地 remote-tracking ref（失败项保留，待重试或下次 fetch --prune）。
-			for (const t of succeeded) {
+			// 对服务端已无此分支的全部目标（含 alreadyGone 的陈旧项）清理本地 remote-tracking ref；
+			// 真失败项保留，待重试或下次 fetch --prune。
+			for (const t of [...succeeded, ...alreadyGone]) {
 				try {
 					await service.execGit(['branch', '-D', '-r', `${t.remote}/${t.branch}`]);
 				} catch {
@@ -227,14 +356,11 @@ export function registerRemoteCommands(
 			}
 			branchesTree.refresh();
 			logTree.refresh();
-			if (failures.length === 0) {
-				void vscode.window.showInformationMessage(
-					succeeded.length === 1 ? `Deleted remote branch ${succeeded[0].shortName}` : `Deleted ${succeeded.length} remote branches`,
-				);
+			const result = formatRemoteDeleteResult(succeeded, alreadyGone, failures);
+			if (result.level === 'info') {
+				void vscode.window.showInformationMessage(result.message);
 			} else {
-				void vscode.window.showWarningMessage(
-					`Deleted ${succeeded.length} remote branches, ${failures.length} failed: ${truncateNames(failures)}`,
-				);
+				void showGitError(result.message);
 			}
 		}),
 	);

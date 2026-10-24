@@ -8,11 +8,14 @@
  *   朴素 `split('/')[0]` 会把 `myorg/repo/feature` 错切成 `myorg`。
  * - {@link partitionRemoteByProtected}：复用 {@link isProtectedBranch}，把 main/master 等主干硬排除。
  * - {@link formatRemoteDeleteConfirm}：生成 modal 确认文案，诚实传达服务器端不可逆 + 协作者影响。
+ * - {@link isRemoteRefMissingError}：识别「服务端已无此 ref」的 push 失败（本地 tracking ref 陈旧场景）。
+ * - {@link formatRemoteDeleteResult}：把逐分支删除结果三桶汇总为通知文案与级别。
  *
- * 与 cleanup.ts 的关系：复用其 `isProtectedBranch` / `truncateNames` 作为单一事实源（轻量指针，不复制定义）。
+ * 与 cleanup.ts 的关系：复用其 `isProtectedBranch` / `truncateNames` / `collapseReason` 作为单一事实源（轻量指针，不复制定义）。
  */
 
-import { isProtectedBranch, truncateNames } from './cleanup';
+import { collapseReason, isProtectedBranch, truncateNames } from './cleanup';
+import { gitErrorText } from '../git-state/git-error';
 
 /** 解析后的远程分支定位。 */
 export interface RemoteBranchTarget {
@@ -93,4 +96,65 @@ export function formatRemoteDeleteConfirm(
 			? `Delete remote branch "${deletable[0].shortName}" (on remote ${deletable[0].remote})?\n${irreversible}`
 			: `Delete ${n} remote branches: ${truncateNames(deletable.map((t) => t.shortName))}.\n${irreversible}`;
 	return { detail: `${head}${body}`, confirmLabel: 'Delete' };
+}
+
+/** 单条远程删除失败：分支短名 + 从 stderr/message 提取的原因。 */
+export interface RemoteDeleteFailure {
+	/** 远程分支短名，如 origin/foo。 */
+	readonly name: string;
+	/** 失败原因（stderr 优先），可能多行。 */
+	readonly reason: string;
+}
+
+/** 「服务端已无此 ref」的报错文案（大小写不敏感）。git 2.x 规范文案 + 旧服务端变体。 */
+const REMOTE_REF_MISSING_PATTERNS: readonly RegExp[] = [/remote ref does not exist/i, /delete of non-existent ref/i];
+
+/**
+ * 判定 `git push <remote> --delete <branch>` 的失败是否属「服务端已无此 ref」。
+ *
+ * 典型场景：PR 合并后远端自动删除分支，本地 remote-tracking ref 在下一次 `fetch --prune`
+ * 前一直陈旧——视图仍列出它，push --delete 却被服务端拒绝
+ * （`error: unable to delete 'x': remote ref does not exist`）。此分支的目标态（服务端无此分支）
+ * 已天然达成，应按成功收尾并清理本地陈旧 ref，而非误报失败。
+ *
+ * @param e execGit 的拒绝值：文本提取统一走 {@link gitErrorText}（非空白 stderr 优先，回退 message）。
+ */
+export function isRemoteRefMissingError(e: unknown): boolean {
+	const text = gitErrorText(e);
+	return text.length > 0 && REMOTE_REF_MISSING_PATTERNS.some((re) => re.test(text));
+}
+
+/** 通知级别：仅成功/已不存在走 info；存在真失败走 error（联动 Show Output）。 */
+export type RemoteDeleteResultLevel = 'info' | 'error';
+
+/**
+ * 把逐分支远程删除结果（成功 / 服务端已不存在 / 失败）三桶汇总为通知文案与级别（纯逻辑）。
+ *
+ * 诚实计数：alreadyGone 单列（服务端本就无此分支，非本次删除），失败项附真实原因；
+ * 零计数段省略（如仅陈旧项时文案为「N already gone on remote …」，不以「Deleted 0 …」开头）。
+ * @param succeeded 服务端删除成功的目标
+ * @param alreadyGone 服务端已无此分支、按达成处理的目标（本地陈旧 tracking ref 已一并清理）
+ * @param failures 真失败项（含原因），展示超 4 条截断标注
+ */
+export function formatRemoteDeleteResult(
+	succeeded: readonly RemoteBranchTarget[],
+	alreadyGone: readonly RemoteBranchTarget[],
+	failures: readonly RemoteDeleteFailure[],
+): { level: RemoteDeleteResultLevel; message: string } {
+	const parts: string[] = [];
+	if (succeeded.length === 1) {
+		parts.push(`Deleted remote branch ${succeeded[0].shortName}`);
+	} else if (succeeded.length > 1) {
+		parts.push(`Deleted ${succeeded.length} remote branches`);
+	}
+	if (alreadyGone.length > 0) {
+		parts.push(`${alreadyGone.length} already gone on remote (pruned local tracking ref${alreadyGone.length > 1 ? 's' : ''})`);
+	}
+	if (failures.length === 0) {
+		return { level: 'info', message: parts.join('; ') };
+	}
+	// 复用 truncateNames（本模块头注释声明的 SSOT）：名称+原因条目信息密度高，收紧到 4 条。
+	const entries = failures.map((f) => `${f.name} (${collapseReason(f.reason)})`);
+	parts.push(`${failures.length} failed: ${truncateNames(entries, 4)}`);
+	return { level: 'error', message: parts.join('; ') };
 }

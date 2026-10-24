@@ -14,6 +14,9 @@ import { selectedBranchRefs } from './branch-selection';
 import { diffPrunedRefs, formatBranchDeleteConfirm, partitionByMerged, truncateNames } from '../engine/ref/cleanup';
 import { diffShapeFromCode } from '../engine/diff/change-side';
 import { resolveDiffSides } from './diff-sides';
+import { gitErrorText } from '../engine/git-state/git-error';
+import type { AuthorTerm } from '../engine/log/log-filter';
+import { buildAuthorListArgs, parseShortlog, type AuthorStat } from '../engine/log/author-suggest';
 
 /** 注册 Log/Branches/Blame/History/Tags 相关命令。 */
 export function registerHistoryCommands(
@@ -23,38 +26,31 @@ export function registerHistoryCommands(
 	favorites: BranchFavorites,
 ): vscode.Disposable[] {
 	const subs: vscode.Disposable[] = [];
-	// vscode.git 在 git 非零退出时抛出 GitError，其 .message 为通用串「Failed to execute git」，
-	// 真实原因落在 .stderr。优先暴露 stderr，使「无上游」「non-fast-forward」等失败可读。
-	const errMsg = (e: unknown): string => {
-		if (e && typeof e === 'object') {
-			const ge = e as { stderr?: unknown; message?: unknown };
-			if (typeof ge.stderr === 'string' && ge.stderr.trim()) {
-				return ge.stderr.trim();
-			}
-			if (typeof ge.message === 'string' && ge.message) {
-				return ge.message;
-			}
-		}
-		return String(e);
-	};
 
 	subs.push(vscode.commands.registerCommand('hyperGit.refreshLog', () => logTree.refresh()));
 	subs.push(vscode.commands.registerCommand('hyperGit.refreshBranches', () => branchesTree.refresh()));
 
 	subs.push(
-		vscode.commands.registerCommand('hyperGit.logFilterAuthor', async () => {
-			const author = await vscode.window.showInputBox({ prompt: 'Filter by Author', placeHolder: 'e.g. John' });
-			const f = logTree.getFilter();
-			logTree.setFilter({ ...f, author: author && author.trim() ? author.trim() : undefined });
-		}),
+		vscode.commands.registerCommand('hyperGit.logFilterAuthor', () => pickAuthors(service, logTree)),
 	);
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterPath', async () => {
+			// 切库竞态守卫（pickAuthors rootAtStart 同范式）：对话框 await 期间切库时，所选文件
+			// 会按切换后的仓库 root 求相对路径，得到跨仓库垃圾 path 过滤 → 仓库已变即放弃。
+			const rootAtStart = service.repoRoot;
 			const uri = await vscode.window.showOpenDialog({ canSelectMany: false });
 			const repo = service.repo;
-			if (uri?.[0] && repo) {
+			if (uri?.[0] && repo && service.repoRoot === rootAtStart) {
 				const rel = path.relative(repo.rootUri.fsPath, uri[0].fsPath).split(path.sep).join('/');
+				// 越仓选择（多根他仓文件 / 单仓外导航）同样产出 '../…' 垃圾 path，且随持久化跨重启
+				// 粘性污染（git log fatal）→ 拒绝。按路径段判定：rel 已归一为 '/' 分隔，'..' 或
+				// '../' 前缀才是越仓；'..' 仅作文件名前缀（如 '..drafts/note.md'）是仓内合法文件，勿误杀
+				// （showBlame 的 startsWith('..') 会对后者误杀，属预存差异，不在此处对齐）。
+				if (rel === '..' || rel.startsWith('../') || path.isAbsolute(rel)) {
+					void vscode.window.showWarningMessage('This file is outside the current repository; cannot filter by path');
+					return;
+				}
 				const f = logTree.getFilter();
 				logTree.setFilter({ ...f, path: rel });
 			}
@@ -63,24 +59,30 @@ export function registerHistoryCommands(
 
 	subs.push(vscode.commands.registerCommand('hyperGit.logClearFilter', () => logTree.clearFilter()));
 
-	subs.push(
-		vscode.commands.registerCommand('hyperGit.logFilter', async () => {
-			// 过滤器聚合入口：QuickPick 分发到既有 6 个过滤命令（复用 handler，零重复实现）。
-			const items = [
-				{ label: 'Filter by Author…', description: 'commits by author', action: 'hyperGit.logFilterAuthor' },
-				{ label: 'Filter by Path…', description: 'commits touching a path', action: 'hyperGit.logFilterPath' },
-				{ label: 'Filter by Message (grep)…', description: 'substring match', action: 'hyperGit.logFilterGrep' },
-				{ label: 'Filter by Message (regex)…', description: 'regular expression', action: 'hyperGit.logFilterRegex' },
-				{ label: 'Filter Merge Commits…', description: 'show or hide merge commits', action: 'hyperGit.logFilterMergeMode' },
-				{ label: 'Filter by Date…', description: 'commits within recent days', action: 'hyperGit.logFilterDate' },
-				{ label: 'Clear Filter', description: 'remove all active filters', action: 'hyperGit.logClearFilter' },
-			];
-			const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Filter commit log' });
-			if (pick) {
-				await vscode.commands.executeCommand(pick.action);
-			}
-		}),
-	);
+	// 过滤器聚合入口：QuickPick 分发到既有 6 个过滤命令（复用 handler，零重复实现）。
+	// 切库竞态守卫（其余对话框同范式）：await 期间切库即放弃——Clear Filter 项直接执行，
+	// 无守卫会删切换后仓库的持久化 key；过滤子命令也应在新仓库语境下重新发起。
+	// 双命令（logFilter/logFilterOn，detailTree/detailFlat 同范式）：常态与「过滤激活」图标经
+	// hyperGit.log.filterActive context key 互斥呈现——持久化恢复的过滤不再是无声约束。
+	const openFilterPicker = async (): Promise<void> => {
+		const rootAtStart = service.repoRoot;
+		const items = [
+			{ label: 'Filter by Author…', description: 'commits by author', action: 'hyperGit.logFilterAuthor' },
+			{ label: 'Filter by Path…', description: 'commits touching a path', action: 'hyperGit.logFilterPath' },
+			{ label: 'Filter by Message (grep)…', description: 'substring match', action: 'hyperGit.logFilterGrep' },
+			{ label: 'Filter by Message (regex)…', description: 'regular expression', action: 'hyperGit.logFilterRegex' },
+			{ label: 'Filter Merge Commits…', description: 'show or hide merge commits', action: 'hyperGit.logFilterMergeMode' },
+			{ label: 'Filter by Date…', description: 'commits within recent days', action: 'hyperGit.logFilterDate' },
+			{ label: 'Clear Filter', description: 'remove all active filters', action: 'hyperGit.logClearFilter' },
+		];
+		const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Filter commit log' });
+		if (!pick || service.repoRoot !== rootAtStart) {
+			return;
+		}
+		await vscode.commands.executeCommand(pick.action);
+	};
+	subs.push(vscode.commands.registerCommand('hyperGit.logFilter', () => openFilterPicker()));
+	subs.push(vscode.commands.registerCommand('hyperGit.logFilterOn', () => openFilterPicker()));
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.copyCommitHash', (node: LogNode) => {
@@ -94,7 +96,8 @@ export function registerHistoryCommands(
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.showHistory', async (change?: ChangeItem) => {
 			if (change?.relativePath) {
-				logTree.setFilter({ path: change.relativePath });
+				// 增量式与其余过滤命令同构：整替 filter 会静默清掉持久化的 authors（文件历史与作者过滤相交而非重置）。
+				logTree.setFilter({ ...logTree.getFilter(), path: change.relativePath });
 			}
 			await vscode.commands.executeCommand('hyperGit.log.focus');
 		}),
@@ -115,7 +118,7 @@ export function registerHistoryCommands(
 					await repo.createBranch(name.trim(), true);
 					branchesTree.refresh();
 				} catch (e) {
-					void showGitError(`Failed to create branch: ${errMsg(e)}`);
+					void showGitError(`Failed to create branch: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -131,7 +134,7 @@ export function registerHistoryCommands(
 				await repo.checkout(node.ref.shortName);
 				branchesTree.refresh();
 			} catch (e) {
-				void showGitError(`Failed to checkout: ${errMsg(e)}`);
+				void showGitError(`Failed to checkout: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -202,7 +205,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Merge'))) {
-					void showGitError(`Failed to merge: ${errMsg(e)}`);
+					void showGitError(`Failed to merge: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -224,7 +227,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Rebase'))) {
-					void showGitError(`Failed to rebase: ${errMsg(e)}`);
+					void showGitError(`Failed to rebase: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -251,7 +254,7 @@ export function registerHistoryCommands(
 				const doc = await vscode.workspace.openTextDocument({ content: blame, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void showGitError(`Failed to Blame: ${errMsg(e)}`);
+				void showGitError(`Failed to Blame: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -267,7 +270,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Pull'))) {
-					void showGitError(`Failed to Pull: ${errMsg(e)}`);
+					void showGitError(`Failed to Pull: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -309,7 +312,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Pushed ${head.name}`);
 			} catch (e) {
-				void showGitError(`Failed to Push: ${errMsg(e)}`);
+				void showGitError(`Failed to Push: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -352,7 +355,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Pushed ${name}`);
 			} catch (e) {
-				void showGitError(`Failed to Push: ${errMsg(e)}`);
+				void showGitError(`Failed to Push: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -375,7 +378,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				logTree.refresh();
 			} catch (e) {
-				void showGitError(`Failed to Fetch: ${errMsg(e)}`);
+				void showGitError(`Failed to Fetch: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -451,7 +454,7 @@ export function registerHistoryCommands(
 				await repo.createBranch(name.trim(), true, source);
 				branchesTree.refresh();
 			} catch (e) {
-				void showGitError(`Failed to create branch: ${errMsg(e)}`);
+				void showGitError(`Failed to create branch: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -468,7 +471,7 @@ export function registerHistoryCommands(
 				const doc = await vscode.workspace.openTextDocument({ content: `$ git diff --stat HEAD...${selected}\n\n${out}`, language: 'plaintext' });
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void showGitError(`Failed to compare: ${errMsg(e)}`);
+				void showGitError(`Failed to compare: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -507,7 +510,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Created tag ${name.trim()} @ ${pick.target === 'HEAD' ? 'HEAD' : pick.target.slice(0, 7)}`);
 			} catch (e) {
-				void showGitError(`Failed to create tag: ${errMsg(e)}`);
+				void showGitError(`Failed to create tag: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -558,7 +561,7 @@ export function registerHistoryCommands(
 				await repo.checkout(name);
 				branchesTree.refresh();
 			} catch (e) {
-				void showGitError(`Failed to checkout tag: ${errMsg(e)}`);
+				void showGitError(`Failed to checkout tag: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -587,7 +590,7 @@ export function registerHistoryCommands(
 			try {
 				await vscode.commands.executeCommand('vscode.diff', left, right, `${filePath} · ${hash.slice(0, 7)} (commit diff)`, { preview: true });
 			} catch (e) {
-				void showGitError(`Failed to open diff: ${errMsg(e)}`);
+				void showGitError(`Failed to open diff: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -621,7 +624,7 @@ export function registerHistoryCommands(
 				void vscode.window.showInformationMessage(`Reset (--${pick.label} ${hash.slice(0, 7)}) complete`);
 			} catch (e) {
 				if (!(await handleGitConflict(service, 'Reset'))) {
-					void showGitError(`Failed to Reset: ${errMsg(e)}`);
+					void showGitError(`Failed to Reset: ${gitErrorText(e)}`);
 				}
 			}
 		}),
@@ -646,7 +649,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Created and checked out ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
 			} catch (e) {
-				void showGitError(`Failed to create branch: ${errMsg(e)}`);
+				void showGitError(`Failed to create branch: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -669,7 +672,7 @@ export function registerHistoryCommands(
 				branchesTree.refresh();
 				void vscode.window.showInformationMessage(`Created tag ${name.trim()} @ ${node.commit.hash.slice(0, 7)}`);
 			} catch (e) {
-				void showGitError(`Failed to create tag: ${errMsg(e)}`);
+				void showGitError(`Failed to create tag: ${gitErrorText(e)}`);
 			}
 		}),
 	);
@@ -687,14 +690,20 @@ export function registerHistoryCommands(
 				});
 				await vscode.window.showTextDocument(doc, { preview: true });
 			} catch (e) {
-				void showGitError(`Failed to query: ${errMsg(e)}`);
+				void showGitError(`Failed to query: ${gitErrorText(e)}`);
 			}
 		}),
 	);
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterGrep', async () => {
+			// 切库竞态守卫（logFilterPath/settle 同范式，grep/mergeMode/date/regex 四命令同）：
+			// 对话框 await 期间切库即放弃，防旧仓库输入经 persistFilter 误写新仓库持久化 key。
+			const rootAtStart = service.repoRoot;
 			const grep = await vscode.window.showInputBox({ prompt: 'Filter by message text/regex (--grep)', placeHolder: 'e.g. fix|bug' });
+			if (service.repoRoot !== rootAtStart) {
+				return;
+			}
 			const f = logTree.getFilter();
 			logTree.setFilter({ ...f, grep: grep && grep.trim() ? grep.trim() : undefined });
 		}),
@@ -702,6 +711,7 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterMergeMode', async () => {
+			const rootAtStart = service.repoRoot;
 			const pick = await vscode.window.showQuickPick(
 				[
 					{ label: 'All Commits', mode: 'all' as MergeMode },
@@ -710,7 +720,7 @@ export function registerHistoryCommands(
 				],
 				{ placeHolder: 'Merge commit filter mode' },
 			);
-			if (!pick) {
+			if (!pick || service.repoRoot !== rootAtStart) {
 				return;
 			}
 			const f = logTree.getFilter();
@@ -720,6 +730,7 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterDate', async () => {
+			const rootAtStart = service.repoRoot;
 			const now = Date.now();
 			const pick = await vscode.window.showQuickPick(
 				[
@@ -730,7 +741,7 @@ export function registerHistoryCommands(
 				],
 				{ placeHolder: 'Commit date range' },
 			);
-			if (!pick) {
+			if (!pick || service.repoRoot !== rootAtStart) {
 				return;
 			}
 			const f = logTree.getFilter();
@@ -740,13 +751,117 @@ export function registerHistoryCommands(
 
 	subs.push(
 		vscode.commands.registerCommand('hyperGit.logFilterRegex', async () => {
+			const rootAtStart = service.repoRoot;
 			const re = await vscode.window.showInputBox({ prompt: 'Filter by message regex (client-side)', placeHolder: 'e.g. ^feat:' });
+			if (service.repoRoot !== rootAtStart) {
+				return;
+			}
 			const f = logTree.getFilter();
 			logTree.setFilter({ ...f, messageRegex: re && re.trim() ? re.trim() : undefined });
 		}),
 	);
 
 	return subs;
+}
+
+/**
+ * 作者过滤选择器（仓库首个 createQuickPick 动态用法）：候选来自 `git shortlog`（按当前视图 scope 取数、
+ * 按提交数降序），QuickPick 内建模糊过滤实现「输入前缀 → 建议下拉」；canSelectMany 多选（git 对多条
+ * `--author` 取 OR）。输入不等于任何作者姓名时头部动态插入「Use pattern」逃生口（原样正则透传，
+ * 保留旧 InputBox 的任意 pattern 能力）；确认时空选 = 清除 author 维度，Esc = 不变。
+ */
+async function pickAuthors(service: GitRepositoryService, logTree: LogFilterControl): Promise<void> {
+	/** exact 项勾选键（同名异邮箱不串）。 */
+	const key = (t: { name: string; email: string }) => `${t.name} <${t.email}>`;
+	const qp = vscode.window.createQuickPick<AuthorPickItem>();
+	qp.canSelectMany = true;
+	qp.matchOnDescription = true;
+	qp.matchOnDetail = true;
+	qp.title = 'Filter by Author';
+	qp.placeholder = 'Type to search authors; check to filter (empty selection clears)';
+	// 先展示再取数：busy 遮盖等待；事件先于 await 注册，取数期间的键入即触发 rebuild。
+	qp.busy = true;
+	qp.items = [];
+	qp.show();
+
+	// 勾选自维护：重建 items 会重置 selectedItems，须记录并在重建后回写。
+	// 预勾选仅 exact 项（pattern 项随输入动态生成，无法预置）；重建触发的程序化 selection
+	// 事件与用户点击不可区分，以时间窗抑制（程序化事件在赋值后即刻送达）。
+	const persistedExact = logTree.getFilter().authors?.filter((t) => t.kind === 'exact') ?? [];
+	let checked = new Set(persistedExact.map(key));
+	let patternOn = false;
+	let suppressUntil = 0;
+	let authors: readonly AuthorStat[] = [];
+	// 候选集外的持久化 exact 作者（scope 已切换 / shortlog 失败降级）以 ghost 项呈现：
+	// selectedItems 只能来自 items，缺项者确认时会被静默丢出持久化 key——ghost 预勾选保留、可取消移除。
+	const ghostItems = (): AuthorPickItem[] => {
+		const present = new Set(authors.map((a) => key(a)));
+		return persistedExact
+			.filter((t) => !present.has(key(t)))
+			.map((t) => ({ label: t.name, description: 'not in current scope', detail: t.email, term: t }));
+	};
+	const rebuild = (value: string): void => {
+		const v = value.trim();
+		const patternItem: AuthorPickItem[] =
+			v && !authors.some((a) => a.name === v)
+				? [{ label: `Use pattern "${v}"`, alwaysShow: true, description: 'regular expression (OR-ed)', term: { kind: 'pattern', pattern: v } }]
+				: [];
+		suppressUntil = Date.now() + 100;
+		qp.items = [...patternItem, ...baseItems(authors), ...ghostItems()];
+		qp.selectedItems = qp.items.filter((i) => (i.term.kind === 'exact' ? checked.has(key(i.term)) : patternOn));
+	};
+	qp.onDidChangeValue(rebuild);
+	qp.onDidChangeSelection((sel) => {
+		if (Date.now() < suppressUntil) {
+			return;
+		}
+		patternOn = sel.some((i) => i.term.kind === 'pattern');
+		checked = new Set(sel.flatMap((i) => (i.term.kind === 'exact' ? [key(i.term)] : [])));
+	});
+
+	// settle 幂等守卫：accept 后 onDidHide 仍会触发；undefined = 取消不改，[] = 清除 author 维度。
+	// 取数窗口外仍可切库（环境驱动切换不夺焦点、QuickPick 不隐藏）：确认时仓库已变则放弃写回，
+	// 防旧仓库勾选经 setFilter→persistAuthors 误写新仓库的持久化 key。
+	const rootAtStart = service.repoRoot;
+	let settled = false;
+	const settle = (terms: readonly AuthorTerm[] | undefined): void => {
+		if (settled) {
+			return;
+		}
+		settled = true;
+		qp.dispose();
+		if (terms && service.repoRoot === rootAtStart) {
+			logTree.setFilter({ ...logTree.getFilter(), authors: terms.length ? terms : undefined });
+		}
+	};
+	qp.onDidAccept(() => settle(qp.selectedItems.map((i) => i.term)));
+	qp.onDidHide(() => settle(undefined));
+
+	// 候选按当前视图 scope 一次取数（非逐键）；切库竞态守卫见上方 rootAtStart；
+	// 空仓库 / unborn HEAD / 查询失败 → 空列表降级（仅 pattern 逃生口可用）。
+	authors = parseShortlog(await service.execGit(['shortlog', ...buildAuthorListArgs(logTree.getScope())]).catch(() => ''));
+	if (service.repoRoot !== rootAtStart) {
+		qp.dispose();
+		return;
+	}
+	// 取数完成以 qp.value（而非 ''）重建：纳入等待期间的键入。
+	rebuild(qp.value);
+	qp.busy = false;
+}
+
+/** shortlog 统计 → QuickPick 项（label=姓名、description=提交数、detail=email 供模糊匹配）。 */
+function baseItems(authors: readonly AuthorStat[]): AuthorPickItem[] {
+	return authors.map((a) => ({
+		label: a.name,
+		description: a.count === 1 ? '1 commit' : `${a.count} commits`,
+		detail: a.email,
+		term: { kind: 'exact', name: a.name, email: a.email },
+	}));
+}
+
+/** 作者候选 QuickPick 项（label=姓名、description=提交数、detail=email，term 为过滤写回项）。 */
+interface AuthorPickItem extends vscode.QuickPickItem {
+	readonly term: AuthorTerm;
 }
 
 /**

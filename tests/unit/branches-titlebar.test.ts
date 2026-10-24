@@ -88,4 +88,40 @@ describe('branches-titlebar（Branches 标题栏/右键菜单声明护栏）', (
 			when: 'false',
 		});
 	});
+
+	it('Update Branch 命令定义齐备：title "Update Branch" 与 $(arrow-down)（同全局 Pull 图标）', () => {
+		expect(commandById.get('hyperGit.branchUpdate')).toMatchObject({
+			title: 'Update Branch',
+			icon: '$(arrow-down)',
+		});
+	});
+
+	it('view/title：标题栏 Pull 位（navigation@3）换成 Update Branch（选区感知，无选区等价 Pull），不再挂全局 Pull', () => {
+		const branchesEntries = titleEntries.filter((e) => e.when === 'view == hyperGit.branches');
+		const byCommand = new Map(branchesEntries.map((e) => [e.command, e]));
+		expect(byCommand.get('hyperGit.branchUpdate')).toEqual({
+			command: 'hyperGit.branchUpdate',
+			when: 'view == hyperGit.branches',
+			group: 'navigation@3',
+		});
+		// Commit 视图的 hyperGit.pull 保留；Branches 标题栏不再出现（选区语义由 branchUpdate 承载）。
+		expect(byCommand.get('hyperGit.pull'), 'Branches 标题栏不应再挂全局 Pull').toBeUndefined();
+	});
+
+	it('view/item/context：本地分支右键提供 Update Branch（多选可用：when 无 !listMultiSelection），palette 不泄漏', () => {
+		expect(
+			itemEntries.find(
+				(e) => e.command === 'hyperGit.branchUpdate' && e.when === 'view == hyperGit.branches && viewItem == hyperGit.branch',
+			),
+			'分支右键缺 branchUpdate 条目',
+		).toEqual({
+			command: 'hyperGit.branchUpdate',
+			when: 'view == hyperGit.branches && viewItem == hyperGit.branch',
+			group: '1_branch@1.7',
+		});
+		expect(paletteEntries.find((e) => e.command === 'hyperGit.branchUpdate')).toEqual({
+			command: 'hyperGit.branchUpdate',
+			when: 'false',
+		});
+	});
 });

@@ -18,7 +18,7 @@ import type { BranchNode } from './tree/branches-tree';
  */
 export function selectedBranchRefs(
 	clicked: BranchNode | undefined,
-	selection: BranchNode[] | undefined,
+	selection: readonly BranchNode[] | undefined,
 	predicate: (ref: RawRef) => boolean,
 ): RawRef[] {
 	const clickedRef = clicked?.kind === 'branch' ? clicked.ref : undefined;
