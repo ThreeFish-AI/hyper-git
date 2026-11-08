@@ -22,7 +22,7 @@ import { extractRateLimit, parseRetryAfterMs } from '../../engine/ci/model';
 import { fetchWithTimeout } from '../ci/graphql-http';
 import { buildPrQuery } from '../../engine/pr/graphql-query';
 import { parsePullRequestsResponse, prsEqual } from '../../engine/pr/model';
-import { buildPrIndex, type PrRemoteInfo, type RemotePrIndex } from '../../engine/pr/match';
+import { buildPrIndex, type BranchPrIndex, type PrRemoteInfo } from '../../engine/pr/match';
 import type { PullRequestVM } from '../../engine/pr/types';
 
 /** 单页 PR 数（GitHub 单页上限 100，取 50 平衡时延与点数）。 */
@@ -41,7 +41,7 @@ const RATE_FLOOR = 100;
 interface CacheEntry {
 	readonly repoRoot: string;
 	readonly prs: readonly PullRequestVM[];
-	readonly index: RemotePrIndex;
+	readonly index: BranchPrIndex;
 	/** 构建索引时的输入快照（remote 增删/改名/改址影响三级匹配），续期须连同比较。 */
 	readonly init: { readonly repoOwner: string; readonly repoHost: string; readonly repo: string; readonly remotes: readonly PrRemoteInfo[] };
 	readonly expires: number;
@@ -62,7 +62,7 @@ export class GitHubPrService implements vscode.Disposable {
 	readonly onDidInvalidate = this._onDidInvalidate.event;
 
 	private cache: CacheEntry | null = null;
-	private inflight: { readonly key: string; readonly promise: Promise<RemotePrIndex | null> } | undefined;
+	private inflight: { readonly key: string; readonly promise: Promise<BranchPrIndex | null> } | undefined;
 	/** 取数代次：登录态或取数源配置变化即推进并清缓存，在途取数完成时据此作废（防写回复活旧会话/旧取数仓数据）。 */
 	private fetchGeneration = 0;
 	private cooldownUntil = 0;
@@ -94,7 +94,7 @@ export class GitHubPrService implements vscode.Disposable {
 	 * 拉取（或复用）当前仓库的 PR 匹配索引。不可用（非 GitHub / 未登录 / 限流 / 关闭 / 失败）→
 	 * null，绝不抛错。数据未变时返回缓存的同一索引实例（树侧引用相等即免 fire）。
 	 */
-	async getPullRequests(): Promise<RemotePrIndex | null> {
+	async getPullRequests(): Promise<BranchPrIndex | null> {
 		if (!this.enabled()) {
 			return null;
 		}
@@ -195,7 +195,7 @@ export class GitHubPrService implements vscode.Disposable {
 	}
 
 	/** 全量取数（分页 ≤ MAX_PAGES）→ 建索引 + 写缓存；任一页失败 → null（不缓存，留待重试）。 */
-	private async fetchAll(remote: GitHubRemote, provider: GitHubAuthProviderId, repoRoot: string): Promise<RemotePrIndex | null> {
+	private async fetchAll(remote: GitHubRemote, provider: GitHubAuthProviderId, repoRoot: string): Promise<BranchPrIndex | null> {
 		const generation = this.fetchGeneration; // 取数期间的代次（登录态/取数源配置变化后作废）
 		// remotes 与 repoRoot 同时采样（首个 await 之前）：完成后才读会取到切库后他仓的列表，错配写入缓存。
 		// name + URL 解析 host/owner/repo：供 Tier a 身份校验（不可解析 → null；可解析但 host 与本仓
@@ -221,7 +221,7 @@ export class GitHubPrService implements vscode.Disposable {
 		// 网络已尝试后的失败统一走 fail()：失败走**上下文一致的**旧缓存（cacheMatches 单一判定，
 		// 旧索引续显而非闪烁隐现），无缓存才无徽标；失败退避只在代次未变时武装（invalidate 刚复位
 		// 的退避不被在途旧代次的失败重新盖住——登录后/取数源切换后立即可重取）。
-		const fail = (): RemotePrIndex | null => {
+		const fail = (): BranchPrIndex | null => {
 			if (generation === this.fetchGeneration) {
 				this.failureCooldownUntil = Date.now() + FAILURE_BACKOFF_MS;
 			}
