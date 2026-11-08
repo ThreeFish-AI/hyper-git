@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPrIndex, matchRemoteBranchPr, type PrRemoteInfo } from '../../src/engine/pr/match';
+import { buildPrIndex, matchLocalBranchPr, matchRemoteBranchPr, type PrRemoteInfo } from '../../src/engine/pr/match';
 import type { PullRequestVM } from '../../src/engine/pr/types';
 
 function pr(overrides: Partial<PullRequestVM> = {}): PullRequestVM {
@@ -181,5 +181,56 @@ describe('buildPrIndex / matchRemoteBranchPr', () => {
 			pr({ headOwner: 'otherlogin', headRefName: 'feature', number: 11 }),
 		];
 		expect(matchRemoteBranchPr('mylogin/feature', { repoOwner: 'acme', repoHost: 'github.com', remotes: [rm('mylogin', null, null, null)] }, prs)).toBeUndefined();
+	});
+});
+
+describe('buildPrIndex / matchLocalBranchPr（本地裸名）', () => {
+	it('Tier b：同仓 headRefName 与本地裸名精确命中（含 / 的本地名）', () => {
+		const prs = [pr({ headOwner: 'acme', headRefName: 'dependabot/npm_and_yarn/x', number: 138, state: 'MERGED' })];
+		const hit = matchLocalBranchPr('dependabot/npm_and_yarn/x', ACME, prs);
+		expect(hit?.number).toBe(138);
+		expect(hit?.state).toBe('MERGED');
+	});
+
+	it('Tier c：非同仓 fork PR 且裸名候选唯一 → 兜底命中（fork / gh pr checkout 工作流）', () => {
+		const prs = [pr({ headOwner: 'contributor', headRefName: 'patch-1', number: 9 })];
+		expect(matchLocalBranchPr('patch-1', ACME, prs)?.number).toBe(9);
+	});
+
+	it('Tier c 歧义（两个 fork 同名分支）→ 不匹配；追加同仓 PR 后 Tier b 命中（b 优先于 c）', () => {
+		const fork = [pr({ headOwner: 'fork1', headRefName: 'patch-1', number: 10 }), pr({ headOwner: 'fork2', headRefName: 'patch-1', number: 11 })];
+		expect(matchLocalBranchPr('patch-1', ACME, fork)).toBeUndefined();
+		const withSameRepo = [...fork, pr({ headOwner: 'acme', headRefName: 'patch-1', number: 12 })];
+		expect(matchLocalBranchPr('patch-1', ACME, withSameRepo)?.number).toBe(12);
+	});
+
+	it('无 Tier a 钉子：本地名形如 owner/branch 不做 fork 身份匹配（远程行可有徽标、本地行无，预期分歧）', () => {
+		const prs = [pr({ headOwner: 'mylogin', headRefName: 'feature', number: 7 })];
+		const init = { repoOwner: 'acme', repoHost: 'github.com', remotes: [rm('origin', 'acme'), rm('mylogin')] };
+		// 远程短名 mylogin/feature 经 Tier a 命中；同一字符串作为本地裸名恒不匹配。
+		expect(matchRemoteBranchPr('mylogin/feature', init, prs)?.number).toBe(7);
+		expect(matchLocalBranchPr('mylogin/feature', init, prs)).toBeUndefined();
+	});
+
+	it('不剥前缀钉子：本地名 origin/feature 只匹配字面同名 PR，绝不剥离错配 feature 的 PR', () => {
+		const prs = [pr({ headOwner: 'acme', headRefName: 'feature', number: 5 })];
+		// remotes 含 origin：若 lookupLocal 误复用剥前缀路径，origin/feature 会错配 #5。
+		expect(matchLocalBranchPr('origin/feature', ACME, prs)).toBeUndefined();
+		expect(matchLocalBranchPr('feature', ACME, prs)?.number).toBe(5);
+	});
+
+	it('大小写：owner 折叠不敏感命中；分支名大小写敏感不命中', () => {
+		const prs = [pr({ headOwner: 'Acme-Inc', headRefName: 'feature', number: 14 })];
+		expect(matchLocalBranchPr('feature', { repoOwner: 'acme-inc', repoHost: 'github.com', remotes: [rm('origin', 'acme')] }, prs)?.number).toBe(14);
+		expect(matchLocalBranchPr('Feature', ACME, prs)).toBeUndefined();
+	});
+
+	it('空 PR 列表 → 恒不匹配；buildPrIndex 索引上 lookupLocal 与单发形态等价', () => {
+		expect(matchLocalBranchPr('feature', ACME, [])).toBeUndefined();
+		const prs = [pr({ headRefName: 'a', number: 1 }), pr({ headRefName: 'b', number: 2 })];
+		const idx = buildPrIndex(prs, ACME);
+		expect(idx.lookupLocal('a')?.number).toBe(1);
+		expect(idx.lookupLocal('b')?.number).toBe(2);
+		expect(idx.lookupLocal('c')).toBeUndefined();
 	});
 });

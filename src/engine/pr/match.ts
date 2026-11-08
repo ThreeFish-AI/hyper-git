@@ -1,8 +1,9 @@
 /**
- * 远程分支 → Pull Request 匹配（纯逻辑，零 vscode 依赖）。
+ * 分支 → Pull Request 匹配（纯逻辑，零 vscode 依赖；远程短名 / 本地裸名双查询入口）。
  *
- * 匹配对象是「剥掉 remote 前缀后的分支路径」与 PR 的 `headRefName`（head 仓库内的分支名）。
- * 前缀剥离复用 {@link resolveRemoteBranch} 的最长前缀匹配（remote 名可含 `/`）。三级优先：
+ * 远程短名（`origin/feature` 形态）匹配对象是「剥掉 remote 前缀后的分支路径」与 PR 的
+ * `headRefName`（head 仓库内的分支名）。前缀剥离复用 {@link resolveRemoteBranch} 的最长前缀
+ * 匹配（remote 名可含 `/`）。三级优先：
  * - **a（fork 全名 + remote 身份校验）**：shortName 恰为 `${headOwner}/${headRefName}`，且首段
  *   是真实存在的 remote、其 URL 解析 host/owner/repo 与本仓 host 及 PR 的 head owner/head repo
  *   一致（owner/repo 大小写不敏感、host 与本仓同实例；fork 惯例保留 base 仓库名，同 host+owner+repo
@@ -18,6 +19,11 @@
  * 分支名保持大小写敏感。
  *
  * 同一 headRefName 多条 PR（复用分支名）取 `updatedAt` 最近一条。
+ *
+ * 本地裸名（{@link BranchPrIndex.lookupLocal}）：**不剥前缀、无 Tier a**——本地分支名不携带
+ * remote 身份（无 URL 可作 fork 身份校验，本地名形如 `owner/branch` 不得被当作 fork 全名），
+ * 只按完整裸名走 Tier b 同仓 → Tier c 唯一兜底；本地名 `origin/feature` 只匹配 headRefName
+ * 字面同名的 PR，绝不剥离 `origin` 错配 `feature` 的 PR。
  */
 
 import { resolveRemoteBranch } from '../ref/remote-ref';
@@ -41,9 +47,12 @@ export interface PrIndexInit {
 	readonly remotes: readonly PrRemoteInfo[];
 }
 
-/** 预计算索引；Branches 树逐行 O(1) 查询。 */
-export interface RemotePrIndex {
+/** 预计算索引；Branches 树逐行 O(1) 查询（远程短名与本地裸名双入口，同一份 Map）。 */
+export interface BranchPrIndex {
+	/** 远程分支短名（如 `origin/feature`）→ PR：剥前缀后 Tier a/b/c 三级匹配。 */
 	lookup(shortName: string): PullRequestVM | undefined;
+	/** 本地分支裸名（无 remote 前缀）→ PR：完整裸名 Tier b → Tier c 唯一（不剥前缀、无 Tier a）。 */
+	lookupLocal(branchName: string): PullRequestVM | undefined;
 }
 
 /** `updatedAt` 近者胜（解析失败按 -∞ 处理，恒不优于合法值）。 */
@@ -53,9 +62,9 @@ function newer(a: PullRequestVM, b: PullRequestVM): PullRequestVM {
 	return (Number.isNaN(ta) ? -Infinity : ta) >= (Number.isNaN(tb) ? -Infinity : tb) ? a : b;
 }
 
-/** 构建索引：三个 Map 预计算，lookup 侧零遍历。owner 段统一折叠小写（GitHub owner 大小写不敏感，
- * `headRepositoryOwner.login` 返回规范形而远程 URL 侧原样），`headRefName`/branch 保持大小写敏感。 */
-export function buildPrIndex(prs: readonly PullRequestVM[], init: PrIndexInit): RemotePrIndex {
+/** 构建索引：三个 Map 预计算，lookup / lookupLocal 侧零遍历。owner 段统一折叠小写（GitHub owner
+ * 大小写不敏感，`headRepositoryOwner.login` 返回规范形而远程 URL 侧原样），`headRefName`/branch 保持大小写敏感。 */
+export function buildPrIndex(prs: readonly PullRequestVM[], init: PrIndexInit): BranchPrIndex {
 	// Tier a：`owner/branch` 全名（headOwner 缺失的 PR 不参与；owner 段小写键）。
 	const byForkFullName = new Map<string, PullRequestVM>();
 	// Tier b：同仓 PR 按 headRefName。
@@ -124,10 +133,25 @@ export function buildPrIndex(prs: readonly PullRequestVM[], init: PrIndexInit): 
 			}
 			return all[0];
 		},
+		// 本地裸名：不剥前缀（本地名可合法为 `origin/feature`，剥了就错配 `feature` 的 PR）、
+		// 无 Tier a（本地名不承载 remote 身份，无法作 fork 身份校验）——与 lookup 的本质行为分界。
+		lookupLocal(branchName: string): PullRequestVM | undefined {
+			const sameRepo = bySameRepoBranch.get(branchName);
+			if (sameRepo) {
+				return sameRepo;
+			}
+			const all = byBranchAll.get(branchName);
+			return all?.length === 1 ? all[0] : undefined;
+		},
 	};
 }
 
 /** 单发便捷形态（= buildPrIndex(prs, init).lookup(shortName)），主供测试与零星调用。 */
 export function matchRemoteBranchPr(shortName: string, init: PrIndexInit, prs: readonly PullRequestVM[]): PullRequestVM | undefined {
 	return buildPrIndex(prs, init).lookup(shortName);
+}
+
+/** 单发便捷形态（= buildPrIndex(prs, init).lookupLocal(branchName)），主供测试与零星调用。 */
+export function matchLocalBranchPr(branchName: string, init: PrIndexInit, prs: readonly PullRequestVM[]): PullRequestVM | undefined {
+	return buildPrIndex(prs, init).lookupLocal(branchName);
 }

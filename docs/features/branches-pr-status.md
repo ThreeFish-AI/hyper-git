@@ -1,9 +1,10 @@
-# Branches 视图远程分支 PR 状态徽标
+# Branches 视图分支 PR 状态徽标
 
-> 在 Branches 视图（`hyperGit.branches`）**远程分支**行右侧显示关联 GitHub Pull Request 状态与
-> PR 号（如 `#138 Merged`），云图标按状态着色（Merged 紫 / Closed 红 / Open 绿 / Draft 弱化）；
-> 悬停行以 Tooltip 展示 PR 号、标题与经主机白名单校验的 Open on GitHub 链接。数据源为 GitHub
-> GraphQL（最近更新的全态 PR 列表），按 origin 远程主机自动判定 github.com / GitHub Enterprise。
+> 在 Branches 视图（`hyperGit.branches`）**本地与远程分支**行右侧显示关联 GitHub Pull Request
+> 状态与 PR 号（如 `#138 Merged`），图标按状态着色（Merged 紫 / Closed 红 / Open 绿 / Draft 弱化；
+> 活动分支蓝、收藏黄优先）；悬停行以 Tooltip 展示 PR 号、标题与经主机白名单校验的 Open on GitHub
+> 链接。数据源为 GitHub GraphQL（最近更新的全态 PR 列表），按 origin 远程主机自动判定
+> github.com / GitHub Enterprise。
 
 ## 数据流
 
@@ -24,13 +25,19 @@
 
 ## 分支 → PR 匹配（三级优先，宁缺勿错）
 
-剥 remote 前缀复用 `resolveRemoteBranch` 最长前缀匹配（remote 名可含 `/`）：
+**远程短名**（`origin/feature` 形态）剥 remote 前缀复用 `resolveRemoteBranch` 最长前缀匹配（remote 名可含 `/`）：
 
 | Tier | 规则 | 场景 |
 |---|---|---|
 | a | `shortName === ${headOwner}/${headRefName}`，且首段 remote 的 URL host/owner/repo 与本仓 host 及 head owner/head repo 一致（owner/repo 大小写不敏感；fork 与 base 同实例、保留 base 仓库名） | remote 本身以 fork owner 命名（如 `mylogin/feature`）；撞名劫持（login 与 remote 名撞名、含 `/` remote 名与键同形、remote 指向同 owner 他仓或异 forge 实例）被身份校验排除 |
 | b | 剥离后 `branch === headRefName && headOwner === repoOwner` | dependabot / 仓内功能分支（主场景） |
 | c | 剥离后 `branch === headRefName` 且候选**唯一** | 专属 fork remote；歧义（多 fork 同名）→ 不显示 |
+
+**本地裸名**（Local Branches 行，含 Favorites 本地条目）：**不剥前缀、无 Tier a**——本地分支名不携带
+remote 身份（无 URL 可作 fork 身份校验，本地名形如 `owner/branch` 不得被当作 fork 全名），按完整裸名
+走 Tier b 同仓 → Tier c 唯一兜底；本地名 `origin/feature` 只匹配 headRefName 字面同名的 PR。不用
+`ref.upstream` 参与匹配：upstream 仅 CLI 兜底路径填充（API 路径刻意不填，v0.0.22 起树节点 upstream
+数据不受信），参与匹配会造成首帧有徽标、刷新后消失的闪烁；裸名匹配与 refs 数据来源路径解耦。
 
 同一 headRefName 多条 PR（复用分支名）取 `updatedAt` 最近一条。
 
@@ -57,7 +64,10 @@
 | 配置关闭 | 零徽标、零请求 |
 | 多 fork 同名分支（匹配歧义） | 不显示徽标（宁缺勿错） |
 | 掉出最近 100 条 PR 的旧分支 | 静默无徽标 |
-| Favorites 中的远程分支 | 同样显示徽标（图标收藏黄优先于 PR 状态色） |
+| 本地分支（含活动分支） | 同样显示徽标（活动蓝 / 收藏黄图标优先于 PR 状态色，状态由徽标文本承载，形如 `active #20 Open`） |
+| 本地名形如 `owner/branch`（fork checkout 形态） | 本地行无徽标（无 Tier a，不做 fork 身份匹配）；对应远程行可经 Tier a 有徽标，属预期分歧 |
+| 本地裸名与唯一 fork PR 撞名 | 显示该 PR（Tier c 唯一兜底）——属同名信息展示，非本分支已合并的凭证 |
+| Favorites 中的分支（本地 / 远程） | 同样显示徽标（图标收藏黄优先于 PR 状态色） |
 | GitHub Enterprise | 按 origin 主机自动判定，使用 `github-enterprise` provider（需已配置 `github-enterprise.uri`） |
 
 ## 配置
@@ -70,7 +80,7 @@ provider 与取数仓判定复用 `hyperGit.log.ci.provider` / `hyperGit.log.ci.
 
 ## 实现
 
-- 引擎层（纯逻辑，Vitest 可测）：[`engine/pr/`](../../src/engine/pr) — `types.ts`（PullRequestVM）、`graphql-query.ts`（$variables 防注入列表查询）、`model.ts`（宽容解析 + prBadge + prsEqual）、`match.ts`（三级匹配索引）。
+- 引擎层（纯逻辑，Vitest 可测）：[`engine/pr/`](../../src/engine/pr) — `types.ts`（PullRequestVM）、`graphql-query.ts`（$variables 防注入列表查询）、`model.ts`（宽容解析 + prBadge + prsEqual）、`match.ts`（`BranchPrIndex`：远程短名三级匹配 + 本地裸名 `lookupLocal` Tier b/c）。
 - 适配层（唯一触碰 vscode/网络）：[`adapter/pr/github-pr-service.ts`](../../src/adapter/pr/github-pr-service.ts)（缓存/分页/限流/safePrUrl）；[`adapter/ci/github-ci-service.ts`](../../src/adapter/ci/github-ci-service.ts) 增 `getGitHubContext()`（remote/provider 单一事实源）；[`adapter/ci/github-auth.ts`](../../src/adapter/ci/github-auth.ts) 增 `onDidChange` 透传。
 - 渲染：[`adapter/tree/branches-tree.ts`](../../src/adapter/tree/branches-tree.ts) — `ensurePrData` 异步 kick、`describe` 追加 `#N 状态`、`prThemeColor` 图标着色（收藏黄/活动蓝优先）；[`adapter/tree/tree-tooltip.ts`](../../src/adapter/tree/tree-tooltip.ts) — `mdTooltip` 增 `links` 链接行（仅含链接实例放开 isTrusted）。
 
@@ -78,3 +88,4 @@ provider 与取数仓判定复用 `hyperGit.log.ci.provider` / `hyperGit.log.ci.
 
 1. `pnpm run check-types` + `pnpm run lint` + `pnpm run test:unit`（含 `tests/unit/pr-*.test.ts`）全绿。
 2. Extension Development Host（F5）在 GitHub 仓库：远程分支行右侧出现 `#N Open/Merged/Closed/Draft` + 图标着色；悬停见 PR 号/标题/可点击 Open on GitHub；收藏远程条目同样生效（黄标优先）；未登录/非 GitHub/配置关闭 → 零徽标零请求；PR 状态变化 ≤60s（下次树刷新 + TTL 到期）自然更新；多根切换无串仓残留。
+3. 本地分支行：已通过 PR 合并的本地分支右侧出现 `#N Merged`（非活动分支图标按状态着色）；活动分支显示 `active #N …` 且图标保持蓝；收藏本地分支黄标优先、徽标文本仍在；同一逻辑分支的本地行与远程行显示同一 PR。

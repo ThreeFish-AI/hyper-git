@@ -6,7 +6,7 @@ import type { GitHubPrService } from '../pr/github-pr-service';
 import { FOR_EACH_REF_FORMAT, type RawRef, parseForEachRef } from '../../engine/ref/for-each-ref';
 import { buildRefTree, type RefTreeNode } from '../../engine/ref/ref-tree';
 import { prBadge, prStateLabel } from '../../engine/pr/model';
-import type { RemotePrIndex } from '../../engine/pr/match';
+import type { BranchPrIndex } from '../../engine/pr/match';
 import type { PullRequestVM } from '../../engine/pr/types';
 import { mdTooltip } from './tree-tooltip';
 
@@ -73,7 +73,8 @@ function prThemeColor(pr: PullRequestVM): vscode.ThemeColor {
  * 四段分组：Favorites（收藏置顶，参考 JetBrains 分组设计）/ Local / Remote / Tags。
  * 构造函数自订阅 service.onDidChange + favorites.onDidChange 做即时刷新。
  *
- * PR 徽标：远程分支行右侧 description 显示关联 PR（`#138 Merged`，GitHub 图标着色）。
+ * PR 徽标：本地与远程分支行右侧 description 显示关联 PR（`#138 Merged`，GitHub 图标着色）。
+ * 远程短名走索引三级匹配，本地裸名走 Tier b/c（不剥前缀、无 fork 身份校验，语义见 engine/pr/match）。
  * 数据经 {@link GitHubPrService} 异步拉取（TTL 缓存）：首轮无徽标先行渲染，索引就绪且与快照
  * 不同才 fire 一次二次渲染（引用相等守卫 + 服务端同实例返回 → 无刷新循环）。
  */
@@ -87,7 +88,7 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 	/** 「按前缀分组为文件夹树」开关（工具栏切换、按仓库持久化，默认开启）。 */
 	private groupingEnabled: boolean;
 	/** PR 匹配索引快照（null = 无数据：未登录/非 GitHub/未就绪 → 行为与无徽标一致）。 */
-	private prIndex: RemotePrIndex | null = null;
+	private prIndex: BranchPrIndex | null = null;
 	private prEnsureInFlight: Promise<void> | undefined;
 	/** PR 取数代次：切库/登录态/配置任一变化即 +1；在途取数完成时代次已变则弃结果并对当前态补拉。 */
 	private prKickEpoch = 0;
@@ -378,16 +379,21 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 		const active = this.isActive(ref);
 		const fav = this.favorites.isFavorite(ref.shortName);
 		const isTag = ref.isTag;
-		// PR 徽标仅远程分支（Favorites 里的远程条目同路径自动生效）。
-		const pr = !isTag && element.remote ? this.prIndex?.lookup(ref.shortName) : undefined;
+		// PR 徽标：远程短名三级匹配 / 本地裸名 Tier b/c（含活动分支与 Favorites 条目，同路径自动生效）。
+		const pr = !isTag
+			? element.remote
+				? this.prIndex?.lookup(ref.shortName)
+				: this.prIndex?.lookupLocal(ref.shortName)
+			: undefined;
 		// 分组形态下展示后缀（element.label）；平铺/收藏回退完整短名。命令仍以 ref.shortName 定位。
 		const item = new vscode.TreeItem(element.label ?? ref.shortName, vscode.TreeItemCollapsibleState.None);
 		item.description = this.describe(ref, active, pr);
 		item.contextValue = isTag ? 'hyperGit.tag' : element.remote ? 'hyperGit.remoteBranch' : 'hyperGit.branch';
 		item.tooltip = this.tooltip(ref, active, fav, pr);
 		const icon = isTag ? 'tag' : element.remote ? 'cloud' : 'git-branch';
-		// 活动分支 = charts.blue（与 Log 本地分支 chip 同语义，全局一致）；收藏（非活动）= charts.yellow；
-		// 其余远程分支带 PR → 按状态着色（远程行 active 恒 false，实际即收藏优先于 PR 色）。
+		// 活动分支 = charts.blue（与 Log 本地分支 chip 同语义，全局一致；本地活动行的 PR 状态色此时
+		// 由 description 徽标文本承载）；收藏（非活动）= charts.yellow；其余分支带 PR → 按状态着色
+		// （远程行 active 恒 false，实际即收藏优先于 PR 色）。
 		const color = active
 			? new vscode.ThemeColor('charts.blue')
 			: fav
@@ -412,7 +418,7 @@ export class BranchesTreeProvider implements vscode.TreeDataProvider<BranchNode>
 			}
 		}
 		if (pr) {
-			parts.push(prBadge(pr)); // `#138 Merged` —— 远程行右侧 PR 徽标
+			parts.push(prBadge(pr)); // `#138 Merged` —— 分支行右侧 PR 徽标
 		}
 		return parts.join(' ');
 	}
