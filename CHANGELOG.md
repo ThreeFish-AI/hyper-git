@@ -6,9 +6,15 @@
 
 ## [Unreleased]
 
+## [0.0.23] - 2026-11-08 — 本地分支 PR 状态徽标 · 开发依赖升级
+
 ### Added
 
 - **Branches 视图本地分支行显示 PR 状态徽标**：Local Branches（含 Favorites 本地条目与活动分支）行右侧以与远程行一致的形态显示关联 GitHub PR（`#N Merged/Open/Closed/Draft`），非活动分支图标按状态着色（Merged 紫 / Closed 红 / Open 绿 / Draft 弱化；活动蓝、收藏黄优先，活动分支呈 `active #N …`），悬停 Tooltip 与远程行同构（PR 号 / 标题 / Open on GitHub）。匹配语义：本地**裸分支名**走同仓 Tier b → 唯一兜底 Tier c（与远程行同口径，宁缺勿错），**不剥 remote 前缀、不做 Tier a fork 身份匹配**（本地名不携带 remote 身份，本地名 `origin/feature` 只匹配 headRefName 字面同名 PR）；不用 `ref.upstream` 参与匹配（upstream 仅 CLI 兜底路径填充且 v0.0.22 起树节点 upstream 数据不受信，裸名匹配消除双数据路径下的徽标闪烁）。取数链路零改动（复用同一 GraphQL 索引，`RemotePrIndex` 更名 `BranchPrIndex` 并新增 `lookupLocal` 入口），engine 增量全量单测覆盖。详见 [功能文档](./docs/features/branches-pr-status.md)。
+
+### Changed
+
+- 开发依赖升级（#157）：@types/node 26.6.5 → 26.6.6、@vscode/vsce 4.0.0 → 4.1.0、eslint 10.13.0 → 10.14.0、rimraf 6.0.1 → 6.1.4、typescript-eslint 8.72.0 → 8.72.1、vite 8.3.4 → 8.3.5、vitest 5.0.5 → 5.1.0——全部 devDependencies，对扩展运行时零影响。
 
 ## [0.0.22] - 2026-10-24 — Graph 过滤持久化与激活指示 · Branches 就地更新 · 开发依赖升级
 
